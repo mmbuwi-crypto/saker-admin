@@ -60,17 +60,31 @@ const gradeCol = g =>
 // Upload photo to Supabase Storage, return public URL
 async function uploadPhoto(studentId, base64) {
   if (!base64 || !base64.startsWith("data:")) return base64;
-  const arr   = base64.split(",");
-  const mime  = arr[0].match(/:(.*?);/)[1];
-  const bstr  = atob(arr[1]);
-  const u8    = new Uint8Array(bstr.length);
-  for (let i=0; i<bstr.length; i++) u8[i]=bstr.charCodeAt(i);
-  const file  = new File([u8], `${studentId}.jpg`, { type: mime });
-  const path  = `${studentId}/photo.jpg`;
-  const { error } = await supabase.storage.from("student-photos").upload(path, file, { upsert: true });
-  if (error) throw error;
-  const { data } = supabase.storage.from("student-photos").getPublicUrl(path);
-  return data.publicUrl;
+  try {
+    const arr  = base64.split(",");
+    const mime = arr[0].match(/:(.*?);/)[1];
+    const bstr = atob(arr[1]);
+    const u8   = new Uint8Array(bstr.length);
+    for (let i=0; i<bstr.length; i++) u8[i]=bstr.charCodeAt(i);
+    const file = new File([u8], `${studentId}.jpg`, { type: mime });
+    const path = `photos/${studentId}.jpg`;
+    const { data, error } = await supabase.storage
+      .from("student-photos")
+      .upload(path, file, { upsert: true, contentType: mime });
+    if (error) {
+      console.error("Photo upload error:", error);
+      alert("Photo upload failed: " + error.message);
+      return null;
+    }
+    const { data: urlData } = supabase.storage
+      .from("student-photos")
+      .getPublicUrl(path);
+    return urlData.publicUrl;
+  } catch(e) {
+    console.error("Photo upload exception:", e);
+    alert("Photo upload error: " + e.message);
+    return null;
+  }
 }
 
 // DOM-inject print helper — works in sandboxed environments
@@ -252,7 +266,12 @@ export default function App() {
     let photoUrl = s.photo_url;
     // If it's a fresh base64 image, upload to storage
     if (photoUrl && photoUrl.startsWith("data:")) {
-      photoUrl = await uploadPhoto(s.id, photoUrl);
+      try {
+        photoUrl = await uploadPhoto(s.id, photoUrl);
+      } catch(e) {
+        console.error("Photo upload failed, saving without photo:", e);
+        photoUrl = null;
+      }
     }
     const row = {
       id: s.id, name: s.name, form: s.form, gender: s.gender,
@@ -317,12 +336,12 @@ export default function App() {
   }
 
   // ── Current user info ───────────────────────────────────────────────────────
+  const currentTeacher = teachers.find(t => t.email === session?.user?.email);
   const currentUser = {
-  id:    session?.user?.id || "ADMIN",
-  name:  currentTeacher?.name || userProfile?.name || session?.user?.email || "Admin",
-  email: session?.user?.email || "",
-  role:  userProfile?.role || "teacher",
-};
+    id:    session?.user?.id || "ADMIN",
+    name:  currentTeacher?.name || userProfile?.name || session?.user?.email || "Admin",
+    email: session?.user?.email || "",
+  };
 
   // ── Loading / not-logged-in screens ────────────────────────────────────────
   if (session === undefined) return (
@@ -334,11 +353,12 @@ export default function App() {
   );
   if (!session) return <LoginScreen onLogin={doLogin} />;
 
-auth: { user: currentUser, role: currentUser.role },
-  students, teachers, marksMap, feesMap, notices,
-  saveStudent, deleteStudent, saveTeacher, saveMark,
-  saveFee, saveNotice, deleteNotice, loadAll,
-};
+  const ctx = {
+    auth: { user: currentUser, role: userRole||"teacher" },
+    students, teachers, marksMap, feesMap, notices,
+    saveStudent, deleteStudent, saveTeacher, saveMark,
+    saveFee, saveNotice, deleteNotice, loadAll,
+  };
 
   return (
     <div style={{fontFamily:"'Segoe UI',system-ui,sans-serif",background:C.grayBg,minHeight:"100vh"}}>
