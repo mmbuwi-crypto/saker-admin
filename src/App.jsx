@@ -57,29 +57,47 @@ function scoreToGrade(v) {
 const gradeCol = g =>
   ["A","B+","B"].includes(g) ? C.green : g==="F" ? C.red : g==="—" ? C.gray : C.gold;
 
-// Resize and store photo as base64 directly in database
+// Resize and compress photo to small base64 for database storage
 async function uploadPhoto(studentId, base64) {
   if (!base64 || !base64.startsWith("data:")) return base64;
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement("canvas");
-      const MAX = 300;
+      // Small size to fit in database
+      const MAX = 150;
       let w = img.width, h = img.height;
       if (w > h) { if (w > MAX) { h = Math.round(h*(MAX/w)); w = MAX; } }
-      else { if (h > MAX) { w = Math.round(w*(MAX/h)); h = MAX; } }
+      else        { if (h > MAX) { w = Math.round(w*(MAX/h)); h = MAX; } }
       canvas.width = w; canvas.height = h;
       const ctx = canvas.getContext("2d");
       ctx.drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL("image/jpeg", 0.7));
+      const compressed = canvas.toDataURL("image/jpeg", 0.5);
+      console.log("Photo compressed, size:", compressed.length);
+      resolve(compressed);
     };
-    img.onerror = () => resolve(base64);
+    img.onerror = () => { console.error("Image load error"); resolve(null); };
     img.src = base64;
   });
 }
 
-// DOM-inject print helper — works in sandboxed environments
+// Print helper - opens new tab with content and prints
 function domPrint(id, html, size="A4 portrait", margin="8mm") {
+  // Try new window first
+  const win = window.open("", "_blank");
+  if (win) {
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+      <style>
+        *{box-sizing:border-box;margin:0;padding:0}
+        @page{size:${size};margin:${margin}}
+        body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      </style></head><body>${html}</body></html>`);
+    win.document.close();
+    win.onload = () => { win.focus(); win.print(); };
+    setTimeout(() => { try { win.focus(); win.print(); } catch(e) {} }, 800);
+    return;
+  }
+  // Fallback: DOM inject
   document.getElementById(id)?.remove();
   document.getElementById(id+"-s")?.remove();
   const st = document.createElement("style");
@@ -544,10 +562,11 @@ function RegistrationPage({ ctx }) {
     const id   = `SBC0${fNum.padStart(2,"0")}${String(n).padStart(3,"0")}`;
     const rec  = `RCP-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
     try {
-      // Upload photo first if exists
-      let photoUrl = form.photo_url;
-      if (photoUrl && photoUrl.startsWith("data:")) {
-        try { photoUrl = await uploadPhoto(id, photoUrl); } catch(e) { photoUrl = null; }
+      // Compress photo before saving
+      let photoUrl = null;
+      if (form.photo_url && form.photo_url.startsWith("data:")) {
+        try { photoUrl = await uploadPhoto(id, form.photo_url); }
+        catch(e) { console.error("Photo compress error:", e); photoUrl = null; }
       }
       const studentData = {
         ...form, id, active:true, photo_url:photoUrl,
