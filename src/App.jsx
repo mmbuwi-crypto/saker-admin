@@ -317,12 +317,12 @@ export default function App() {
   }
 
   // ── Current user info ───────────────────────────────────────────────────────
-  const currentTeacher = teachers.find(t => t.email === session?.user?.email);
   const currentUser = {
-    id:    session?.user?.id || "ADMIN",
-    name:  currentTeacher?.name || userProfile?.name || session?.user?.email || "Admin",
-    email: session?.user?.email || "",
-  };
+  id:    session?.user?.id || "ADMIN",
+  name:  currentTeacher?.name || userProfile?.name || session?.user?.email || "Admin",
+  email: session?.user?.email || "",
+  role:  userProfile?.role || "teacher",
+};
 
   // ── Loading / not-logged-in screens ────────────────────────────────────────
   if (session === undefined) return (
@@ -334,12 +334,11 @@ export default function App() {
   );
   if (!session) return <LoginScreen onLogin={doLogin} />;
 
-  const ctx = {
-    auth: { user: currentUser, role: userRole||"teacher" },
-    students, teachers, marksMap, feesMap, notices,
-    saveStudent, deleteStudent, saveTeacher, saveMark,
-    saveFee, saveNotice, deleteNotice, loadAll,
-  };
+auth: { user: currentUser, role: currentUser.role },
+  students, teachers, marksMap, feesMap, notices,
+  saveStudent, deleteStudent, saveTeacher, saveMark,
+  saveFee, saveNotice, deleteNotice, loadAll,
+};
 
   return (
     <div style={{fontFamily:"'Segoe UI',system-ui,sans-serif",background:C.grayBg,minHeight:"100vh"}}>
