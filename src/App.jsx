@@ -57,34 +57,25 @@ function scoreToGrade(v) {
 const gradeCol = g =>
   ["A","B+","B"].includes(g) ? C.green : g==="F" ? C.red : g==="—" ? C.gray : C.gold;
 
-// Upload photo to Supabase Storage, return public URL
+// Resize and store photo as base64 directly in database
 async function uploadPhoto(studentId, base64) {
   if (!base64 || !base64.startsWith("data:")) return base64;
-  try {
-    const arr  = base64.split(",");
-    const mime = arr[0].match(/:(.*?);/)[1];
-    const bstr = atob(arr[1]);
-    const u8   = new Uint8Array(bstr.length);
-    for (let i=0; i<bstr.length; i++) u8[i]=bstr.charCodeAt(i);
-    const file = new File([u8], `${studentId}.jpg`, { type: mime });
-    const path = `photos/${studentId}.jpg`;
-    const { data, error } = await supabase.storage
-      .from("student-photos")
-      .upload(path, file, { upsert: true, contentType: mime });
-    if (error) {
-      console.error("Photo upload error:", error);
-      alert("Photo upload failed: " + error.message);
-      return null;
-    }
-    const { data: urlData } = supabase.storage
-      .from("student-photos")
-      .getPublicUrl(path);
-    return urlData.publicUrl;
-  } catch(e) {
-    console.error("Photo upload exception:", e);
-    alert("Photo upload error: " + e.message);
-    return null;
-  }
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      const MAX = 300;
+      let w = img.width, h = img.height;
+      if (w > h) { if (w > MAX) { h = Math.round(h*(MAX/w)); w = MAX; } }
+      else { if (h > MAX) { w = Math.round(w*(MAX/h)); h = MAX; } }
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL("image/jpeg", 0.7));
+    };
+    img.onerror = () => resolve(base64);
+    img.src = base64;
+  });
 }
 
 // DOM-inject print helper — works in sandboxed environments
@@ -553,15 +544,21 @@ function RegistrationPage({ ctx }) {
     const id   = `SBC0${fNum.padStart(2,"0")}${String(n).padStart(3,"0")}`;
     const rec  = `RCP-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
     try {
-      await saveStudent({
-        ...form, id, active:true,
+      // Upload photo first if exists
+      let photoUrl = form.photo_url;
+      if (photoUrl && photoUrl.startsWith("data:")) {
+        try { photoUrl = await uploadPhoto(id, photoUrl); } catch(e) { photoUrl = null; }
+      }
+      const studentData = {
+        ...form, id, active:true, photo_url:photoUrl,
         reg_status:"registered", reg_date:todayStr(),
         reg_fee:fee, reg_receipt:rec,
         reg_paid_by:form.paidBy||form.parent,
         reg_cashier:auth.user.name,
         is_late_reg:form.isLate,
-      });
-      setReceipt({ ...form, id, reg_fee:fee, reg_receipt:rec, reg_date:todayStr(), reg_paid_by:form.paidBy||form.parent, reg_cashier:auth.user.name });
+      };
+      await saveStudent(studentData);
+      setReceipt({ ...studentData });
       setTab("receipt");
       setForm(blank);
     } catch(e) { alert("Error saving: "+e.message); }
