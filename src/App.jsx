@@ -277,16 +277,8 @@ export default function App() {
 
   // ── DB write helpers (passed via ctx) ──────────────────────────────────────
   async function saveStudent(s) {
-    let photoUrl = s.photo_url;
-    // If it's a fresh base64 image, upload to storage
-    if (photoUrl && photoUrl.startsWith("data:")) {
-      try {
-        photoUrl = await uploadPhoto(s.id, photoUrl);
-      } catch(e) {
-        console.error("Photo upload failed, saving without photo:", e);
-        photoUrl = null;
-      }
-    }
+    // photo_url is already compressed base64 or null — save directly
+    let photoUrl = s.photo_url || null;
     const row = {
       id: s.id, name: s.name, form: s.form, gender: s.gender,
       dob: s.dob||null, parent: s.parent, phone: s.phone, address: s.address,
@@ -583,10 +575,7 @@ function RegistrationPage({ ctx }) {
         reg_cashier:auth.user.name,
         is_late_reg:form.isLate,
       };
-      const {error:saveErr} = await supabase.from("students").upsert(studentData, {onConflict:"id"});
-      if (saveErr) throw saveErr;
-      await supabase.from("fees").upsert({student_id:id, paid:0, total:TOTAL_FEE},{onConflict:"student_id",ignoreDuplicates:true});
-      await loadAll();
+      await saveStudent(studentData);
       setReceipt({ ...studentData });
       setTab("receipt");
       setForm(blank);
