@@ -1653,7 +1653,7 @@ function FeesPage({ ctx }) {
           <option value="">All Forms</option>{FORMS.map(f=><option key={f}>{f}</option>)}
         </select>
         <button onClick={printDebtors} style={{width:"100%",padding:"10px",background:C.red,color:C.white,border:"none",borderRadius:8,fontWeight:800,fontSize:13,cursor:"pointer"}}>
-          🖨 Print Defaulters — Below {threshold}%{filter.form?` (${filter.form})":""}
+          🖨 Print Defaulters — Below {threshold}%{filter.form?` (${filter.form})`:""}
         </button>
       </div>
 
