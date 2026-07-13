@@ -57,61 +57,66 @@ function scoreToGrade(v) {
 const gradeCol = g =>
   ["A","B+","B"].includes(g) ? C.green : g==="F" ? C.red : g==="—" ? C.gray : C.gold;
 
-// Resize and compress photo to small base64 for database storage
-async function uploadPhoto(studentId, base64) {
-  if (!base64 || !base64.startsWith("data:")) return base64;
+// Compress photo using canvas before storing in DB
+function compressPhoto(base64) {
   return new Promise((resolve) => {
+    if (!base64 || !base64.startsWith("data:")) { resolve(null); return; }
     const img = new Image();
     img.onload = () => {
-      const canvas = document.createElement("canvas");
-      // Small size to fit in database
-      const MAX = 150;
+      const MAX = 200;
       let w = img.width, h = img.height;
-      if (w > h) { if (w > MAX) { h = Math.round(h*(MAX/w)); w = MAX; } }
-      else        { if (h > MAX) { w = Math.round(w*(MAX/h)); h = MAX; } }
+      const scale = Math.min(MAX/w, MAX/h, 1);
+      w = Math.round(w*scale); h = Math.round(h*scale);
+      const canvas = document.createElement("canvas");
       canvas.width = w; canvas.height = h;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(img, 0, 0, w, h);
-      const compressed = canvas.toDataURL("image/jpeg", 0.5);
-      console.log("Photo compressed, size:", compressed.length);
-      resolve(compressed);
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL("image/jpeg", 0.6));
     };
-    img.onerror = () => { console.error("Image load error"); resolve(null); };
+    img.onerror = () => resolve(null);
     img.src = base64;
   });
 }
+async function uploadPhoto(studentId, base64) {
+  return await compressPhoto(base64);
+}
 
-// Print helper - opens new tab with content and prints
+// Print helper - works on mobile and desktop
 function domPrint(id, html, size="A4 portrait", margin="8mm") {
-  // Try new window first
-  const win = window.open("", "_blank");
-  if (win) {
-    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
-      <style>
-        *{box-sizing:border-box;margin:0;padding:0}
-        @page{size:${size};margin:${margin}}
-        body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-      </style></head><body>${html}</body></html>`);
-    win.document.close();
-    win.onload = () => { win.focus(); win.print(); };
-    setTimeout(() => { try { win.focus(); win.print(); } catch(e) {} }, 800);
-    return;
-  }
-  // Fallback: DOM inject
+  const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8">
+    <style>
+      *{box-sizing:border-box;margin:0;padding:0}
+      @page{size:${size};margin:${margin}}
+      body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;
+           -webkit-print-color-adjust:exact;print-color-adjust:exact}
+    </style></head><body>${html}</body></html>`;
+
+  // Method 1: Blob URL (best for mobile)
+  try {
+    const blob = new Blob([fullHtml], {type:"text/html"});
+    const url  = URL.createObjectURL(blob);
+    const win  = window.open(url, "_blank");
+    if (win) {
+      win.onload = () => { win.print(); URL.revokeObjectURL(url); };
+      setTimeout(() => { try { win.print(); URL.revokeObjectURL(url); } catch(e){} }, 1000);
+      return;
+    }
+    URL.revokeObjectURL(url);
+  } catch(e) { console.log("Blob print failed:", e); }
+
+  // Method 2: DOM inject fallback
   document.getElementById(id)?.remove();
   document.getElementById(id+"-s")?.remove();
   const st = document.createElement("style");
   st.id = id+"-s";
-  st.textContent = `@media print{body>*:not(#${id}){display:none!important}#${id}{display:block!important;position:fixed;inset:0;background:#fff;z-index:99999;overflow:auto;padding:0}@page{size:${size};margin:${margin}}}#${id}{display:none}`;
+  st.textContent = `@media print{body>*:not(#${id}){display:none!important}#${id}{display:block!important;position:fixed;inset:0;background:#fff;z-index:99999}@page{size:${size};margin:${margin}}}#${id}{display:none}`;
   document.head.appendChild(st);
   const div = document.createElement("div");
-  div.id = id;
-  div.innerHTML = html;
+  div.id = id; div.innerHTML = html;
   document.body.appendChild(div);
-  setTimeout(() => {
+  setTimeout(()=>{
     window.print();
-    setTimeout(() => { document.getElementById(id)?.remove(); document.getElementById(id+"-s")?.remove(); }, 2500);
-  }, 200);
+    setTimeout(()=>{ document.getElementById(id)?.remove(); document.getElementById(id+"-s")?.remove(); }, 2500);
+  }, 300);
 }
 
 // ─── Nav ──────────────────────────────────────────────────────────────────────
@@ -562,21 +567,26 @@ function RegistrationPage({ ctx }) {
     const id   = `SBC0${fNum.padStart(2,"0")}${String(n).padStart(3,"0")}`;
     const rec  = `RCP-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
     try {
-      // Compress photo before saving
+      // Compress photo then save student
       let photoUrl = null;
-      if (form.photo_url && form.photo_url.startsWith("data:")) {
-        try { photoUrl = await uploadPhoto(id, form.photo_url); }
-        catch(e) { console.error("Photo compress error:", e); photoUrl = null; }
+      if (form.photo_url) {
+        photoUrl = await compressPhoto(form.photo_url);
       }
       const studentData = {
-        ...form, id, active:true, photo_url:photoUrl,
+        name:form.name, form:form.form, gender:form.gender,
+        dob:form.dob||null, parent:form.parent, phone:form.phone,
+        address:form.address||null, photo_url:photoUrl,
+        id, active:true,
         reg_status:"registered", reg_date:todayStr(),
         reg_fee:fee, reg_receipt:rec,
         reg_paid_by:form.paidBy||form.parent,
         reg_cashier:auth.user.name,
         is_late_reg:form.isLate,
       };
-      await saveStudent(studentData);
+      const {error:saveErr} = await supabase.from("students").upsert(studentData, {onConflict:"id"});
+      if (saveErr) throw saveErr;
+      await supabase.from("fees").upsert({student_id:id, paid:0, total:TOTAL_FEE},{onConflict:"student_id",ignoreDuplicates:true});
+      await loadAll();
       setReceipt({ ...studentData });
       setTab("receipt");
       setForm(blank);
