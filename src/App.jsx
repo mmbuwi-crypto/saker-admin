@@ -318,6 +318,7 @@ export default function App() {
       teacher_id: teacherId||null,
     }, { onConflict:"student_id,subject,seq,acad_year" });
     if (error) throw error;
+    await loadAll(); // refresh marks immediately
   }
 
   async function saveFee(studentId, paid) {
@@ -989,11 +990,19 @@ function MarksPage({ ctx }) {
   async function saveAll() {
     setSaving(true);
     try {
-      await Promise.all(formStudents.map(s => {
+      // Save all marks one by one
+      for (const s of formStudents) {
         const v = local[s.id];
-        if (v===""||v===undefined) return;
-        return saveMark(s.id, subject, filter.seq, filter.year, v, coeff, teacher?.id||"ADMIN");
-      }));
+        if (v===""||v===undefined) continue;
+        const { error } = await supabase.from("marks").upsert({
+          student_id: s.id, subject, seq: filter.seq,
+          acad_year: filter.year, score: Number(v),
+          coeff: Number(coeff)||1,
+          teacher_id: teacher?.id||null,
+        }, { onConflict:"student_id,subject,seq,acad_year" });
+        if (error) throw error;
+      }
+      await ctx.loadAll(); // refresh all data
       setSaved(true);
     } catch(e) { alert("Save error: "+e.message); }
     setSaving(false);
