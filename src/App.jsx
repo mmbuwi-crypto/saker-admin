@@ -1139,15 +1139,6 @@ function ReportsPage({ ctx }) {
   function buildPrintHTML() {
     if (!student||!modeRows.length) return "";
 
-    // Student info
-    const name    = student.name || "";
-    const dob     = fmtDate(student.dob);
-    const sex     = student.gender || "";
-    const classe  = student.form  || "";
-    const year    = sel.year;
-    const term    = sel.mode==="term" ? sel.term : "Annual";
-
-    // Subjects from the actual SBC report card
     const SBC_SUBJECTS = [
       "English language","French/ Français","Mathematics","Health science",
       "Home management","Citizenship","Food and Nutrition","Chemistry",
@@ -1156,232 +1147,226 @@ function ReportsPage({ ctx }) {
       "Commerce","Accounts","Hygiene","Sport/Physical education","Manual Labour"
     ];
 
-    const rows = SBC_SUBJECTS.map(sub => {
-      const r = modeRows.find(x=>x.sub===sub);
-      if (!r) {
-        return `<tr>
-          <td style="padding:3px 5px;font-size:9px;border:1px solid #1a56a0">${sub}</td>
-          <td style="border:1px solid #1a56a0"></td>
-          <td style="border:1px solid #1a56a0"></td>
-          <td style="border:1px solid #1a56a0"></td>
-          <td style="border:1px solid #1a56a0"></td>
+    // ── Compute class ranking ─────────────────────────────────────────────────
+    const peers = students.filter(s=>s.active&&s.form===student.form&&s.reg_status==="registered");
+    const peerAvgs = peers.map(ps=>{
+      let tw=0,tc=0;
+      SBC_SUBJECTS.forEach(sub=>{
+        const seqs = sel.mode==="term"
+          ? TERM_SEQS[sel.term].map(sq=>{ const k=ps.id+"-"+sub+"-"+sq+"-"+sel.year; return marksMap[k]?.score??null; })
+          : SEQ_LABELS.map(sq=>{ const k=ps.id+"-"+sub+"-"+sq+"-"+sel.year; return marksMap[k]?.score??null; });
+        const vals=seqs.filter(x=>x!==null);
+        const c=getCoeff(sub);
+        if(vals.length){tw+=vals.reduce((a,b)=>a+Number(b),0)/vals.length*c;tc+=c;}
+      });
+      return{id:ps.id,avg:tc?tw/tc:0};
+    }).sort((a,b)=>b.avg-a.avg);
+    const myRank = peerAvgs.findIndex(x=>x.id===student.id)+1;
+    const rankStr = myRank>0?myRank+"/"+peers.length:"—";
+
+    // ── Class average ─────────────────────────────────────────────────────────
+    const classAvg = peerAvgs.length
+      ? (peerAvgs.reduce((a,x)=>a+x.avg,0)/peerAvgs.length).toFixed(2)
+      : "—";
+
+    const photoHtml = student.photo_url
+      ?`<img src="${student.photo_url}" style="width:65px;height:78px;object-fit:cover;border:1px solid #1a56a0;display:block">`
+      :`<div style="width:65px;height:78px;border:1px solid #999;display:flex;align-items:center;justify-content:center;font-size:9px;color:#999;text-align:center">PHOTO</div>`;
+
+    const termLabel = sel.mode==="term" ? sel.term.replace(" Term","").toUpperCase()+" TERM" : "ANNUAL";
+    const seqHeaders = sel.mode==="term"
+      ? termSeqs.map((_,i)=>`<th style="background:#1a56a0;color:#fff;border:1px solid #fff;padding:3px 2px;font-size:7px;min-width:22px">SQ${termSeqs.indexOf(termSeqs[i])+1+(sel.term==="Second Term"?2:sel.term==="Third Term"?4:0)}</th>`).join("")
+      : SEQ_LABELS.map((_,i)=>`<th style="background:#1a56a0;color:#fff;border:1px solid #fff;padding:3px 2px;font-size:7px;min-width:18px">SQ${i+1}</th>`).join("");
+
+    const rows = SBC_SUBJECTS.map((sub,i)=>{
+      const r = modeRows.find(x=>
+        x.sub===sub||
+        (sub==="French/ Français"&&x.sub==="French")||
+        (sub==="Computer Studies"&&x.sub==="Computer Science")||
+        (sub==="Sport/Physical education"&&x.sub==="Physical Education")||
+        (sub==="Literature in English"&&x.sub==="Literature")
+      );
+      if(!r){
+        const emptyCols = sel.mode==="term" ? termSeqs.map(()=>`<td style="border:1px solid #1a56a0"></td>`).join("") : SEQ_LABELS.map(()=>`<td style="border:1px solid #1a56a0"></td>`).join("");
+        return`<tr style="background:${i%2===0?"#fff":"#F9FAFB"}">
+          <td style="padding:2px 4px;font-size:7.5px;border:1px solid #1a56a0">${sub}</td>
+          ${emptyCols}
           <td style="border:1px solid #1a56a0"></td>
           <td style="border:1px solid #1a56a0"></td>
           <td style="border:1px solid #1a56a0"></td>
           <td style="border:1px solid #1a56a0"></td>
         </tr>`;
       }
-      const avg   = sel.mode==="term" ? r.termAvg : r.annualAvg;
-      const score = avg !== null ? (avg * r.coeff).toFixed(1) : "";
+      const avg = sel.mode==="term"?r.termAvg:r.annualAvg;
       const {remark} = scoreToGrade(avg);
-      return `<tr>
-        <td style="padding:3px 5px;font-size:9px;border:1px solid #1a56a0">${sub}</td>
-        <td style="text-align:center;font-size:9px;border:1px solid #1a56a0">${r.termScores?.[0]!==null&&r.termScores?.[0]!==undefined?r.termScores[0]:""}</td>
-        <td style="text-align:center;font-size:9px;border:1px solid #1a56a0">${r.termScores?.[1]!==null&&r.termScores?.[1]!==undefined?r.termScores[1]:""}</td>
-        <td style="text-align:center;font-size:9px;font-weight:700;border:1px solid #1a56a0">${avg!==null?avg.toFixed(1):""}</td>
-        <td style="text-align:center;font-size:9px;border:1px solid #1a56a0">${r.coeff}</td>
-        <td style="text-align:center;font-size:9px;font-weight:700;border:1px solid #1a56a0">${score}</td>
-        <td style="text-align:center;font-size:9px;border:1px solid #1a56a0"></td>
-        <td style="text-align:center;font-size:9px;color:${avg!==null&&avg>=10?"#15803D":"#B91C1C"};border:1px solid #1a56a0">${remark}</td>
-        <td style="border:1px solid #1a56a0"></td>
+      const pass = avg!==null&&avg>=10;
+      const pond = avg!==null?(avg*r.coeff).toFixed(1):"";
+      const scoreCols = sel.mode==="term"
+        ? r.termScores.map(s=>`<td style="text-align:center;font-size:8px;border:1px solid #1a56a0">${s!=null?s:""}</td>`).join("")
+        : SEQ_LABELS.map((_,j)=>{
+            const sc=[r.s1,r.s2,r.s3,r.s4,r.s5,r.s6][j];
+            return`<td style="text-align:center;font-size:7.5px;border:1px solid #1a56a0">${sc!=null?sc:""}</td>`;
+          }).join("");
+      return`<tr style="background:${i%2===0?"#fff":"#F9FAFB"}">
+        <td style="padding:2px 4px;font-size:7.5px;border:1px solid #1a56a0">${sub}</td>
+        ${scoreCols}
+        <td style="text-align:center;font-size:8px;font-weight:700;border:1px solid #1a56a0">${avg!=null?avg.toFixed(1):""}</td>
+        <td style="text-align:center;font-size:8px;border:1px solid #1a56a0">${r.coeff}</td>
+        <td style="text-align:center;font-size:8px;font-weight:700;border:1px solid #1a56a0">${pond}</td>
+        <td style="text-align:center;font-size:7.5px;color:${pass?"#15803D":"#B91C1C"};border:1px solid #1a56a0">${remark}</td>
       </tr>`;
     }).join("");
 
-    const termAvgAll  = overallAvg ? overallAvg.toFixed(2) : "___";
-    const pctScore    = overallAvg ? (overallAvg*5).toFixed(0)+"%" : "___";
-
-    return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
-<title>Report Card — ${name}</title>
+    return`<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Report Card — ${student.name}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  @page{size:A4 portrait;margin:8mm}
+  @page{size:A4 portrait;margin:6mm}
   html,body{font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff;
-    -webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:10px}
+    -webkit-print-color-adjust:exact;print-color-adjust:exact}
   table{width:100%;border-collapse:collapse}
-  .page{width:194mm;margin:0 auto}
+  .page{width:198mm;margin:0 auto}
 </style></head><body><div class="page">
 
-<!-- BILINGUAL GOVERNMENT HEADER -->
-<table style="width:100%;margin-bottom:4px">
+<!-- HEADER -->
+<table style="margin-bottom:3px">
   <tr>
-    <td style="width:33%;vertical-align:top;font-size:8px;line-height:1.5">
-      <strong>REPUBLIC OF CAMEROON</strong><br>
-      Peace-Work-Fatherland<br>
-      Ministry of secondary Education
+    <td style="width:33%;font-size:7.5px;line-height:1.5;vertical-align:top">
+      <strong>REPUBLIC OF CAMEROON</strong><br>Peace-Work-Fatherland<br>Ministry of Secondary Education
     </td>
-    <td style="width:34%;text-align:center;vertical-align:middle">
-      <!-- Coat of arms placeholder -->
-      <div style="font-size:24px">🇨🇲</div>
-    </td>
-    <td style="width:33%;text-align:right;vertical-align:top;font-size:8px;line-height:1.5">
-      <strong>REPUBLIQUE DU CAMEROUN</strong><br>
-      Paix – Travail – Patrie<br>
-      Ministère De l'Enseignement
+    <td style="width:34%;text-align:center;vertical-align:middle;font-size:20px">🇨🇲</td>
+    <td style="width:33%;font-size:7.5px;line-height:1.5;vertical-align:top;text-align:right">
+      <strong>REPUBLIQUE DU CAMEROUN</strong><br>Paix – Travail – Patrie<br>Ministère De l'Enseignement
     </td>
   </tr>
 </table>
 
-<!-- SCHOOL NAME BANNER -->
-<div style="background:#1a56a0;color:#fff;text-align:center;padding:6px 4px;margin-bottom:4px">
-  <div style="font-size:18px;font-weight:900;letter-spacing:1px">SAKER BAPTIST COLLAGE(SBC)-BAWE</div>
-  <div style="font-size:9px;margin-top:2px">Motto: Quality, Discipline, and Excellence education</div>
+<!-- SCHOOL NAME -->
+<div style="background:#1a56a0;color:#fff;text-align:center;padding:5px 4px;margin-bottom:3px">
+  <div style="font-size:15px;font-weight:900;letter-spacing:.5px">SAKER BAPTIST COLLAGE(SBC)-BAWE</div>
+  <div style="font-size:8px;margin-top:1px;opacity:.85">Motto: Quality, Discipline, and Excellence education</div>
 </div>
 
-<!-- REPORT CARD TITLE -->
-<table style="width:100%;margin-bottom:5px">
-  <tr>
-    <td style="text-align:center">
-      <div style="font-size:12px;font-weight:800;text-decoration:underline">ACADEMIC REPORT CARD</div>
-      <div style="font-size:11px;font-weight:700">BULLETIN DE NOTES</div>
-    </td>
-  </tr>
-</table>
+<!-- TITLE -->
+<div style="text-align:center;margin-bottom:3px">
+  <span style="font-size:11px;font-weight:800;text-decoration:underline">ACADEMIC REPORT CARD</span>
+  <span style="font-size:10px;font-weight:700"> / BULLETIN DE NOTES</span>
+</div>
 
-<!-- TERM INFO ROW -->
-<table style="width:100%;border:1px solid #000;margin-bottom:5px">
+<!-- TERM + STUDENT INFO + PHOTO -->
+<table style="border:1px solid #000;margin-bottom:3px">
   <tr>
-    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;width:25%">
-      <strong>${sel.mode==="term"?`${sel.term.replace(" Term","")} TERM`:""}</strong>
-      &nbsp;&nbsp; <strong>3<sup>ème</sup> TERM</strong>
+    <td colspan="4" style="border-bottom:1px solid #000;padding:2px 6px;font-size:8px">
+      <strong>${termLabel}</strong> &nbsp;|&nbsp; Class: <strong>${student.form}</strong> &nbsp;|&nbsp;
+      No. on Roll: <strong>${peers.length}</strong> &nbsp;|&nbsp; Effective: <strong>${students.filter(s=>s.active&&s.form===student.form&&s.reg_status==="registered").length}</strong> &nbsp;|&nbsp;
+      Academic Year: <strong>${sel.year}</strong>
     </td>
-    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;width:25%">
-      Class: <strong>${classe}</strong>
-    </td>
-    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;width:25%">
-      No. on Roll: <strong>${students.filter(s=>s.active&&s.form===student.form).length}</strong>
-    </td>
-    <td style="padding:3px 6px;font-size:9px;width:25%">
-      Effective: <strong>${students.filter(s=>s.active&&s.form===student.form&&s.reg_status==="registered").length}</strong>
-    </td>
-  </tr>
-</table>
-
-<!-- STUDENT INFO -->
-<table style="width:100%;border:1px solid #000;margin-bottom:5px">
-  <tr>
-    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;width:40%">
-      Name and other Name: <strong>${name}</strong>
-    </td>
-    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;width:15%">
-      Sex....... <strong>${sex.charAt(0)}</strong>
-    </td>
-    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;width:25%">
-      Sexe
-    </td>
-    <td style="padding:3px 6px;font-size:9px;width:20%">
-      &nbsp;
+    <td rowspan="4" style="width:72px;padding:3px;border-left:1px solid #000;vertical-align:top;text-align:center">
+      ${photoHtml}
     </td>
   </tr>
   <tr>
-    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;border-top:1px solid #000">
-      Nom et prénom: <strong>${name}</strong>
+    <td colspan="2" style="padding:2px 6px;font-size:8px;border-bottom:1px solid #ccc;border-right:1px solid #ccc">
+      Name / Nom: <strong>${student.name}</strong>
     </td>
-    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;border-top:1px solid #000">
-      Date of Birth: <strong>${dob}</strong>
-    </td>
-    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;border-top:1px solid #000">
-      Naissance: <strong>${dob}</strong>
-    </td>
-    <td style="padding:3px 6px;font-size:9px;border-top:1px solid #000">
-      &nbsp;
+    <td colspan="2" style="padding:2px 6px;font-size:8px;border-bottom:1px solid #ccc">
+      Matricule / ID: <strong>${student.id}</strong>
     </td>
   </tr>
   <tr>
-    <td colspan="2" style="padding:3px 6px;font-size:9px;border-right:1px solid #000;border-top:1px solid #000">
-      Classe / Class: <strong>${classe}</strong>
+    <td style="padding:2px 6px;font-size:8px;border-bottom:1px solid #ccc;border-right:1px solid #ccc">
+      Sex / Sexe: <strong>${student.gender}</strong>
     </td>
-    <td colspan="2" style="padding:3px 6px;font-size:9px;border-top:1px solid #000">
-      Annee scolaire / Year 20<strong>${year}</strong> &nbsp;/20
+    <td style="padding:2px 6px;font-size:8px;border-bottom:1px solid #ccc;border-right:1px solid #ccc">
+      DOB / Naissance: <strong>${fmtDate(student.dob)}</strong>
+    </td>
+    <td colspan="2" style="padding:2px 6px;font-size:8px;border-bottom:1px solid #ccc">
+      Parent/Guardian: <strong>${student.parent||"—"}</strong>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="4" style="padding:2px 6px;font-size:8px">
+      Address / Domicile: <strong>${student.address||"—"}</strong>
     </td>
   </tr>
 </table>
 
 <!-- MARKS TABLE -->
-<table style="width:100%;border:2px solid #1a56a0;margin-bottom:5px">
+<table style="border:1px solid #1a56a0;margin-bottom:3px">
   <thead>
     <tr style="background:#1a56a0;color:#fff">
-      <th rowspan="2" style="padding:4px 5px;text-align:left;font-size:9px;border:1px solid #1a56a0;width:22%">SUBJECT</th>
-      <th style="padding:4px 3px;text-align:center;font-size:8px;border:1px solid #fff;width:9%">Class Test/20</th>
-      <th style="padding:4px 3px;text-align:center;font-size:8px;border:1px solid #fff;width:9%">Exam. Test /20</th>
-      <th style="padding:4px 3px;text-align:center;font-size:8px;border:1px solid #fff;width:9%">Average/20</th>
-      <th style="padding:4px 3px;text-align:center;font-size:8px;border:1px solid #fff;width:7%">Coef.</th>
-      <th style="padding:4px 3px;text-align:center;font-size:8px;border:1px solid #fff;width:8%">Score</th>
-      <th style="padding:4px 3px;text-align:center;font-size:8px;border:1px solid #fff;width:7%">Position</th>
-      <th style="padding:4px 3px;text-align:center;font-size:8px;border:1px solid #fff;width:15%">REMARKS</th>
-      <th style="padding:4px 3px;text-align:center;font-size:8px;border:1px solid #fff;width:14%">Subject master SIGN.</th>
+      <th style="text-align:left;padding:3px 5px;font-size:8px;border:1px solid #fff;min-width:95px">SUBJECT</th>
+      ${seqHeaders}
+      <th style="padding:3px 3px;font-size:7.5px;border:1px solid #fff;min-width:28px">Avg/20</th>
+      <th style="padding:3px 3px;font-size:7.5px;border:1px solid #fff;min-width:24px">Coef</th>
+      <th style="padding:3px 3px;font-size:7.5px;border:1px solid #fff;min-width:30px">Score</th>
+      <th style="padding:3px 3px;font-size:7.5px;border:1px solid #fff;min-width:48px">Remarks</th>
     </tr>
   </thead>
-  <tbody>
-    ${rows}
-  </tbody>
+  <tbody>${rows}</tbody>
 </table>
 
-<!-- SUMMARY SECTION -->
-<table style="width:100%;border:1px solid #000;margin-bottom:5px">
+<!-- SUMMARY -->
+<table style="border:1px solid #000;margin-bottom:3px">
   <tr>
-    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;width:33%">
-      Terminal Average: <strong>${termAvgAll}/20</strong>
+    <td style="padding:3px 6px;font-size:8.5px;border-right:1px solid #000;width:25%">
+      Terminal Avg: <strong>${overallAvg?overallAvg.toFixed(2):"—"}/20</strong>
     </td>
-    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;width:33%">
-      Discipline: ___________
+    <td style="padding:3px 6px;font-size:8.5px;border-right:1px solid #000;width:25%">
+      Class Avg: <strong>${classAvg}/20</strong>
     </td>
-    <td style="padding:3px 6px;font-size:9px;width:34%">
-      Promoted/Repeat: ___________
+    <td style="padding:3px 6px;font-size:8.5px;border-right:1px solid #000;width:25%">
+      Position / Rang: <strong>${rankStr}</strong>
+    </td>
+    <td style="padding:3px 6px;font-size:8.5px;width:25%">
+      Promoted/Repeat: __________
     </td>
   </tr>
   <tr>
-    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;border-top:1px solid #000">
-      Annual Average: <strong>${sel.mode==="annual"?termAvgAll:""}/20</strong>
+    <td style="padding:3px 6px;font-size:8.5px;border-right:1px solid #000;border-top:1px solid #ccc">
+      Annual Avg: <strong>${sel.mode==="annual"&&overallAvg?overallAvg.toFixed(2):"—"}/20</strong>
     </td>
-    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;border-top:1px solid #000">
-      Position: ___________
+    <td style="padding:3px 6px;font-size:8.5px;border-right:1px solid #000;border-top:1px solid #ccc">
+      Absences: <strong>${conduct.absent||"—"}</strong>
     </td>
-    <td style="padding:3px 6px;font-size:9px;border-top:1px solid #000">
-      Fees/Money Owning: ___________
+    <td style="padding:3px 6px;font-size:8.5px;border-right:1px solid #000;border-top:1px solid #ccc">
+      No. of Warnings: __________
     </td>
-  </tr>
-  <tr>
-    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;border-top:1px solid #000">
-      No of Absences: ${conduct.absent||"___"}
-    </td>
-    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;border-top:1px solid #000">
-      No of Warning: ___________
-    </td>
-    <td style="padding:3px 6px;font-size:9px;border-top:1px solid #000">
-      Next Term Begins: ___________
+    <td style="padding:3px 6px;font-size:8.5px;border-top:1px solid #ccc">
+      Fees Owing: __________
     </td>
   </tr>
   <tr>
-    <td colspan="3" style="padding:3px 6px;font-size:9px;border-top:1px solid #000">
-      No. of suspensions: ___________
+    <td colspan="2" style="padding:3px 6px;font-size:8.5px;border-right:1px solid #000;border-top:1px solid #ccc">
+      Class Teacher Remark: <strong>${conduct.classTeacherRemark||"_________________________"}</strong>
+    </td>
+    <td colspan="2" style="padding:3px 6px;font-size:8.5px;border-top:1px solid #ccc">
+      Next Term Begins: __________
     </td>
   </tr>
 </table>
 
-<!-- DISCIPLINE + SIGNATURES -->
-<table style="width:100%;border:1px solid #000;margin-bottom:8px">
+<!-- SIGNATURES -->
+<table style="margin-top:6px">
   <tr>
-    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;width:50%">
-      <strong>Discipline</strong><br><br>
-      Class Teacher's Remark: ${conduct.classTeacherRemark||"_________________________"}
+    <td style="width:33%;text-align:center;padding:0 8px">
+      <div style="height:22px;border-bottom:1px solid #000;margin-bottom:2px"></div>
+      <div style="font-size:8px">Class Teacher / Prof. Principal</div>
     </td>
-    <td style="padding:3px 6px;font-size:9px;width:50%">
-      &nbsp;
+    <td style="width:34%;text-align:center;padding:0 8px">
+      <div style="height:22px;border-bottom:1px solid #000;margin-bottom:2px"></div>
+      <div style="font-size:8px">Principal's Signature / Stamp</div>
+    </td>
+    <td style="width:33%;text-align:center;padding:0 8px">
+      <div style="height:22px;border-bottom:1px solid #000;margin-bottom:2px"></div>
+      <div style="font-size:8px">Parent / Guardian</div>
     </td>
   </tr>
 </table>
 
-<!-- PRINCIPAL SIGNATURE -->
-<div style="text-align:right;margin-top:16px;padding-right:20px">
-  <div style="font-size:9px;margin-bottom:20px">Principal's Signature/Stamp</div>
-  <div style="border-top:1px solid #000;width:160px;display:inline-block;padding-top:3px;font-size:8px">Principal / Proviseur</div>
+<div style="text-align:center;font-size:7px;color:#888;margin-top:5px;border-top:1px dashed #ccc;padding-top:3px">
+  Saker Baptist Collage (SBC)-Bawe · ${sel.year} · Printed: ${new Date().toLocaleDateString("en-GB")}
 </div>
-
-<!-- FOOTER -->
-<div style="text-align:center;font-size:7.5px;color:#666;margin-top:10px;border-top:1px dashed #ccc;padding-top:4px">
-  Saker Baptist Collage (SBC)-Bawe &nbsp;·&nbsp; ${year} &nbsp;·&nbsp; Printed: ${new Date().toLocaleDateString("en-GB")}
-</div>
-
 </div></body></html>`;
   }
 
@@ -1461,78 +1446,73 @@ function ReportsPage({ ctx }) {
             )}
           </div>
 
-          {/* Preview card — SBC Physical Design */}
-          <div style={{background:C.white,borderRadius:8,overflow:"hidden",boxShadow:"0 2px 10px rgba(0,0,0,0.1)",marginBottom:13,border:"2px solid #1a56a0"}}>
+          {/* Preview card — SBC compact design */}
+          <div style={{background:C.white,borderRadius:8,overflow:"hidden",
+            boxShadow:"0 2px 10px rgba(0,0,0,0.1)",marginBottom:13,border:"2px solid #1a56a0"}}>
 
-            {/* Bilingual government header */}
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"6px 10px",borderBottom:"1px solid #ccc"}}>
-              <div style={{fontSize:7.5,lineHeight:1.5}}>
-                <strong>REPUBLIC OF CAMEROON</strong><br/>
-                Peace-Work-Fatherland<br/>
-                Ministry of Secondary Education
-              </div>
-              <div style={{textAlign:"center",fontSize:22}}>🇨🇲</div>
-              <div style={{fontSize:7.5,lineHeight:1.5,textAlign:"right"}}>
-                <strong>REPUBLIQUE DU CAMEROUN</strong><br/>
-                Paix – Travail – Patrie<br/>
-                Ministère De l'Enseignement
-              </div>
+            {/* Govt header */}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",
+              padding:"5px 10px",borderBottom:"1px solid #ccc",fontSize:7.5}}>
+              <div style={{lineHeight:1.5}}><strong>REPUBLIC OF CAMEROON</strong><br/>Peace-Work-Fatherland<br/>Ministry of Secondary Education</div>
+              <div style={{fontSize:20}}>🇨🇲</div>
+              <div style={{lineHeight:1.5,textAlign:"right"}}><strong>REPUBLIQUE DU CAMEROUN</strong><br/>Paix – Travail – Patrie<br/>Ministère De l'Enseignement</div>
             </div>
 
-            {/* School name banner */}
-            <div style={{background:"#1a56a0",color:"#fff",textAlign:"center",padding:"7px 4px"}}>
-              <div style={{fontSize:14,fontWeight:900,letterSpacing:.5}}>SAKER BAPTIST COLLAGE(SBC)-BAWE</div>
-              <div style={{fontSize:8,marginTop:1,opacity:.85}}>Motto: Quality, Discipline, and Excellence education</div>
+            {/* School banner */}
+            <div style={{background:"#1a56a0",color:"#fff",textAlign:"center",padding:"6px 4px"}}>
+              <div style={{fontSize:13,fontWeight:900,letterSpacing:.5}}>SAKER BAPTIST COLLAGE(SBC)-BAWE</div>
+              <div style={{fontSize:7.5,marginTop:1,opacity:.85}}>Motto: Quality, Discipline, and Excellence education</div>
             </div>
 
             {/* Title */}
-            <div style={{textAlign:"center",padding:"5px 0",borderBottom:"1px solid #1a56a0"}}>
-              <div style={{fontSize:11,fontWeight:800,textDecoration:"underline"}}>ACADEMIC REPORT CARD</div>
-              <div style={{fontSize:10,fontWeight:700}}>BULLETIN DE NOTES</div>
+            <div style={{textAlign:"center",padding:"4px 0",borderBottom:"1px solid #1a56a0",fontSize:10,fontWeight:800,textDecoration:"underline"}}>
+              ACADEMIC REPORT CARD / BULLETIN DE NOTES
             </div>
 
-            {/* Term row */}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",borderBottom:"1px solid #000",fontSize:8}}>
-              <div style={{padding:"3px 6px",borderRight:"1px solid #000"}}><strong>{sel.mode==="term"?sel.term.replace(" Term","")+" TERM":"ANNUAL"}</strong> / 3ème TERM</div>
-              <div style={{padding:"3px 6px",borderRight:"1px solid #000"}}>Class: <strong>{student.form}</strong></div>
-              <div style={{padding:"3px 6px",borderRight:"1px solid #000"}}>No. on Roll: <strong>{students.filter(s=>s.active&&s.form===student.form).length}</strong></div>
-              <div style={{padding:"3px 6px"}}>Effective: <strong>{students.filter(s=>s.active&&s.form===student.form&&s.reg_status==="registered").length}</strong></div>
-            </div>
-
-            {/* Student info */}
-            <div style={{borderBottom:"1px solid #000",fontSize:8}}>
-              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr",borderBottom:"1px solid #ccc"}}>
-                <div style={{padding:"3px 6px",borderRight:"1px solid #000"}}>Name: <strong>{student.name}</strong></div>
-                <div style={{padding:"3px 6px",borderRight:"1px solid #000"}}>Sex: <strong>{student.gender?.charAt(0)}</strong></div>
-                <div style={{padding:"3px 6px",borderRight:"1px solid #000"}}>Sexe</div>
-                <div style={{padding:"3px 6px"}}>{student.photo_url&&<img src={student.photo_url} alt="" style={{width:50,height:60,objectFit:"cover",border:"1px solid #1a56a0",borderRadius:2}}/>}</div>
+            {/* Term + student info + photo */}
+            <div style={{display:"flex",gap:0,borderBottom:"1px solid #000"}}>
+              <div style={{flex:1,fontSize:8}}>
+                <div style={{padding:"2px 6px",borderBottom:"1px solid #ccc",borderRight:"1px solid #000"}}>
+                  <strong>{sel.mode==="term"?sel.term.replace(" Term","").toUpperCase()+" TERM":"ANNUAL"}</strong> &nbsp;|&nbsp;
+                  Class: <strong>{student.form}</strong> &nbsp;|&nbsp;
+                  Roll: <strong>{students.filter(s=>s.active&&s.form===student.form).length}</strong> &nbsp;|&nbsp;
+                  Year: <strong>{sel.year}</strong>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"1px solid #ccc"}}>
+                  <div style={{padding:"2px 6px",borderRight:"1px solid #ccc"}}>Name: <strong>{student.name}</strong></div>
+                  <div style={{padding:"2px 6px"}}>Matricule: <strong>{student.id}</strong></div>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"1px solid #ccc"}}>
+                  <div style={{padding:"2px 6px",borderRight:"1px solid #ccc"}}>Sex: <strong>{student.gender}</strong></div>
+                  <div style={{padding:"2px 6px"}}>DOB: <strong>{fmtDate(student.dob)}</strong></div>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr"}}>
+                  <div style={{padding:"2px 6px",borderRight:"1px solid #ccc"}}>Parent: <strong>{student.parent||"—"}</strong></div>
+                  <div style={{padding:"2px 6px"}}>Phone: <strong>{student.phone||"—"}</strong></div>
+                </div>
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr",borderBottom:"1px solid #ccc"}}>
-                <div style={{padding:"3px 6px",borderRight:"1px solid #000"}}>Nom et prénom: <strong>{student.name}</strong></div>
-                <div style={{padding:"3px 6px",borderRight:"1px solid #000"}}>DOB: <strong>{fmtDate(student.dob)}</strong></div>
-                <div style={{padding:"3px 6px",borderRight:"1px solid #000"}}>Naissance</div>
-                <div style={{padding:"3px 6px"}}></div>
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr"}}>
-                <div style={{padding:"3px 6px",borderRight:"1px solid #000"}}>Classe: <strong>{student.form}</strong></div>
-                <div style={{padding:"3px 6px"}}>Annee scolaire / Year 20<strong>{sel.year}</strong></div>
+              <div style={{width:70,borderLeft:"1px solid #000",padding:3,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                {student.photo_url
+                  ?<img src={student.photo_url} alt="" style={{width:62,height:75,objectFit:"cover",border:"1px solid #1a56a0"}}/>
+                  :<div style={{width:62,height:75,border:"1px solid #999",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:"#999",textAlign:"center"}}>PHOTO</div>
+                }
               </div>
             </div>
 
             {/* Marks table */}
             <div style={{overflowX:"auto"}}>
-              <table style={{width:"100%",borderCollapse:"collapse",minWidth:500}}>
+              <table style={{width:"100%",borderCollapse:"collapse",minWidth:480}}>
                 <thead>
                   <tr style={{background:"#1a56a0",color:"#fff"}}>
-                    <th style={{padding:"4px 5px",textAlign:"left",fontSize:8,border:"1px solid #1a56a0",minWidth:95}}>SUBJECT</th>
-                    <th style={{padding:"4px 2px",textAlign:"center",fontSize:7,border:"1px solid #fff",minWidth:36}}>Class Test/20</th>
-                    <th style={{padding:"4px 2px",textAlign:"center",fontSize:7,border:"1px solid #fff",minWidth:36}}>Exam Test/20</th>
-                    <th style={{padding:"4px 2px",textAlign:"center",fontSize:7,border:"1px solid #fff",minWidth:36}}>Average/20</th>
-                    <th style={{padding:"4px 2px",textAlign:"center",fontSize:7,border:"1px solid #fff",minWidth:26}}>Coef.</th>
-                    <th style={{padding:"4px 2px",textAlign:"center",fontSize:7,border:"1px solid #fff",minWidth:32}}>Score</th>
-                    <th style={{padding:"4px 2px",textAlign:"center",fontSize:7,border:"1px solid #fff",minWidth:26}}>Position</th>
-                    <th style={{padding:"4px 2px",textAlign:"center",fontSize:7,border:"1px solid #fff",minWidth:52}}>REMARKS</th>
-                    <th style={{padding:"4px 2px",textAlign:"center",fontSize:7,border:"1px solid #fff",minWidth:48}}>Subject Master SIGN.</th>
+                    <th style={{padding:"3px 5px",textAlign:"left",fontSize:8,border:"1px solid #1a56a0",minWidth:90}}>SUBJECT</th>
+                    {sel.mode==="term"
+                      ? termSeqs.map((sq,i)=><th key={sq} style={{padding:"3px 2px",textAlign:"center",fontSize:7.5,border:"1px solid #fff",minWidth:22}}>SQ{sq.replace("SEQ ","")}</th>)
+                      : ["SQ1","SQ2","SQ3","SQ4","SQ5","SQ6"].map(s=><th key={s} style={{padding:"3px 2px",textAlign:"center",fontSize:7,border:"1px solid #fff",minWidth:18}}>{s}</th>)
+                    }
+                    <th style={{padding:"3px 2px",textAlign:"center",fontSize:7.5,border:"1px solid #fff",minWidth:28}}>Avg/20</th>
+                    <th style={{padding:"3px 2px",textAlign:"center",fontSize:7.5,border:"1px solid #fff",minWidth:24}}>Coef</th>
+                    <th style={{padding:"3px 2px",textAlign:"center",fontSize:7.5,border:"1px solid #fff",minWidth:28}}>Score</th>
+                    <th style={{padding:"3px 2px",textAlign:"center",fontSize:7.5,border:"1px solid #fff",minWidth:46}}>Remarks</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1543,7 +1523,6 @@ function ReportsPage({ ctx }) {
                     "Literature in English","Computer Studies","Religious Studies",
                     "Commerce","Accounts","Hygiene","Sport/Physical education","Manual Labour"
                   ].map((sub,i)=>{
-                    // Match subject names flexibly
                     const r=modeRows.find(x=>
                       x.sub===sub||
                       (sub==="French/ Français"&&x.sub==="French")||
@@ -1552,20 +1531,20 @@ function ReportsPage({ ctx }) {
                       (sub==="Literature in English"&&x.sub==="Literature")
                     );
                     const avg=r?(sel.mode==="term"?r.termAvg:r.annualAvg):null;
-                    const score=avg!==null&&r?(avg*r.coeff).toFixed(1):"";
-                    const {remark}=r&&avg!==null?scoreToGrade(avg):{remark:""};
-                    const pass=avg!==null&&avg>=10;
+                    const score=avg!=null&&r?(avg*r.coeff).toFixed(1):"";
+                    const {remark}=r&&avg!=null?scoreToGrade(avg):{remark:""};
+                    const pass=avg!=null&&avg>=10;
                     return(
                       <tr key={sub} style={{background:i%2===0?"#fff":"#F8FAFC"}}>
-                        <td style={{padding:"3px 5px",fontSize:8.5,border:"1px solid #1a56a0"}}>{sub}</td>
-                        <td style={{textAlign:"center",fontSize:8.5,border:"1px solid #1a56a0"}}>{r&&r.termScores?.[0]!=null?r.termScores[0]:""}</td>
-                        <td style={{textAlign:"center",fontSize:8.5,border:"1px solid #1a56a0"}}>{r&&r.termScores?.[1]!=null?r.termScores[1]:""}</td>
-                        <td style={{textAlign:"center",fontSize:8.5,fontWeight:700,border:"1px solid #1a56a0"}}>{avg!=null?avg.toFixed(1):""}</td>
-                        <td style={{textAlign:"center",fontSize:8.5,border:"1px solid #1a56a0"}}>{r?r.coeff:""}</td>
-                        <td style={{textAlign:"center",fontSize:8.5,fontWeight:700,border:"1px solid #1a56a0"}}>{score}</td>
-                        <td style={{textAlign:"center",fontSize:8.5,border:"1px solid #1a56a0"}}></td>
-                        <td style={{textAlign:"center",fontSize:8,color:avg!=null?(pass?C.green:C.red):"#000",border:"1px solid #1a56a0"}}>{remark}</td>
-                        <td style={{border:"1px solid #1a56a0"}}></td>
+                        <td style={{padding:"2px 4px",fontSize:8,border:"1px solid #1a56a0"}}>{sub}</td>
+                        {sel.mode==="term"
+                          ? r?.termScores.map((s,j)=><td key={j} style={{textAlign:"center",fontSize:8,border:"1px solid #1a56a0"}}>{s!=null?s:""}</td>)
+                          : [r?.s1,r?.s2,r?.s3,r?.s4,r?.s5,r?.s6].map((s,j)=><td key={j} style={{textAlign:"center",fontSize:7.5,border:"1px solid #1a56a0"}}>{s!=null?s:""}</td>)
+                        }
+                        <td style={{textAlign:"center",fontSize:8,fontWeight:700,border:"1px solid #1a56a0"}}>{avg!=null?avg.toFixed(1):""}</td>
+                        <td style={{textAlign:"center",fontSize:8,border:"1px solid #1a56a0"}}>{r?r.coeff:""}</td>
+                        <td style={{textAlign:"center",fontSize:8,fontWeight:700,border:"1px solid #1a56a0"}}>{score}</td>
+                        <td style={{textAlign:"center",fontSize:7.5,color:avg!=null?(pass?C.green:C.red):"#000",border:"1px solid #1a56a0"}}>{remark}</td>
                       </tr>
                     );
                   })}
@@ -1574,35 +1553,52 @@ function ReportsPage({ ctx }) {
             </div>
 
             {/* Summary */}
-            <div style={{padding:"6px 10px",borderTop:"2px solid #1a56a0",fontSize:8.5}}>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:4}}>
-                <div>Terminal Average: <strong>{overallAvg?overallAvg.toFixed(2):"___"}/20</strong></div>
-                <div>Discipline: ___________</div>
-                <div>Promoted/Repeat: ___________</div>
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:4}}>
-                <div>Annual Average: <strong>{sel.mode==="annual"&&overallAvg?overallAvg.toFixed(2):"___"}/20</strong></div>
-                <div>Position: <strong>___</strong></div>
-                <div>Fees/Money Owning: ___________</div>
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:4}}>
-                <div>No of Absences: {conduct.absent||"___"}</div>
-                <div>No of Warning: ___________</div>
-                <div>Next Term Begins: ___________</div>
-              </div>
-              <div style={{marginBottom:4}}>No. of suspensions: ___________</div>
-              <div style={{borderTop:"1px solid #ccc",paddingTop:5}}>
-                <strong>Discipline:</strong><br/>
-                Class Teacher Remark: {conduct.classTeacherRemark||"_________________________"}<br/>
-                Principal Remark: {conduct.principalRemark||"_________________________"}
-              </div>
-              <div style={{textAlign:"right",marginTop:12,paddingBottom:6}}>
-                <div style={{fontSize:8.5}}>Principal's Signature/Stamp</div>
-                <div style={{marginTop:14,borderTop:"1px solid #000",display:"inline-block",minWidth:130,paddingTop:2,fontSize:8}}>Principal / Proviseur</div>
-              </div>
-            </div>
+            {(()=>{
+              // Auto compute class ranking and class average for preview
+              const peers2=students.filter(s=>s.active&&s.form===student.form&&s.reg_status==="registered");
+              const peerAvgs2=peers2.map(ps=>{
+                let tw=0,tc=0;
+                modeRows.forEach(r=>{
+                  const seqs=sel.mode==="term"
+                    ? TERM_SEQS[sel.term].map(sq=>{const k=ps.id+"-"+r.sub+"-"+sq+"-"+sel.year;return marksMap[k]?.score??null;})
+                    : SEQ_LABELS.map(sq=>{const k=ps.id+"-"+r.sub+"-"+sq+"-"+sel.year;return marksMap[k]?.score??null;});
+                  const vals=seqs.filter(x=>x!==null);
+                  if(vals.length){tw+=vals.reduce((a,b)=>a+Number(b),0)/vals.length*r.coeff;tc+=r.coeff;}
+                });
+                return{id:ps.id,avg:tc?tw/tc:0};
+              }).sort((a,b)=>b.avg-a.avg);
+              const myRank2=peerAvgs2.findIndex(x=>x.id===student.id)+1;
+              const rankStr2=myRank2>0?myRank2+"/"+peers2.length:"—";
+              const classAvg2=peerAvgs2.length?(peerAvgs2.reduce((a,x)=>a+x.avg,0)/peerAvgs2.length).toFixed(2):"—";
+              return(
+                <div style={{borderTop:"2px solid #1a56a0",padding:"5px 10px",fontSize:8.5}}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6,marginBottom:4}}>
+                    <div>Terminal Avg: <strong>{overallAvg?overallAvg.toFixed(2):"—"}/20</strong></div>
+                    <div>Class Avg: <strong>{classAvg2}/20</strong></div>
+                    <div>Position: <strong>{rankStr2}</strong></div>
+                    <div>Promoted/Repeat: ______</div>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6,marginBottom:4}}>
+                    <div>Annual Avg: <strong>{sel.mode==="annual"&&overallAvg?overallAvg.toFixed(2):"—"}/20</strong></div>
+                    <div>Absences: <strong>{conduct.absent||"—"}</strong></div>
+                    <div>Warnings: ______</div>
+                    <div>Fees Owing: ______</div>
+                  </div>
+                  <div style={{borderTop:"1px solid #ccc",paddingTop:4,marginBottom:6}}>
+                    Class Teacher Remark: <strong>{conduct.classTeacherRemark||"_________________________"}</strong>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginTop:8}}>
+                    {["Class Teacher / Prof. Principal","Principal's Signature / Stamp","Parent / Guardian"].map((r,i)=>(
+                      <div key={r} style={{textAlign:"center"}}>
+                        <div style={{height:20,borderBottom:"1px solid #000",marginBottom:2}}></div>
+                        <div style={{fontSize:7.5}}>{r}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
-
 
           {modeRows.length>0
             ? <button onClick={printReport} style={{width:"100%",padding:"13px",background:`linear-gradient(90deg,${C.navy},${C.navyMid})`,color:C.white,border:"none",borderRadius:10,fontWeight:800,fontSize:15,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
