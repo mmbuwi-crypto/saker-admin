@@ -1391,6 +1391,9 @@ function ReportsPage({ ctx }) {
     domPrint("sbc-report", buildPrintHTML(), "A4 portrait", "7mm");
   }
 
+  // Guard: show error if something crashes
+  try {
+
   return (
     <div>
       {/* Controls */}
@@ -1579,7 +1582,7 @@ function ReportsPage({ ctx }) {
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:4}}>
                 <div>Annual Average: <strong>{sel.mode==="annual"&&overallAvg?overallAvg.toFixed(2):"___"}/20</strong></div>
-                <div>Position: <strong>{classRank||"___"}</strong></div>
+                <div>Position: <strong>___</strong></div>
                 <div>Fees/Money Owning: ___________</div>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:4}}>
@@ -1611,6 +1614,12 @@ function ReportsPage({ ctx }) {
       )}
     </div>
   );
+  } catch(err) {
+    return <div style={{padding:20,color:"red",fontSize:13}}>
+      <strong>Report Card Error:</strong> {err.message}<br/>
+      <small>{err.stack}</small>
+    </div>;
+  }
 }
 
 // ─── Fees ──────────────────────────────────────────────────────────────────────
