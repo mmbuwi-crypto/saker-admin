@@ -14,11 +14,11 @@ const C = {
 // ─── Constants ────────────────────────────────────────────────────────────────
 const FORMS = ["Form 1","Form 2","Form 3","Form 4","Form 5"];
 const SUBJECTS_BY_FORM = {
-  "Form 1":["Mathematics","English Language","French","Biology","Chemistry","Physics","History","Geography","Computer Science","Civic Education","Religious Studies","Physical Education"],
-  "Form 2":["Mathematics","English Language","French","Biology","Chemistry","Physics","History","Geography","Computer Science","Civic Education","Religious Studies","Physical Education"],
-  "Form 3":["Mathematics","English Language","French","Biology","Chemistry","Physics","History","Geography","Computer Science","Civic Education","Religious Studies","Physical Education"],
-  "Form 4":["Mathematics","English Language","French","Biology","Chemistry","Physics","History","Geography","Economics","Accounting","Computer Science","Literature"],
-  "Form 5":["Mathematics","English Language","French","Biology","Chemistry","Physics","History","Geography","Economics","Accounting","Computer Science","Literature"],
+  "Form 1":["English language","French/ Français","Mathematics","Health science","Home management","Citizenship","Food and Nutrition","Chemistry","History","Economics","Geography","Biology","Human Biology","Physics","Computer Studies","Religious Studies","Hygiene","Sport/Physical education","Manual Labour"],
+  "Form 2":["English language","French/ Français","Mathematics","Health science","Home management","Citizenship","Food and Nutrition","Chemistry","History","Economics","Geography","Biology","Human Biology","Physics","Computer Studies","Religious Studies","Hygiene","Sport/Physical education","Manual Labour"],
+  "Form 3":["English language","French/ Français","Mathematics","Health science","Home management","Citizenship","Food and Nutrition","Chemistry","History","Economics","Geography","Biology","Human Biology","Physics","Computer Studies","Religious Studies","Hygiene","Sport/Physical education","Manual Labour"],
+  "Form 4":["English language","French/ Français","Mathematics","Chemistry","History","Economics","Geography","Biology","Physics","Literature in English","Computer Studies","Religious Studies","Commerce","Accounts","Hygiene","Sport/Physical education"],
+  "Form 5":["English language","French/ Français","Mathematics","Chemistry","History","Economics","Geography","Biology","Physics","Literature in English","Computer Studies","Religious Studies","Commerce","Accounts","Hygiene","Sport/Physical education"],
 };
 const SEQ_LABELS  = ["SEQ 1","SEQ 2","SEQ 3","SEQ 4","SEQ 5","SEQ 6"];
 const TERM_SEQS   = {"First Term":["SEQ 1","SEQ 2"],"Second Term":["SEQ 3","SEQ 4"],"Third Term":["SEQ 5","SEQ 6"]};
@@ -30,11 +30,13 @@ const REG_LATE    = 1000;
 const LATE_CUTOFF = "2026-09-30";
 
 const DEFAULT_COEFF = {
-  "Mathematics":4,"English Language":4,"French":4,
-  "Biology":3,"Chemistry":3,"Physics":3,
-  "History":2,"Geography":2,"Computer Science":2,
-  "Civic Education":1,"Religious Studies":1,"Physical Education":1,
-  "Economics":3,"Accounting":3,"Literature":3,
+  "English language":4,"French/ Français":4,"Mathematics":4,
+  "Biology":3,"Human Biology":3,"Chemistry":3,"Physics":3,
+  "History":2,"Geography":2,"Computer Studies":2,
+  "Religious Studies":1,"Sport/Physical education":1,"Hygiene":1,
+  "Economics":3,"Commerce":3,"Accounts":3,"Literature in English":3,
+  "Health science":2,"Home management":2,"Citizenship":1,
+  "Food and Nutrition":2,"Manual Labour":1,
 };
 const getCoeff = sub => DEFAULT_COEFF[sub] || 2;
 
@@ -958,7 +960,7 @@ function TeachersPage({ ctx }) {
 
 // ─── Marks Entry ───────────────────────────────────────────────────────────────
 function MarksPage({ ctx }) {
-  const { students, marksMap, saveMark, auth, teachers } = ctx;
+  const { students, marksMap, saveMark, auth, teachers, loadAll } = ctx;
   const isTeacher  = auth.role==="teacher";
   const teacher    = teachers.find(t=>t.email===auth.user.email);
   const availForms = isTeacher ? (teacher?.forms||[]) : FORMS;
@@ -1076,6 +1078,13 @@ function MarksPage({ ctx }) {
 
 // ─── Report Cards ──────────────────────────────────────────────────────────────
 function ReportsPage({ ctx }) {
+  const SBC_SUBJECTS_LIST = [
+    "English language","French/ Français","Mathematics","Health science",
+    "Home management","Citizenship","Food and Nutrition","Chemistry",
+    "History","Economics","Geography","Biology","Human Biology","Physics",
+    "Literature in English","Computer Studies","Religious Studies",
+    "Commerce","Accounts","Hygiene","Sport/Physical education","Manual Labour"
+  ];
   const { students, marksMap, teachers } = ctx;
   const [sel,     setSel]     = useState({ studentId:"", year:"2026/2027", mode:"term", term:"First Term" });
   const [conduct, setConduct] = useState({ present:"", absent:"", late:"", conduct:"Very Good", classTeacherRemark:"", principalRemark:"" });
@@ -1129,190 +1138,253 @@ function ReportsPage({ ctx }) {
 
   function buildPrintHTML() {
     if (!student||!modeRows.length) return "";
-    const photoHtml = student.photo_url
-      ? `<img src="${student.photo_url}" style="width:78px;height:94px;object-fit:cover;border:2px solid #0D2340;border-radius:2px;display:block">`
-      : `<div style="width:78px;height:94px;border:2px dashed #ccc;border-radius:2px;background:#f9fafb;display:flex;align-items:center;justify-content:center;font-size:22px">👤</div>`;
 
-    const profileHtml = [
-      ["Nom / Name",student.name],["Matricule / ID",student.id],
-      ["Classe / Form",student.form],["Sexe / Gender",student.gender],
-      ["Date naiss. / DOB",fmtDate(student.dob)],["Domicile / Address",student.address||"—"],
-      ["Parent/Tuteur",student.parent],["Téléphone",student.phone],
-    ].map(([l,v],i)=>`<div style="display:flex;gap:4px;padding:2px 0;border-bottom:1px solid #e5e7eb;background:${i%2===0?"#f8f9fa":"#fff"}"><span style="font-size:7.5px;color:#6b7280;width:110px;flex-shrink:0">${l}:</span><span style="font-size:9px;font-weight:700;color:#0D2340">${v||"—"}</span></div>`).join("");
+    // Student info
+    const name    = student.name || "";
+    const dob     = fmtDate(student.dob);
+    const sex     = student.gender || "";
+    const classe  = student.form  || "";
+    const year    = sel.year;
+    const term    = sel.mode==="term" ? sel.term : "Annual";
 
-    const D2 = v => v!==null ? Number(v).toFixed(1) : "—";
-    const thStyle = (bg="#0D2340") => `background:${bg};color:#fff;border:1px solid rgba(0,0,0,0.2);padding:5px 5px;text-align:center;font-size:8px;font-weight:700`;
+    // Subjects from the actual SBC report card
+    const SBC_SUBJECTS = [
+      "English language","French/ Français","Mathematics","Health science",
+      "Home management","Citizenship","Food and Nutrition","Chemistry",
+      "History","Economics","Geography","Biology","Human Biology","Physics",
+      "Literature in English","Computer Studies","Religious Studies",
+      "Commerce","Accounts","Hygiene","Sport/Physical education","Manual Labour"
+    ];
 
-    let thead="", tbody="", totrow="";
-
-    if (sel.mode==="term") {
-      thead = `<th style="${thStyle()}; text-align:left; min-width:85px; padding:5px 7px">Matière / Subject</th>
-        ${termSeqs.map(sq=>`<th style="${thStyle()};font-size:8px">${sq}<br><span style="font-weight:400;font-size:7px">/20</span></th>`).join("")}
-        <th style="${thStyle("#9A7520")}">Coeff</th>
-        <th style="${thStyle("#9A7520")}">Moy/20</th>
-        <th style="${thStyle("#9A7520")}">Moy×C</th>
-        <th style="${thStyle("#9A7520")}">Obs.</th>
-        <th style="${thStyle("#1a4a2e")};min-width:80px">Enseignant</th>`;
-
-      tbody = modeRows.map((r,i)=>{
-        const avg=r.termAvg; const {remark}=scoreToGrade(avg);
-        const pass=avg!==null&&avg>=10;
-        const pond=avg!==null?(avg*r.coeff).toFixed(2):"—";
-        return `<tr style="background:${i%2===0?"#fff":"#F9FAFB"}">
-          <td style="padding:4px 7px;font-weight:600;color:#0D2340;font-size:9px;border:1px solid #E5E7EB">${r.sub}</td>
-          ${r.termScores.map(s=>`<td style="padding:4px 5px;text-align:center;font-size:9px;border:1px solid #E5E7EB">${s!==null?s:"—"}</td>`).join("")}
-          <td style="padding:4px 5px;text-align:center;font-weight:800;color:#C9962A;background:#FFFBF0;border:1px solid #E5E7EB">${r.coeff}</td>
-          <td style="padding:4px 5px;text-align:center;font-weight:800;background:#FFFBF0;border:1px solid #E5E7EB">${avg!==null?avg.toFixed(2):"—"}</td>
-          <td style="padding:4px 5px;text-align:center;font-weight:700;background:#FFFBF0;border:1px solid #E5E7EB">${pond}</td>
-          <td style="padding:4px 5px;text-align:center;font-size:8.5px;color:${pass?"#15803D":"#B91C1C"};font-weight:700;background:#FFFBF0;border:1px solid #E5E7EB">${remark}</td>
-          <td style="padding:4px 5px;font-size:7.5px;color:#163558;background:#f0fdf8;border:1px solid #E5E7EB">${r.teacher}</td>
+    const rows = SBC_SUBJECTS.map(sub => {
+      const r = modeRows.find(x=>x.sub===sub);
+      if (!r) {
+        return `<tr>
+          <td style="padding:3px 5px;font-size:9px;border:1px solid #1a56a0">${sub}</td>
+          <td style="border:1px solid #1a56a0"></td>
+          <td style="border:1px solid #1a56a0"></td>
+          <td style="border:1px solid #1a56a0"></td>
+          <td style="border:1px solid #1a56a0"></td>
+          <td style="border:1px solid #1a56a0"></td>
+          <td style="border:1px solid #1a56a0"></td>
+          <td style="border:1px solid #1a56a0"></td>
+          <td style="border:1px solid #1a56a0"></td>
         </tr>`;
-      }).join("");
-
-      totrow = `<tr style="background:#EEF2FF;font-weight:900">
-        <td style="padding:5px 7px;font-size:9px;color:#0D2340;border-top:2px solid #0D2340;border:1px solid #E5E7EB">MOYENNE GÉNÉRALE</td>
-        ${termSeqs.map(()=>`<td style="border-top:2px solid #0D2340;border:1px solid #E5E7EB"></td>`).join("")}
-        <td style="padding:5px 4px;text-align:center;font-weight:900;color:#C9962A;background:#FFFBF0;border-top:2px solid #0D2340;border:1px solid #E5E7EB">${totalCoeff}</td>
-        <td style="padding:5px 4px;text-align:center;font-weight:900;font-size:10px;background:#FFFBF0;border-top:2px solid #0D2340;border:1px solid #E5E7EB">${overallAvg?overallAvg.toFixed(2):"—"}</td>
-        <td style="padding:5px 4px;text-align:center;font-weight:800;background:#FFFBF0;border-top:2px solid #0D2340;border:1px solid #E5E7EB">${overallAvg?(overallAvg*totalCoeff).toFixed(2):"—"}</td>
-        <td style="padding:5px 4px;text-align:center;font-size:9px;color:${overallAvg&&overallAvg>=10?"#15803D":"#B91C1C"};font-weight:700;background:#FFFBF0;border-top:2px solid #0D2340;border:1px solid #E5E7EB">${overallGrd.remark}</td>
-        <td style="border-top:2px solid #0D2340;border:1px solid #E5E7EB"></td>
+      }
+      const avg   = sel.mode==="term" ? r.termAvg : r.annualAvg;
+      const score = avg !== null ? (avg * r.coeff).toFixed(1) : "";
+      const {remark} = scoreToGrade(avg);
+      return `<tr>
+        <td style="padding:3px 5px;font-size:9px;border:1px solid #1a56a0">${sub}</td>
+        <td style="text-align:center;font-size:9px;border:1px solid #1a56a0">${r.termScores?.[0]!==null&&r.termScores?.[0]!==undefined?r.termScores[0]:""}</td>
+        <td style="text-align:center;font-size:9px;border:1px solid #1a56a0">${r.termScores?.[1]!==null&&r.termScores?.[1]!==undefined?r.termScores[1]:""}</td>
+        <td style="text-align:center;font-size:9px;font-weight:700;border:1px solid #1a56a0">${avg!==null?avg.toFixed(1):""}</td>
+        <td style="text-align:center;font-size:9px;border:1px solid #1a56a0">${r.coeff}</td>
+        <td style="text-align:center;font-size:9px;font-weight:700;border:1px solid #1a56a0">${score}</td>
+        <td style="text-align:center;font-size:9px;border:1px solid #1a56a0"></td>
+        <td style="text-align:center;font-size:9px;color:${avg!==null&&avg>=10?"#15803D":"#B91C1C"};border:1px solid #1a56a0">${remark}</td>
+        <td style="border:1px solid #1a56a0"></td>
       </tr>`;
-    } else {
-      thead = `<th style="${thStyle()};text-align:left;padding:5px 7px;min-width:82px">Matière</th>
-        <th style="${thStyle()};font-size:7.5px">S1<br>/20</th><th style="${thStyle()};font-size:7.5px">S2<br>/20</th>
-        <th style="${thStyle("#1a5c32")};font-size:7.5px">T1</th>
-        <th style="${thStyle()};font-size:7.5px">S3<br>/20</th><th style="${thStyle()};font-size:7.5px">S4<br>/20</th>
-        <th style="${thStyle("#1a5c32")};font-size:7.5px">T2</th>
-        <th style="${thStyle()};font-size:7.5px">S5<br>/20</th><th style="${thStyle()};font-size:7.5px">S6<br>/20</th>
-        <th style="${thStyle("#1a5c32")};font-size:7.5px">T3</th>
-        <th style="${thStyle("#9A7520")}">Coeff</th>
-        <th style="${thStyle("#9A7520")};min-width:36px">Ann/20</th>
-        <th style="${thStyle("#9A7520")}">Moy×C</th>
-        <th style="${thStyle("#9A7520")}">Obs.</th>
-        <th style="${thStyle("#1a4a2e")};min-width:72px">Enseignant</th>`;
+    }).join("");
 
-      tbody = modeRows.map((r,i)=>{
-        const avg=r.annualAvg; const {remark}=scoreToGrade(avg);
-        const pass=avg!==null&&avg>=10;
-        const pond=avg!==null?(avg*r.coeff).toFixed(2):"—";
-        const td=(v,extra="")=>`<td style="padding:3px 4px;text-align:center;font-size:8.5px;border:1px solid #E5E7EB${extra}">${v}</td>`;
-        return `<tr style="background:${i%2===0?"#fff":"#F9FAFB"}">
-          <td style="padding:3px 6px;font-weight:600;color:#0D2340;font-size:8px;border:1px solid #E5E7EB">${r.sub}</td>
-          ${td(r.s1!==null?r.s1:"—")}${td(r.s2!==null?r.s2:"—")}
-          ${td(D2(r.t1Avg),";font-weight:700;color:#15803D;background:#f0fdf4")}
-          ${td(r.s3!==null?r.s3:"—")}${td(r.s4!==null?r.s4:"—")}
-          ${td(D2(r.t2Avg),";font-weight:700;color:#15803D;background:#f0fdf4")}
-          ${td(r.s5!==null?r.s5:"—")}${td(r.s6!==null?r.s6:"—")}
-          ${td(D2(r.t3Avg),";font-weight:700;color:#15803D;background:#f0fdf4")}
-          <td style="padding:3px 4px;text-align:center;font-weight:800;font-size:9px;color:#C9962A;background:#FFFBF0;border:1px solid #E5E7EB">${r.coeff}</td>
-          <td style="padding:3px 4px;text-align:center;font-weight:800;font-size:9.5px;background:#FFFBF0;border:1px solid #E5E7EB">${avg!==null?avg.toFixed(2):"—"}</td>
-          <td style="padding:3px 4px;text-align:center;font-weight:700;font-size:9px;background:#FFFBF0;border:1px solid #E5E7EB">${pond}</td>
-          <td style="padding:3px 4px;text-align:center;font-size:8.5px;color:${pass?"#15803D":"#B91C1C"};font-weight:700;background:#FFFBF0;border:1px solid #E5E7EB">${remark}</td>
-          <td style="padding:3px 4px;font-size:7.5px;color:#163558;background:#f0fdf8;border:1px solid #E5E7EB">${r.teacher}</td>
-        </tr>`;
-      }).join("");
+    const termAvgAll  = overallAvg ? overallAvg.toFixed(2) : "___";
+    const pctScore    = overallAvg ? (overallAvg*5).toFixed(0)+"%" : "___";
 
-      totrow = `<tr style="background:#EEF2FF;font-weight:900">
-        <td style="padding:4px 6px;font-size:8.5px;color:#0D2340;border-top:2px solid #0D2340;border:1px solid #E5E7EB">MOYENNE GÉNÉRALE</td>
-        <td colspan="9" style="border-top:2px solid #0D2340;border:1px solid #E5E7EB"></td>
-        <td style="padding:4px 4px;text-align:center;font-weight:900;color:#C9962A;background:#FFFBF0;border-top:2px solid #0D2340;border:1px solid #E5E7EB">${totalCoeff}</td>
-        <td style="padding:4px 4px;text-align:center;font-weight:900;font-size:10px;background:#FFFBF0;border-top:2px solid #0D2340;border:1px solid #E5E7EB">${overallAvg?overallAvg.toFixed(2):"—"}</td>
-        <td style="padding:4px 4px;text-align:center;font-weight:800;background:#FFFBF0;border-top:2px solid #0D2340;border:1px solid #E5E7EB">${overallAvg?(overallAvg*totalCoeff).toFixed(2):"—"}</td>
-        <td style="padding:4px 4px;text-align:center;font-size:9px;color:${overallAvg&&overallAvg>=10?"#15803D":"#B91C1C"};font-weight:700;background:#FFFBF0;border-top:2px solid #0D2340;border:1px solid #E5E7EB">${overallGrd.remark}</td>
-        <td style="border-top:2px solid #0D2340;border:1px solid #E5E7EB"></td>
-      </tr>`;
-    }
-
-    const conductRows = [
-      ["Jours présent / Days Present",conduct.present||"______"],
-      ["Jours absent / Days Absent",  conduct.absent||"______"],
-      ["Retards / Times Late",        conduct.late||"______"],
-      ["Conduite / Conduct",          conduct.conduct],
-    ].map(([l,v],i)=>`<div style="display:flex;justify-content:space-between;padding:4px 9px;border-bottom:1px solid #E5E7EB;background:${i%2===0?"#F9FAFB":"#fff"}"><span style="font-size:8px;color:#6B7280">${l}</span><span style="font-size:9px;font-weight:700;color:#0D2340;border-bottom:1px solid #D1D5DB;min-width:55px;text-align:center">${v}</span></div>`).join("");
-
-    const sigRow = ["Prof. Principal / Class Teacher","Proviseur / Principal","Parent/Tuteur / Guardian"]
-      .map(r=>`<div style="text-align:center;padding:0 6px"><div style="height:26px;border-bottom:1px solid #6B7280;margin-bottom:3px"></div><div style="font-size:8px;color:#6B7280">${r}</div></div>`).join("");
-
-    const gradeScale = [["A","17-20","Excellent","#15803D"],["B+","15-16","Very Good","#166534"],["B","13-14","Good","#15803D"],["C+","11-12","Fairly Good","#C9962A"],["C","10","Average","#C9962A"],["D","9","Pass","#B45309"],["F","0-8","Fail","#B91C1C"]]
-      .map(([g,r,rm,col])=>`<span style="font-size:8px;color:#6B7280;display:flex;align-items:center;gap:2px"><strong style="color:${col};font-size:9px">${g}</strong> ${r} — ${rm}</span>`).join("");
-
-    return `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
-<title>Report Card — ${student.name}</title>
+    return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<title>Report Card — ${name}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  @page{size:A4 portrait;margin:7mm}
-  html,body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#0D2340;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .page{width:196mm;margin:0 auto;font-size:9.5px}
+  @page{size:A4 portrait;margin:8mm}
+  html,body{font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:10px}
   table{width:100%;border-collapse:collapse}
+  .page{width:194mm;margin:0 auto}
 </style></head><body><div class="page">
 
-<!-- BILINGUAL BANNER -->
-<div style="background:#0D2340;color:#fff;padding:6px 12px;display:flex;justify-content:space-between;align-items:flex-start;gap:6px">
-  <div style="flex:1"><div style="font-size:9.5px;font-weight:900">REPUBLIC OF CAMEROON</div><div style="font-size:7.5px;opacity:.75;line-height:1.5;margin-top:1px">Peace – Work – Fatherland<br>Ministry of Secondary Education<br>Regional Delegation – NW Region</div></div>
-  <div style="text-align:center;padding:0 12px;border-left:1px solid rgba(255,255,255,.2);border-right:1px solid rgba(255,255,255,.2)"><div style="font-size:28px;line-height:1">🎓</div></div>
-  <div style="flex:1;text-align:right"><div style="font-size:9.5px;font-weight:900">RÉPUBLIQUE DU CAMEROUN</div><div style="font-size:7.5px;opacity:.75;line-height:1.5;margin-top:1px">Paix – Travail – Patrie<br>Ministère des Ens. Secondaires<br>Délégation Régionale – Rég. NW</div></div>
+<!-- BILINGUAL GOVERNMENT HEADER -->
+<table style="width:100%;margin-bottom:4px">
+  <tr>
+    <td style="width:33%;vertical-align:top;font-size:8px;line-height:1.5">
+      <strong>REPUBLIC OF CAMEROON</strong><br>
+      Peace-Work-Fatherland<br>
+      Ministry of secondary Education
+    </td>
+    <td style="width:34%;text-align:center;vertical-align:middle">
+      <!-- Coat of arms placeholder -->
+      <div style="font-size:24px">🇨🇲</div>
+    </td>
+    <td style="width:33%;text-align:right;vertical-align:top;font-size:8px;line-height:1.5">
+      <strong>REPUBLIQUE DU CAMEROUN</strong><br>
+      Paix – Travail – Patrie<br>
+      Ministère De l'Enseignement
+    </td>
+  </tr>
+</table>
+
+<!-- SCHOOL NAME BANNER -->
+<div style="background:#1a56a0;color:#fff;text-align:center;padding:6px 4px;margin-bottom:4px">
+  <div style="font-size:18px;font-weight:900;letter-spacing:1px">SAKER BAPTIST COLLAGE(SBC)-BAWE</div>
+  <div style="font-size:9px;margin-top:2px">Motto: Quality, Discipline, and Excellence education</div>
 </div>
 
-<!-- LETTERHEAD + PHOTO -->
-<div style="display:flex;align-items:center;padding:8px 12px;gap:12px;border-bottom:3px solid #C9962A">
-  <div style="width:56px;height:56px;border-radius:50%;background:#0D2340;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;border:2px solid #C9962A">🎓</div>
-  <div style="flex:1;text-align:center">
-    <div style="font-size:17px;font-weight:900;color:#0D2340;letter-spacing:.5px">SAKER BAPTIST COLLEGE</div>
-    <div style="font-size:8.5px;color:#6B7280;letter-spacing:1.2px;margin-top:2px">NGEPTANG · NONI · NORTHWEST REGION · CAMEROON</div>
-    <div style="margin-top:7px">
-      <span style="background:#0D2340;color:#fff;padding:3px 16px;border-radius:12px;font-size:11px;font-weight:800">${sel.mode==="term"?sel.term.toUpperCase()+" REPORT CARD":"ANNUAL REPORT CARD"}</span>
-      &nbsp;<span style="background:#C9962A;color:#fff;padding:3px 10px;border-radius:12px;font-size:10px;font-weight:700">${sel.year} · ${student.form}</span>
-    </div>
-  </div>
-  <div style="flex-shrink:0;text-align:center">${photoHtml}<div style="font-size:7px;color:#9CA3AF;margin-top:2px">Photo Passeport</div></div>
-</div>
+<!-- REPORT CARD TITLE -->
+<table style="width:100%;margin-bottom:5px">
+  <tr>
+    <td style="text-align:center">
+      <div style="font-size:12px;font-weight:800;text-decoration:underline">ACADEMIC REPORT CARD</div>
+      <div style="font-size:11px;font-weight:700">BULLETIN DE NOTES</div>
+    </td>
+  </tr>
+</table>
 
-<!-- STUDENT PROFILE -->
-<div style="padding:7px 12px;background:#F8F9FA;border-bottom:2px solid #0D2340">
-  <div style="font-size:8.5px;font-weight:900;color:#0D2340;margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Renseignements de l'élève / Student Information</div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 18px">${profileHtml}</div>
-</div>
+<!-- TERM INFO ROW -->
+<table style="width:100%;border:1px solid #000;margin-bottom:5px">
+  <tr>
+    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;width:25%">
+      <strong>${sel.mode==="term"?`${sel.term.replace(" Term","")} TERM`:""}</strong>
+      &nbsp;&nbsp; <strong>3<sup>ème</sup> TERM</strong>
+    </td>
+    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;width:25%">
+      Class: <strong>${classe}</strong>
+    </td>
+    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;width:25%">
+      No. on Roll: <strong>${students.filter(s=>s.active&&s.form===student.form).length}</strong>
+    </td>
+    <td style="padding:3px 6px;font-size:9px;width:25%">
+      Effective: <strong>${students.filter(s=>s.active&&s.form===student.form&&s.reg_status==="registered").length}</strong>
+    </td>
+  </tr>
+</table>
 
-<!-- RESULTS -->
-<div style="margin:5px 0">
-  <div style="background:#0D2340;color:#fff;padding:4px 12px;font-size:10px;font-weight:800;letter-spacing:.3px">RÉSULTATS ACADÉMIQUES / ACADEMIC RESULTS — ${sel.mode==="term"?sel.term.toUpperCase():"ANNUAL"}</div>
-  <table><thead><tr>${thead}</tr></thead><tbody>${tbody}${totrow}</tbody></table>
-</div>
+<!-- STUDENT INFO -->
+<table style="width:100%;border:1px solid #000;margin-bottom:5px">
+  <tr>
+    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;width:40%">
+      Name and other Name: <strong>${name}</strong>
+    </td>
+    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;width:15%">
+      Sex....... <strong>${sex.charAt(0)}</strong>
+    </td>
+    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;width:25%">
+      Sexe
+    </td>
+    <td style="padding:3px 6px;font-size:9px;width:20%">
+      &nbsp;
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;border-top:1px solid #000">
+      Nom et prénom: <strong>${name}</strong>
+    </td>
+    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;border-top:1px solid #000">
+      Date of Birth: <strong>${dob}</strong>
+    </td>
+    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;border-top:1px solid #000">
+      Naissance: <strong>${dob}</strong>
+    </td>
+    <td style="padding:3px 6px;font-size:9px;border-top:1px solid #000">
+      &nbsp;
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" style="padding:3px 6px;font-size:9px;border-right:1px solid #000;border-top:1px solid #000">
+      Classe / Class: <strong>${classe}</strong>
+    </td>
+    <td colspan="2" style="padding:3px 6px;font-size:9px;border-top:1px solid #000">
+      Annee scolaire / Year 20<strong>${year}</strong> &nbsp;/20
+    </td>
+  </tr>
+</table>
 
-<!-- SUMMARY BAND -->
-<div style="display:grid;grid-template-columns:repeat(5,1fr);border:2px solid #0D2340;margin-bottom:5px">
-  ${[["Moy. Pond.",overallAvg?overallAvg.toFixed(2)+"/20":"—"],["Note %",overallAvg?(overallAvg*5).toFixed(0)+"%":"—"],["Rang","—"],[`Reçu`,`${passCount}/${modeRows.length}`],["Échoué",`${modeRows.length-passCount}`]].map(([l,v],i)=>`<div style="padding:6px 4px;text-align:center;border-right:${i<4?"1px solid #E5E7EB":"none"};background:${i%2===0?"#fff":"#F8F9FA"}"><div style="font-size:13px;font-weight:900;color:#0D2340">${v}</div><div style="font-size:7px;color:#6B7280;margin-top:1px">${l}</div></div>`).join("")}
-</div>
+<!-- MARKS TABLE -->
+<table style="width:100%;border:2px solid #1a56a0;margin-bottom:5px">
+  <thead>
+    <tr style="background:#1a56a0;color:#fff">
+      <th rowspan="2" style="padding:4px 5px;text-align:left;font-size:9px;border:1px solid #1a56a0;width:22%">SUBJECT</th>
+      <th style="padding:4px 3px;text-align:center;font-size:8px;border:1px solid #fff;width:9%">Class Test/20</th>
+      <th style="padding:4px 3px;text-align:center;font-size:8px;border:1px solid #fff;width:9%">Exam. Test /20</th>
+      <th style="padding:4px 3px;text-align:center;font-size:8px;border:1px solid #fff;width:9%">Average/20</th>
+      <th style="padding:4px 3px;text-align:center;font-size:8px;border:1px solid #fff;width:7%">Coef.</th>
+      <th style="padding:4px 3px;text-align:center;font-size:8px;border:1px solid #fff;width:8%">Score</th>
+      <th style="padding:4px 3px;text-align:center;font-size:8px;border:1px solid #fff;width:7%">Position</th>
+      <th style="padding:4px 3px;text-align:center;font-size:8px;border:1px solid #fff;width:15%">REMARKS</th>
+      <th style="padding:4px 3px;text-align:center;font-size:8px;border:1px solid #fff;width:14%">Subject master SIGN.</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${rows}
+  </tbody>
+</table>
 
-<!-- CONDUCT + REMARKS -->
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:5px">
-  <div style="border:1.5px solid #0D2340;border-radius:3px;overflow:hidden">
-    <div style="background:#0D2340;color:#fff;padding:4px 9px;font-size:8.5px;font-weight:800">CONDUITE &amp; PRÉSENCE / CONDUCT &amp; ATTENDANCE</div>
-    ${conductRows}
-  </div>
-  <div style="border:1.5px solid #0D2340;border-radius:3px;overflow:hidden">
-    <div style="background:#0D2340;color:#fff;padding:4px 9px;font-size:8.5px;font-weight:800">APPRÉCIATIONS / REMARKS</div>
-    <div style="padding:5px 9px;border-bottom:1px solid #E5E7EB"><div style="font-size:7.5px;color:#6B7280;margin-bottom:3px">Prof. Principal / Class Teacher:</div><div style="font-size:9.5px;font-weight:700;color:#0D2340;min-height:18px;border-bottom:1px solid #D1D5DB">${conduct.classTeacherRemark||""}</div></div>
-    <div style="padding:5px 9px"><div style="font-size:7.5px;color:#6B7280;margin-bottom:3px">Proviseur / Principal:</div><div style="font-size:9.5px;font-weight:700;color:#0D2340;min-height:18px;border-bottom:1px solid #D1D5DB">${conduct.principalRemark||""}</div></div>
-  </div>
-</div>
+<!-- SUMMARY SECTION -->
+<table style="width:100%;border:1px solid #000;margin-bottom:5px">
+  <tr>
+    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;width:33%">
+      Terminal Average: <strong>${termAvgAll}/20</strong>
+    </td>
+    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;width:33%">
+      Discipline: ___________
+    </td>
+    <td style="padding:3px 6px;font-size:9px;width:34%">
+      Promoted/Repeat: ___________
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;border-top:1px solid #000">
+      Annual Average: <strong>${sel.mode==="annual"?termAvgAll:""}/20</strong>
+    </td>
+    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;border-top:1px solid #000">
+      Position: ___________
+    </td>
+    <td style="padding:3px 6px;font-size:9px;border-top:1px solid #000">
+      Fees/Money Owning: ___________
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;border-top:1px solid #000">
+      No of Absences: ${conduct.absent||"___"}
+    </td>
+    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;border-top:1px solid #000">
+      No of Warning: ___________
+    </td>
+    <td style="padding:3px 6px;font-size:9px;border-top:1px solid #000">
+      Next Term Begins: ___________
+    </td>
+  </tr>
+  <tr>
+    <td colspan="3" style="padding:3px 6px;font-size:9px;border-top:1px solid #000">
+      No. of suspensions: ___________
+    </td>
+  </tr>
+</table>
 
-<!-- GRADE SCALE -->
-<div style="border:1px solid #E5E7EB;border-radius:3px;padding:5px 10px;margin-bottom:6px;background:#F9FAFB">
-  <div style="font-size:7.5px;font-weight:800;color:#6B7280;margin-bottom:3px;text-transform:uppercase;letter-spacing:.4px">Barème / Grade Scale (Score /20) · Coefficient = poids de la matière dans la moyenne</div>
-  <div style="display:flex;flex-wrap:wrap;gap:4px 14px">${gradeScale}</div>
-</div>
+<!-- DISCIPLINE + SIGNATURES -->
+<table style="width:100%;border:1px solid #000;margin-bottom:8px">
+  <tr>
+    <td style="padding:3px 6px;font-size:9px;border-right:1px solid #000;width:50%">
+      <strong>Discipline</strong><br><br>
+      Class Teacher's Remark: ${conduct.classTeacherRemark||"_________________________"}
+    </td>
+    <td style="padding:3px 6px;font-size:9px;width:50%">
+      &nbsp;
+    </td>
+  </tr>
+</table>
 
-<!-- SIGNATURES -->
-<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:10px">${sigRow}</div>
+<!-- PRINCIPAL SIGNATURE -->
+<div style="text-align:right;margin-top:16px;padding-right:20px">
+  <div style="font-size:9px;margin-bottom:20px">Principal's Signature/Stamp</div>
+  <div style="border-top:1px solid #000;width:160px;display:inline-block;padding-top:3px;font-size:8px">Principal / Proviseur</div>
+</div>
 
 <!-- FOOTER -->
-<div style="text-align:center;font-size:7.5px;color:#9CA3AF;margin-top:8px;border-top:1px dashed #E5E7EB;padding-top:5px">
-  Saker Baptist College · Ngeptang, Noni, NW Region, Cameroon · ${sel.year} · Printed: ${new Date().toLocaleDateString("en-GB")}
+<div style="text-align:center;font-size:7.5px;color:#666;margin-top:10px;border-top:1px dashed #ccc;padding-top:4px">
+  Saker Baptist Collage (SBC)-Bawe &nbsp;·&nbsp; ${year} &nbsp;·&nbsp; Printed: ${new Date().toLocaleDateString("en-GB")}
 </div>
+
 </div></body></html>`;
   }
+
 
   function printReport() {
     if (!student||!modeRows.length) return;
@@ -1386,179 +1458,148 @@ function ReportsPage({ ctx }) {
             )}
           </div>
 
-          {/* Preview card */}
-          <div style={{background:C.white,borderRadius:12,overflow:"hidden",boxShadow:"0 2px 10px rgba(0,0,0,0.1)",marginBottom:13,border:`1px solid ${C.grayLight}`}}>
-            <div style={{background:C.navy,color:C.white,padding:"6px 12px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:4}}>
-              <div style={{flex:1}}><div style={{fontSize:9,fontWeight:900}}>REPUBLIC OF CAMEROON</div><div style={{fontSize:7,opacity:.7,lineHeight:1.5}}>Peace – Work – Fatherland<br/>Min. of Secondary Education</div></div>
-              <div style={{textAlign:"center",padding:"0 10px",borderLeft:"1px solid rgba(255,255,255,.15)",borderRight:"1px solid rgba(255,255,255,.15)"}}><span style={{fontSize:22}}>🎓</span></div>
-              <div style={{flex:1,textAlign:"right"}}><div style={{fontSize:9,fontWeight:900}}>RÉPUBLIQUE DU CAMEROUN</div><div style={{fontSize:7,opacity:.7,lineHeight:1.5}}>Paix – Travail – Patrie<br/>Min. des Ens. Secondaires</div></div>
-            </div>
-            <div style={{borderBottom:`3px solid ${C.gold}`,padding:"9px 12px"}}>
-              <div style={{display:"flex",alignItems:"center",gap:10}}>
-                <div style={{width:48,height:48,borderRadius:"50%",background:C.navy,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0,border:`2px solid ${C.gold}`}}>🎓</div>
-                <div style={{flex:1,textAlign:"center"}}>
-                  <div style={{fontWeight:900,fontSize:15,color:C.navy}}>SAKER BAPTIST COLLEGE</div>
-                  <div style={{fontSize:8,color:C.gray,letterSpacing:1.2,marginTop:1}}>NGEPTANG · NONI · NORTHWEST REGION · CAMEROON</div>
-                  <div style={{marginTop:6,display:"inline-flex",gap:7,flexWrap:"wrap",justifyContent:"center"}}>
-                    <span style={{background:C.navy,color:C.white,padding:"3px 13px",borderRadius:11,fontSize:10,fontWeight:800}}>{sel.mode==="term"?`${sel.term.toUpperCase()} REPORT CARD`:"ANNUAL REPORT CARD"}</span>
-                    <span style={{background:C.gold,color:C.white,padding:"3px 9px",borderRadius:11,fontSize:10,fontWeight:700}}>{sel.year} · {student.form}</span>
-                  </div>
-                </div>
-                <div style={{flexShrink:0,textAlign:"center"}}>
-                  <PhotoBox photo={student.photo_url} size={[58,70]}/>
-                  <div style={{fontSize:7,color:C.gray,marginTop:2}}>Photo passeport</div>
-                </div>
+          {/* Preview card — SBC Physical Design */}
+          <div style={{background:C.white,borderRadius:8,overflow:"hidden",boxShadow:"0 2px 10px rgba(0,0,0,0.1)",marginBottom:13,border:"2px solid #1a56a0"}}>
+
+            {/* Bilingual government header */}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"6px 10px",borderBottom:"1px solid #ccc"}}>
+              <div style={{fontSize:7.5,lineHeight:1.5}}>
+                <strong>REPUBLIC OF CAMEROON</strong><br/>
+                Peace-Work-Fatherland<br/>
+                Ministry of Secondary Education
               </div>
-            </div>
-            <div style={{background:"#F8F9FA",padding:"7px 12px",borderBottom:`2px solid ${C.navy}`}}>
-              <div style={{fontSize:9,fontWeight:900,color:C.navy,marginBottom:4,textTransform:"uppercase"}}>Student Information</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"2px 12px"}}>
-                {[["Name",student.name],["ID",student.id],["Form",student.form],["Gender",student.gender],["DOB",fmtDate(student.dob)],["Address",student.address||"—"],["Parent",student.parent],["Phone",student.phone]].map(([l,v])=>(
-                  <div key={l} style={{display:"flex",alignItems:"baseline",gap:4,padding:"2px 0",borderBottom:`1px solid ${C.grayLight}`}}>
-                    <span style={{fontSize:7.5,color:C.gray,flexShrink:0,minWidth:52}}>{l}:</span>
-                    <span style={{fontSize:10,fontWeight:700,color:C.navy,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v||"—"}</span>
-                  </div>
-                ))}
+              <div style={{textAlign:"center",fontSize:22}}>🇨🇲</div>
+              <div style={{fontSize:7.5,lineHeight:1.5,textAlign:"right"}}>
+                <strong>REPUBLIQUE DU CAMEROUN</strong><br/>
+                Paix – Travail – Patrie<br/>
+                Ministère De l'Enseignement
               </div>
-            </div>
-            <div>
-              <div style={{background:C.navy,color:C.white,padding:"5px 12px",fontSize:10,fontWeight:800}}>ACADEMIC RESULTS</div>
-              {!modeRows.length ? <div style={{padding:24,textAlign:"center",color:C.gray}}>No marks for this period.</div> : (
-                <div style={{overflowX:"auto"}}>
-                  <table style={{width:"100%",borderCollapse:"collapse",minWidth:sel.mode==="annual"?560:300}}>
-                    <thead>
-                      <tr style={{background:C.navy,color:C.white}}>
-                        <th style={{padding:"5px 8px",textAlign:"left",fontSize:8.5,border:`1px solid ${C.navyMid}`,minWidth:85}}>Matière / Subject</th>
-                        {sel.mode==="term" ? <>
-                          {termSeqs.map(sq=><th key={sq} style={{padding:"5px 5px",textAlign:"center",fontSize:8,border:`1px solid ${C.navyMid}`,minWidth:30}}>{sq.replace("SEQ ","S")}<br/><span style={{opacity:.6,fontWeight:400,fontSize:7}}>/20</span></th>)}
-                          <th style={{padding:"5px 4px",background:"#9A7520",textAlign:"center",fontSize:8,border:`1px solid #7a5c10`,minWidth:30}}>Coeff</th>
-                          <th style={{padding:"5px 4px",background:"#9A7520",textAlign:"center",fontSize:8,border:`1px solid #7a5c10`,minWidth:34}}>Moy/20</th>
-                          <th style={{padding:"5px 4px",background:"#9A7520",textAlign:"center",fontSize:8,border:`1px solid #7a5c10`,minWidth:36}}>Moy×C</th>
-                          <th style={{padding:"5px 4px",background:"#9A7520",textAlign:"center",fontSize:8,border:`1px solid #7a5c10`,minWidth:44}}>Obs.</th>
-                          <th style={{padding:"5px 4px",background:"#1a4a2e",textAlign:"center",fontSize:8,border:`1px solid #0d3020`,minWidth:72}}>Enseignant</th>
-                        </> : <>
-                          {["S1","S2"].map(h=><th key={h} style={{padding:"4px 3px",textAlign:"center",fontSize:7.5,border:`1px solid ${C.navyMid}`,minWidth:22}}>{h}<br/>/20</th>)}
-                          <th style={{padding:"4px 3px",textAlign:"center",fontSize:7.5,background:"#1a5c32",border:`1px solid #0f3d21`,minWidth:24}}>T1</th>
-                          {["S3","S4"].map(h=><th key={h} style={{padding:"4px 3px",textAlign:"center",fontSize:7.5,border:`1px solid ${C.navyMid}`,minWidth:22}}>{h}<br/>/20</th>)}
-                          <th style={{padding:"4px 3px",textAlign:"center",fontSize:7.5,background:"#1a5c32",border:`1px solid #0f3d21`,minWidth:24}}>T2</th>
-                          {["S5","S6"].map(h=><th key={h} style={{padding:"4px 3px",textAlign:"center",fontSize:7.5,border:`1px solid ${C.navyMid}`,minWidth:22}}>{h}<br/>/20</th>)}
-                          <th style={{padding:"4px 3px",textAlign:"center",fontSize:7.5,background:"#1a5c32",border:`1px solid #0f3d21`,minWidth:24}}>T3</th>
-                          <th style={{padding:"4px 4px",background:"#9A7520",textAlign:"center",fontSize:8,border:`1px solid #7a5c10`,minWidth:26}}>Coeff</th>
-                          <th style={{padding:"4px 4px",background:"#9A7520",textAlign:"center",fontSize:8,border:`1px solid #7a5c10`,minWidth:32}}>Ann/20</th>
-                          <th style={{padding:"4px 4px",background:"#9A7520",textAlign:"center",fontSize:8,border:`1px solid #7a5c10`,minWidth:34}}>Moy×C</th>
-                          <th style={{padding:"4px 4px",background:"#9A7520",textAlign:"center",fontSize:8,border:`1px solid #7a5c10`,minWidth:40}}>Obs.</th>
-                          <th style={{padding:"4px 4px",background:"#1a4a2e",textAlign:"center",fontSize:7.5,border:`1px solid #0d3020`,minWidth:65}}>Enseignant</th>
-                        </>}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {modeRows.map((r,i)=>{
-                        const avg=sel.mode==="term"?r.termAvg:r.annualAvg;
-                        const {remark}=scoreToGrade(avg); const pass=avg!==null&&avg>=10;
-                        const pcol=pass?C.green:C.red; const bg=i%2===0?C.white:"#F8FAFC";
-                        const pond=avg!==null?(avg*r.coeff).toFixed(2):"—";
-                        const td=(v,s={})=><td style={{padding:"4px 4px",textAlign:"center",fontSize:9,border:`1px solid ${C.grayLight}`,...s}}>{v}</td>;
-                        return (
-                          <tr key={r.sub} style={{background:bg}}>
-                            <td style={{padding:"4px 7px",fontWeight:600,color:C.navy,fontSize:9.5,border:`1px solid ${C.grayLight}`}}>{r.sub}</td>
-                            {sel.mode==="term" ? <>
-                              {r.termScores.map((s,j)=>td(s!==null?s:"—",{key:j}))}
-                              {td(r.coeff,{fontWeight:800,color:C.gold,background:"#FFFBF0"})}
-                              {td(avg!==null?avg.toFixed(2):"—",{fontWeight:800,background:"#FFFBF0"})}
-                              {td(pond,{fontWeight:700,background:"#FFFBF0"})}
-                              {td(remark,{color:pcol,fontWeight:700,background:"#FFFBF0",fontSize:8.5})}
-                              <td style={{padding:"4px 5px",fontSize:8,color:C.navyMid,background:"#f0fdf8",border:`1px solid ${C.grayLight}`}}>{r.teacher}</td>
-                            </> : <>
-                              {[r.s1,r.s2].map((s,j)=>td(s!==null?s:"—",{key:j}))}
-                              {td(D(r.t1Avg),{fontWeight:700,color:C.green,background:"#f0fdf4"})}
-                              {[r.s3,r.s4].map((s,j)=>td(s!==null?s:"—",{key:j+2}))}
-                              {td(D(r.t2Avg),{fontWeight:700,color:C.green,background:"#f0fdf4"})}
-                              {[r.s5,r.s6].map((s,j)=>td(s!==null?s:"—",{key:j+4}))}
-                              {td(D(r.t3Avg),{fontWeight:700,color:C.green,background:"#f0fdf4"})}
-                              {td(r.coeff,{fontWeight:800,color:C.gold,background:"#FFFBF0",fontSize:9})}
-                              {td(avg!==null?avg.toFixed(2):"—",{fontWeight:800,background:"#FFFBF0"})}
-                              {td(pond,{fontWeight:700,background:"#FFFBF0"})}
-                              {td(remark,{color:pcol,fontWeight:700,background:"#FFFBF0",fontSize:8.5})}
-                              <td style={{padding:"3px 4px",fontSize:7.5,color:C.navyMid,background:"#f0fdf8",border:`1px solid ${C.grayLight}`}}>{r.teacher}</td>
-                            </>}
-                          </tr>
-                        );
-                      })}
-                      {/* Total row */}
-                      <tr style={{background:"#EEF2FF"}}>
-                        <td style={{padding:"5px 7px",fontWeight:900,color:C.navy,fontSize:9,borderTop:`2px solid ${C.navy}`,border:`1px solid ${C.grayLight}`}}>MOYENNE GÉNÉRALE</td>
-                        {sel.mode==="term" ? <>
-                          {termSeqs.map((_,j)=><td key={j} style={{border:`1px solid ${C.grayLight}`,borderTop:`2px solid ${C.navy}`}}/>)}
-                          <td style={{padding:"5px 4px",textAlign:"center",fontWeight:900,fontSize:9,color:C.gold,background:"#FFFBF0",border:`1px solid ${C.grayLight}`,borderTop:`2px solid ${C.navy}`}}>{totalCoeff}</td>
-                          <td style={{padding:"5px 4px",textAlign:"center",fontWeight:900,fontSize:10,background:"#FFFBF0",border:`1px solid ${C.grayLight}`,borderTop:`2px solid ${C.navy}`}}>{overallAvg?overallAvg.toFixed(2):"—"}</td>
-                          <td style={{padding:"5px 4px",textAlign:"center",fontWeight:800,background:"#FFFBF0",border:`1px solid ${C.grayLight}`,borderTop:`2px solid ${C.navy}`}}>{overallAvg?(overallAvg*totalCoeff).toFixed(2):"—"}</td>
-                          <td style={{padding:"5px 4px",textAlign:"center",fontSize:9,color:overallAvg&&overallAvg>=10?C.green:C.red,fontWeight:700,background:"#FFFBF0",border:`1px solid ${C.grayLight}`,borderTop:`2px solid ${C.navy}`}}>{overallGrd.remark}</td>
-                          <td style={{border:`1px solid ${C.grayLight}`,borderTop:`2px solid ${C.navy}`}}/>
-                        </> : <>
-                          {Array(9).fill(0).map((_,j)=><td key={j} style={{border:`1px solid ${C.grayLight}`,borderTop:`2px solid ${C.navy}`}}/>)}
-                          <td style={{padding:"5px 3px",textAlign:"center",fontWeight:900,fontSize:9,color:C.gold,background:"#FFFBF0",border:`1px solid ${C.grayLight}`,borderTop:`2px solid ${C.navy}`}}>{totalCoeff}</td>
-                          <td style={{padding:"5px 3px",textAlign:"center",fontWeight:900,fontSize:10,background:"#FFFBF0",border:`1px solid ${C.grayLight}`,borderTop:`2px solid ${C.navy}`}}>{overallAvg?overallAvg.toFixed(2):"—"}</td>
-                          <td style={{padding:"5px 3px",textAlign:"center",fontWeight:800,background:"#FFFBF0",border:`1px solid ${C.grayLight}`,borderTop:`2px solid ${C.navy}`}}>{overallAvg?(overallAvg*totalCoeff).toFixed(2):"—"}</td>
-                          <td style={{padding:"5px 3px",textAlign:"center",fontSize:9,color:overallAvg&&overallAvg>=10?C.green:C.red,fontWeight:700,background:"#FFFBF0",border:`1px solid ${C.grayLight}`,borderTop:`2px solid ${C.navy}`}}>{overallGrd.remark}</td>
-                          <td style={{border:`1px solid ${C.grayLight}`,borderTop:`2px solid ${C.navy}`}}/>
-                        </>}
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              )}
             </div>
 
-            {modeRows.length>0 && <>
-              {/* Summary band */}
-              <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",borderTop:`2px solid ${C.navy}`}}>
-                {[["Moy. Pond.",overallAvg?overallAvg.toFixed(2)+"/20":"—",C.navy],["Note %",overallAvg?(overallAvg*5).toFixed(0)+"%":"—",C.navy],["Rang","—",C.navyMid],[`Reçu`,`${passCount}/${modeRows.length}`,C.green],["Échoué",`${modeRows.length-passCount}`,modeRows.length-passCount>0?C.red:C.green]].map(([l,v,col],i)=>(
-                  <div key={l} style={{padding:"7px 3px",textAlign:"center",borderRight:i<4?`1px solid ${C.grayLight}`:"none",background:i%2===0?C.white:C.grayBg}}>
-                    <div style={{fontSize:14,fontWeight:900,color:col}}>{v}</div>
-                    <div style={{fontSize:7.5,color:C.gray,marginTop:1}}>{l}</div>
-                  </div>
-                ))}
+            {/* School name banner */}
+            <div style={{background:"#1a56a0",color:"#fff",textAlign:"center",padding:"7px 4px"}}>
+              <div style={{fontSize:14,fontWeight:900,letterSpacing:.5}}>SAKER BAPTIST COLLAGE(SBC)-BAWE</div>
+              <div style={{fontSize:8,marginTop:1,opacity:.85}}>Motto: Quality, Discipline, and Excellence education</div>
+            </div>
+
+            {/* Title */}
+            <div style={{textAlign:"center",padding:"5px 0",borderBottom:"1px solid #1a56a0"}}>
+              <div style={{fontSize:11,fontWeight:800,textDecoration:"underline"}}>ACADEMIC REPORT CARD</div>
+              <div style={{fontSize:10,fontWeight:700}}>BULLETIN DE NOTES</div>
+            </div>
+
+            {/* Term row */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",borderBottom:"1px solid #000",fontSize:8}}>
+              <div style={{padding:"3px 6px",borderRight:"1px solid #000"}}><strong>{sel.mode==="term"?sel.term.replace(" Term","")+" TERM":"ANNUAL"}</strong> / 3ème TERM</div>
+              <div style={{padding:"3px 6px",borderRight:"1px solid #000"}}>Class: <strong>{student.form}</strong></div>
+              <div style={{padding:"3px 6px",borderRight:"1px solid #000"}}>No. on Roll: <strong>{students.filter(s=>s.active&&s.form===student.form).length}</strong></div>
+              <div style={{padding:"3px 6px"}}>Effective: <strong>{students.filter(s=>s.active&&s.form===student.form&&s.reg_status==="registered").length}</strong></div>
+            </div>
+
+            {/* Student info */}
+            <div style={{borderBottom:"1px solid #000",fontSize:8}}>
+              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr",borderBottom:"1px solid #ccc"}}>
+                <div style={{padding:"3px 6px",borderRight:"1px solid #000"}}>Name: <strong>{student.name}</strong></div>
+                <div style={{padding:"3px 6px",borderRight:"1px solid #000"}}>Sex: <strong>{student.gender?.charAt(0)}</strong></div>
+                <div style={{padding:"3px 6px",borderRight:"1px solid #000"}}>Sexe</div>
+                <div style={{padding:"3px 6px"}}>{student.photo_url&&<img src={student.photo_url} alt="" style={{width:50,height:60,objectFit:"cover",border:"1px solid #1a56a0",borderRadius:2}}/>}</div>
               </div>
-              {/* Conduct */}
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderTop:`1px solid ${C.grayLight}`}}>
-                <div style={{borderRight:`1px solid ${C.grayLight}`}}>
-                  <div style={{background:C.navy,color:C.white,padding:"4px 10px",fontSize:9,fontWeight:800}}>CONDUITE &amp; PRÉSENCE</div>
-                  {[["Jours présent",conduct.present||"___"],["Jours absent",conduct.absent||"___"],["Retards",conduct.late||"___"],["Conduite",conduct.conduct]].map(([l,v],i)=>(
-                    <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 10px",borderBottom:`1px solid ${C.grayBg}`,background:i%2===0?C.white:C.grayBg}}>
-                      <span style={{fontSize:8.5,color:C.gray}}>{l}</span>
-                      <strong style={{fontSize:9.5,color:C.navy,borderBottom:`1px solid ${C.gray}`,minWidth:50,textAlign:"center"}}>{v}</strong>
-                    </div>
-                  ))}
-                </div>
-                <div>
-                  <div style={{background:C.navy,color:C.white,padding:"4px 10px",fontSize:9,fontWeight:800}}>APPRÉCIATIONS</div>
-                  <div style={{padding:"5px 10px",borderBottom:`1px solid ${C.grayBg}`}}><div style={{fontSize:7.5,color:C.gray,marginBottom:2}}>Prof. Principal:</div><div style={{fontSize:9.5,fontWeight:600,minHeight:14,borderBottom:`1px solid ${C.grayLight}`,color:C.navy}}>{conduct.classTeacherRemark||""}</div></div>
-                  <div style={{padding:"5px 10px"}}><div style={{fontSize:7.5,color:C.gray,marginBottom:2}}>Proviseur:</div><div style={{fontSize:9.5,fontWeight:600,minHeight:14,borderBottom:`1px solid ${C.grayLight}`,color:C.navy}}>{conduct.principalRemark||""}</div></div>
-                </div>
+              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr",borderBottom:"1px solid #ccc"}}>
+                <div style={{padding:"3px 6px",borderRight:"1px solid #000"}}>Nom et prénom: <strong>{student.name}</strong></div>
+                <div style={{padding:"3px 6px",borderRight:"1px solid #000"}}>DOB: <strong>{fmtDate(student.dob)}</strong></div>
+                <div style={{padding:"3px 6px",borderRight:"1px solid #000"}}>Naissance</div>
+                <div style={{padding:"3px 6px"}}></div>
               </div>
-              {/* Grade key */}
-              <div style={{background:C.grayBg,padding:"6px 12px",borderTop:`1px solid ${C.grayLight}`}}>
-                <div style={{fontSize:7.5,fontWeight:800,color:C.gray,marginBottom:3}}>GRADE SCALE / BARÈME</div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:"3px 10px"}}>
-                  {[["A","17-20","Excellent",C.green],["B+","15-16","Very Good",C.green],["B","13-14","Good",C.green],["C+","11-12","Fairly Good",C.gold],["C","10","Average",C.gold],["D","9","Pass","#B45309"],["F","0-8","Fail",C.red]].map(([g,r,rm,col])=>(
-                    <span key={g} style={{fontSize:8,color:C.gray,display:"flex",alignItems:"center",gap:2}}><strong style={{color:col,fontSize:8.5}}>{g}</strong> {r} — {rm}</span>
-                  ))}
-                </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr"}}>
+                <div style={{padding:"3px 6px",borderRight:"1px solid #000"}}>Classe: <strong>{student.form}</strong></div>
+                <div style={{padding:"3px 6px"}}>Annee scolaire / Year 20<strong>{sel.year}</strong></div>
               </div>
-              {/* Signatures */}
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",padding:"12px 14px 10px"}}>
-                {["Prof. Principal / Class Teacher","Proviseur / Principal","Parent/Tuteur / Guardian"].map((r,i)=>(
-                  <div key={r} style={{textAlign:"center",padding:"0 5px",borderRight:i<2?`1px solid ${C.grayLight}`:"none"}}>
-                    <div style={{height:28,borderBottom:`1px solid ${C.navy}`,marginBottom:3}}></div>
-                    <div style={{fontSize:8,color:C.gray,lineHeight:1.4}}>{r}</div>
-                  </div>
-                ))}
+            </div>
+
+            {/* Marks table */}
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",minWidth:500}}>
+                <thead>
+                  <tr style={{background:"#1a56a0",color:"#fff"}}>
+                    <th style={{padding:"4px 5px",textAlign:"left",fontSize:8,border:"1px solid #1a56a0",minWidth:95}}>SUBJECT</th>
+                    <th style={{padding:"4px 2px",textAlign:"center",fontSize:7,border:"1px solid #fff",minWidth:36}}>Class Test/20</th>
+                    <th style={{padding:"4px 2px",textAlign:"center",fontSize:7,border:"1px solid #fff",minWidth:36}}>Exam Test/20</th>
+                    <th style={{padding:"4px 2px",textAlign:"center",fontSize:7,border:"1px solid #fff",minWidth:36}}>Average/20</th>
+                    <th style={{padding:"4px 2px",textAlign:"center",fontSize:7,border:"1px solid #fff",minWidth:26}}>Coef.</th>
+                    <th style={{padding:"4px 2px",textAlign:"center",fontSize:7,border:"1px solid #fff",minWidth:32}}>Score</th>
+                    <th style={{padding:"4px 2px",textAlign:"center",fontSize:7,border:"1px solid #fff",minWidth:26}}>Position</th>
+                    <th style={{padding:"4px 2px",textAlign:"center",fontSize:7,border:"1px solid #fff",minWidth:52}}>REMARKS</th>
+                    <th style={{padding:"4px 2px",textAlign:"center",fontSize:7,border:"1px solid #fff",minWidth:48}}>Subject Master SIGN.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    "English language","French/ Français","Mathematics","Health science",
+                    "Home management","Citizenship","Food and Nutrition","Chemistry",
+                    "History","Economics","Geography","Biology","Human Biology","Physics",
+                    "Literature in English","Computer Studies","Religious Studies",
+                    "Commerce","Accounts","Hygiene","Sport/Physical education","Manual Labour"
+                  ].map((sub,i)=>{
+                    // Match subject names flexibly
+                    const r=modeRows.find(x=>
+                      x.sub===sub||
+                      (sub==="French/ Français"&&x.sub==="French")||
+                      (sub==="Computer Studies"&&x.sub==="Computer Science")||
+                      (sub==="Sport/Physical education"&&x.sub==="Physical Education")||
+                      (sub==="Literature in English"&&x.sub==="Literature")
+                    );
+                    const avg=r?(sel.mode==="term"?r.termAvg:r.annualAvg):null;
+                    const score=avg!==null&&r?(avg*r.coeff).toFixed(1):"";
+                    const {remark}=r&&avg!==null?scoreToGrade(avg):{remark:""};
+                    const pass=avg!==null&&avg>=10;
+                    return(
+                      <tr key={sub} style={{background:i%2===0?"#fff":"#F8FAFC"}}>
+                        <td style={{padding:"3px 5px",fontSize:8.5,border:"1px solid #1a56a0"}}>{sub}</td>
+                        <td style={{textAlign:"center",fontSize:8.5,border:"1px solid #1a56a0"}}>{r&&r.termScores?.[0]!=null?r.termScores[0]:""}</td>
+                        <td style={{textAlign:"center",fontSize:8.5,border:"1px solid #1a56a0"}}>{r&&r.termScores?.[1]!=null?r.termScores[1]:""}</td>
+                        <td style={{textAlign:"center",fontSize:8.5,fontWeight:700,border:"1px solid #1a56a0"}}>{avg!=null?avg.toFixed(1):""}</td>
+                        <td style={{textAlign:"center",fontSize:8.5,border:"1px solid #1a56a0"}}>{r?r.coeff:""}</td>
+                        <td style={{textAlign:"center",fontSize:8.5,fontWeight:700,border:"1px solid #1a56a0"}}>{score}</td>
+                        <td style={{textAlign:"center",fontSize:8.5,border:"1px solid #1a56a0"}}></td>
+                        <td style={{textAlign:"center",fontSize:8,color:avg!=null?(pass?C.green:C.red):"#000",border:"1px solid #1a56a0"}}>{remark}</td>
+                        <td style={{border:"1px solid #1a56a0"}}></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Summary */}
+            <div style={{padding:"6px 10px",borderTop:"2px solid #1a56a0",fontSize:8.5}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:4}}>
+                <div>Terminal Average: <strong>{overallAvg?overallAvg.toFixed(2):"___"}/20</strong></div>
+                <div>Discipline: ___________</div>
+                <div>Promoted/Repeat: ___________</div>
               </div>
-              <div style={{textAlign:"center",fontSize:7.5,color:"#9CA3AF",borderTop:`1px dashed ${C.grayLight}`,padding:"5px 12px 7px"}}>
-                Saker Baptist College · Ngeptang, Noni, NW Region · {sel.year} · {new Date().toLocaleDateString("en-GB")}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:4}}>
+                <div>Annual Average: <strong>{sel.mode==="annual"&&overallAvg?overallAvg.toFixed(2):"___"}/20</strong></div>
+                <div>Position: <strong>{classRank||"___"}</strong></div>
+                <div>Fees/Money Owning: ___________</div>
               </div>
-            </>}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:4}}>
+                <div>No of Absences: {conduct.absent||"___"}</div>
+                <div>No of Warning: ___________</div>
+                <div>Next Term Begins: ___________</div>
+              </div>
+              <div style={{marginBottom:4}}>No. of suspensions: ___________</div>
+              <div style={{borderTop:"1px solid #ccc",paddingTop:5}}>
+                <strong>Discipline:</strong><br/>
+                Class Teacher Remark: {conduct.classTeacherRemark||"_________________________"}<br/>
+                Principal Remark: {conduct.principalRemark||"_________________________"}
+              </div>
+              <div style={{textAlign:"right",marginTop:12,paddingBottom:6}}>
+                <div style={{fontSize:8.5}}>Principal's Signature/Stamp</div>
+                <div style={{marginTop:14,borderTop:"1px solid #000",display:"inline-block",minWidth:130,paddingTop:2,fontSize:8}}>Principal / Proviseur</div>
+              </div>
+            </div>
           </div>
+
 
           {modeRows.length>0
             ? <button onClick={printReport} style={{width:"100%",padding:"13px",background:`linear-gradient(90deg,${C.navy},${C.navyMid})`,color:C.white,border:"none",borderRadius:10,fontWeight:800,fontSize:15,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
