@@ -1177,7 +1177,8 @@ function ReportsPage({ ctx }) {
     const seqNums = sel.mode==="term"
       ? termSeqs.map(sq=>sq.replace("SEQ ",""))
       : ["1","2","3","4","5","6"];
-    const seqHeaders = seqNums.map(n=>`<th style="background:#1a56a0;color:#fff;border:1px solid #fff;padding:2px 1px;font-size:7px;width:${sel.mode==="term"?"7%":"4.5%"}">SQ${n}</th>`).join("");
+    const seqW = sel.mode==="term" ? "6%" : "4%";
+    const seqHeaders = seqNums.map(n=>`<th style="background:#1a56a0;color:#fff;border:1px solid #fff;padding:1px;font-size:6.5px;width:${seqW}">SQ${n}</th>`).join("");
 
     const rows = SBC_SUBJECTS.map((sub,i)=>{
       const r = modeRows.find(x=>
@@ -1190,8 +1191,9 @@ function ReportsPage({ ctx }) {
       if(!r){
         const emptyCols = sel.mode==="term" ? termSeqs.map(()=>`<td style="border:1px solid #1a56a0"></td>`).join("") : SEQ_LABELS.map(()=>`<td style="border:1px solid #1a56a0"></td>`).join("");
         return`<tr style="background:${i%2===0?"#fff":"#F9FAFB"}">
-          <td style="padding:1px 3px;font-size:7.5px;border:1px solid #1a56a0">${sub}</td>
+          <td style="padding:1px 2px;font-size:6.5px;border:1px solid #1a56a0;line-height:1.1">${sub}</td>
           ${emptyCols}
+          <td style="border:1px solid #1a56a0"></td>
           <td style="border:1px solid #1a56a0"></td>
           <td style="border:1px solid #1a56a0"></td>
           <td style="border:1px solid #1a56a0"></td>
@@ -1203,19 +1205,19 @@ function ReportsPage({ ctx }) {
       const pass = avg!==null&&avg>=10;
       const pond = avg!==null?(avg*r.coeff).toFixed(1):"";
       const scoreCols = sel.mode==="term"
-        ? r.termScores.map(s=>`<td style="text-align:center;font-size:8px;border:1px solid #1a56a0">${s!=null?s:""}</td>`).join("")
+        ? r.termScores.map(s=>`<td style="text-align:center;font-size:7px;border:1px solid #1a56a0;padding:1px">${s!=null?s:""}</td>`).join("")
         : SEQ_LABELS.map((_,j)=>{
             const sc=[r.s1,r.s2,r.s3,r.s4,r.s5,r.s6][j];
-            return`<td style="text-align:center;font-size:7.5px;border:1px solid #1a56a0">${sc!=null?sc:""}</td>`;
+            return`<td style="text-align:center;font-size:6.5px;border:1px solid #1a56a0;padding:1px">${sc!=null?sc:""}</td>`;
           }).join("");
       return`<tr style="background:${i%2===0?"#fff":"#F9FAFB"}">
-        <td style="padding:1px 3px;font-size:7.5px;border:1px solid #1a56a0">${sub}</td>
+        <td style="padding:1px 2px;font-size:6.5px;border:1px solid #1a56a0;line-height:1.1">${sub}</td>
         ${scoreCols}
-        <td style="text-align:center;font-size:8px;font-weight:700;border:1px solid #1a56a0">${avg!=null?avg.toFixed(1):""}</td>
-        <td style="text-align:center;font-size:8px;border:1px solid #1a56a0">${r.coeff}</td>
-        <td style="text-align:center;font-size:8px;font-weight:700;border:1px solid #1a56a0">${pond}</td>
-        <td style="text-align:center;font-size:7px;color:${pass?"#15803D":"#B91C1C"};border:1px solid #1a56a0">${remark}</td>
-      <td style="padding:1px 3px;font-size:6.5px;color:#163558;border:1px solid #1a56a0">${r.teacher||""}</td>
+        <td style="text-align:center;font-size:7px;font-weight:700;border:1px solid #1a56a0;padding:1px">${avg!=null?avg.toFixed(1):""}</td>
+        <td style="text-align:center;font-size:7px;border:1px solid #1a56a0;padding:1px">${r.coeff}</td>
+        <td style="text-align:center;font-size:7px;font-weight:700;border:1px solid #1a56a0;padding:1px">${pond}</td>
+        <td style="text-align:center;font-size:6px;color:${pass?"#15803D":"#B91C1C"};border:1px solid #1a56a0;padding:1px">${remark.slice(0,3)}</td>
+      <td style="padding:1px 2px;font-size:6px;color:#163558;border:1px solid #1a56a0;line-height:1.1">${(r.teacher||"").split(" ").slice(-1)[0]}</td>
       </tr>`;
     }).join("");
 
@@ -1297,13 +1299,13 @@ function ReportsPage({ ctx }) {
 <table style="border:1px solid #1a56a0;margin-bottom:3px">
   <thead>
     <tr style="background:#1a56a0;color:#fff">
-      <th style="text-align:left;padding:2px 4px;font-size:7.5px;border:1px solid #fff;width:20%">SUBJECT</th>
+      <th style="text-align:left;padding:1px 3px;font-size:7px;border:1px solid #fff;width:15%">SUBJECT</th>
       ${seqHeaders}
-      <th style="padding:2px 2px;font-size:7px;border:1px solid #fff;width:6%">Avg/20</th>
-      <th style="padding:2px 2px;font-size:7px;border:1px solid #fff;width:4%">Cf</th>
-      <th style="padding:2px 2px;font-size:7px;border:1px solid #fff;width:6%">Score</th>
-      <th style="padding:2px 2px;font-size:7px;border:1px solid #fff;width:9%">Remarks</th>
-      <th style="padding:2px 2px;font-size:7px;border:1px solid #fff;width:14%">Teacher</th>
+      <th style="padding:1px 1px;font-size:6.5px;border:1px solid #fff;width:5%">Avg</th>
+      <th style="padding:1px 1px;font-size:6.5px;border:1px solid #fff;width:3.5%">Cf</th>
+      <th style="padding:1px 1px;font-size:6.5px;border:1px solid #fff;width:5%">Sc</th>
+      <th style="padding:1px 1px;font-size:6.5px;border:1px solid #fff;width:7%;writing-mode:vertical-rl;text-orientation:mixed;height:32px">Rmk</th>
+      <th style="padding:1px 1px;font-size:6.5px;border:1px solid #fff;width:13%">Teacher</th>
   </thead>
   <tbody>${rows}</tbody>
 </table>
@@ -1506,16 +1508,16 @@ function ReportsPage({ ctx }) {
               <table style={{width:"100%",borderCollapse:"collapse",minWidth:480}}>
                 <thead>
                   <tr style={{background:"#1a56a0",color:"#fff"}}>
-                    <th style={{padding:"2px 4px",textAlign:"left",fontSize:7.5,border:"1px solid #1a56a0",width:"22%"}}>SUBJECT</th>
+                    <th style={{padding:"1px 3px",textAlign:"left",fontSize:6.5,border:"1px solid #1a56a0",width:"16%"}}>SUBJECT</th>
                     {sel.mode==="term"
-                      ? termSeqs.map((sq)=><th key={sq} style={{padding:"2px 1px",textAlign:"center",fontSize:7,border:"1px solid #fff",width:"8%"}}>SQ{sq.replace("SEQ ","")}</th>)
-                      : ["SQ1","SQ2","SQ3","SQ4","SQ5","SQ6"].map(s=><th key={s} style={{padding:"2px 1px",textAlign:"center",fontSize:6.5,border:"1px solid #fff",width:"5%"}}>{s}</th>)
+                      ? termSeqs.map((sq)=><th key={sq} style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"6%"}}>SQ{sq.replace("SEQ ","")}</th>)
+                      : ["1","2","3","4","5","6"].map(s=><th key={s} style={{padding:"1px",textAlign:"center",fontSize:5.5,border:"1px solid #fff",width:"4%"}}>SQ{s}</th>)
                     }
-                    <th style={{padding:"2px 1px",textAlign:"center",fontSize:7,border:"1px solid #fff",width:"7%"}}>Avg</th>
-                    <th style={{padding:"2px 1px",textAlign:"center",fontSize:7,border:"1px solid #fff",width:"5%"}}>Cf</th>
-                    <th style={{padding:"2px 1px",textAlign:"center",fontSize:7,border:"1px solid #fff",width:"7%"}}>Score</th>
-                    <th style={{padding:"2px 1px",textAlign:"center",fontSize:7,border:"1px solid #fff",width:"10%"}}>Rmk</th>
-                    <th style={{padding:"2px 1px",textAlign:"center",fontSize:7,border:"1px solid #fff",width:"16%"}}>Teacher</th>
+                    <th style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"5%"}}>Avg</th>
+                    <th style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"3.5%"}}>Cf</th>
+                    <th style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"5%"}}>Sc</th>
+                    <th style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"7%"}}>Rmk</th>
+                    <th style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"13%"}}>Teacher</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1539,16 +1541,16 @@ function ReportsPage({ ctx }) {
                     const pass=avg!=null&&avg>=10;
                     return(
                       <tr key={sub} style={{background:i%2===0?"#fff":"#F8FAFC"}}>
-                        <td style={{padding:"1px 3px",fontSize:7.5,border:"1px solid #1a56a0"}}>{sub}</td>
+                        <td style={{padding:"1px 2px",fontSize:6.5,border:"1px solid #1a56a0",lineHeight:1.1}}>{sub}</td>
                         {sel.mode==="term"
-                          ? r?.termScores.map((s,j)=><td key={j} style={{textAlign:"center",fontSize:7.5,border:"1px solid #1a56a0",padding:"1px"}}>{s!=null?s:""}</td>)
-                          : [r?.s1,r?.s2,r?.s3,r?.s4,r?.s5,r?.s6].map((s,j)=><td key={j} style={{textAlign:"center",fontSize:7,border:"1px solid #1a56a0",padding:"1px"}}>{s!=null?s:""}</td>)
+                          ? r?.termScores.map((s,j)=><td key={j} style={{textAlign:"center",fontSize:6.5,border:"1px solid #1a56a0",padding:"1px"}}>{s!=null?s:""}</td>)
+                          : [r?.s1,r?.s2,r?.s3,r?.s4,r?.s5,r?.s6].map((s,j)=><td key={j} style={{textAlign:"center",fontSize:6,border:"1px solid #1a56a0",padding:"1px"}}>{s!=null?s:""}</td>)
                         }
-                        <td style={{textAlign:"center",fontSize:7.5,fontWeight:700,border:"1px solid #1a56a0",padding:"1px"}}>{avg!=null?avg.toFixed(1):""}</td>
-                        <td style={{textAlign:"center",fontSize:7.5,border:"1px solid #1a56a0",padding:"1px"}}>{r?r.coeff:""}</td>
-                        <td style={{textAlign:"center",fontSize:7.5,fontWeight:700,border:"1px solid #1a56a0",padding:"1px"}}>{score}</td>
-                        <td style={{textAlign:"center",fontSize:7,color:avg!=null?(pass?C.green:C.red):"#000",border:"1px solid #1a56a0"}}>{remark}</td>
-                        <td style={{padding:"1px 2px",fontSize:6.5,color:"#163558",border:"1px solid #1a56a0"}}>{r?.teacher||""}</td>
+                        <td style={{textAlign:"center",fontSize:6.5,fontWeight:700,border:"1px solid #1a56a0",padding:"1px"}}>{avg!=null?avg.toFixed(1):""}</td>
+                        <td style={{textAlign:"center",fontSize:6.5,border:"1px solid #1a56a0",padding:"1px"}}>{r?r.coeff:""}</td>
+                        <td style={{textAlign:"center",fontSize:6.5,fontWeight:700,border:"1px solid #1a56a0",padding:"1px"}}>{score}</td>
+                        <td style={{textAlign:"center",fontSize:5.5,color:avg!=null?(pass?C.green:C.red):"#000",border:"1px solid #1a56a0",padding:"1px"}}>{remark.slice(0,3)}</td>
+                        <td style={{padding:"1px 2px",fontSize:5.5,color:"#163558",border:"1px solid #1a56a0",lineHeight:1.1}}>{(r?.teacher||"").split(" ").slice(-1)[0]}</td>
                       </tr>
                     );
                   })}
