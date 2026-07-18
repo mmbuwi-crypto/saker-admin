@@ -88,6 +88,7 @@ function domPrint(id, html, size="A4 portrait", margin="8mm") {
     <style>
       *{box-sizing:border-box;margin:0;padding:0}
       @page{size:${size};margin:${margin}}
+      @media print{ html,body{ width:${size.includes("A5")?"148mm":"210mm"}; } }
       body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;
            -webkit-print-color-adjust:exact;print-color-adjust:exact}
     </style></head><body>${html}</body></html>`;
@@ -1226,6 +1227,11 @@ function ReportsPage({ ctx }) {
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   @page{size:A4 portrait;margin:6mm}
+  @page{size:210mm 297mm;margin:6mm}
+  @media print{
+    html,body{width:210mm;height:297mm}
+    .page{max-width:198mm}
+  }
   html,body{font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff;
     -webkit-print-color-adjust:exact;print-color-adjust:exact}
   table{width:100%;border-collapse:collapse}
