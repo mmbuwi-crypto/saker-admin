@@ -1171,19 +1171,15 @@ function ReportsPage({ ctx }) {
       : "—";
 
     const photoHtml = student.photo_url
-      ?`<img src="${student.photo_url}" style="width:65px;height:78px;object-fit:cover;border:1px solid #1a56a0;display:block">`
-      :`<div style="width:65px;height:78px;border:1px solid #999;display:flex;align-items:center;justify-content:center;font-size:9px;color:#999;text-align:center">PHOTO</div>`;
-
-    const photoHtmlSmall = student.photo_url
-      ?`<img src="${student.photo_url}" style="width:42px;height:50px;object-fit:cover;border:1px solid #1a56a0;display:block">`
-      :`<div style="width:42px;height:50px;border:1px solid #999;display:flex;align-items:center;justify-content:center;font-size:6px;color:#999;text-align:center">PHOTO</div>`;
+      ?`<img src="${student.photo_url}" style="width:60px;height:72px;object-fit:cover;border:1px solid #1a56a0;display:block">`
+      :`<div style="width:60px;height:72px;border:1px solid #999;display:flex;align-items:center;justify-content:center;font-size:8px;color:#999;text-align:center">PHOTO</div>`;
 
     const termLabel = sel.mode==="term" ? sel.term.replace(" Term","").toUpperCase()+" TERM" : "ANNUAL";
     const seqNums = sel.mode==="term"
       ? termSeqs.map(sq=>sq.replace("SEQ ",""))
       : ["1","2","3","4","5","6"];
     const seqW = sel.mode==="term" ? "6%" : "4%";
-    const seqHeaders = seqNums.map(n=>`<th style="background:#1a56a0;color:#fff;border:1px solid #fff;padding:1px;font-size:6.5px;width:${seqW}">SQ${n}</th>`).join("");
+    const seqHeaders = seqNums.map(n=>`<th style="background:#1a56a0;color:#fff;border:1px solid #fff;padding:2px 1px;font-size:7px;width:${seqW}">SQ${n}</th>`).join("");
 
     const rows = SBC_SUBJECTS.map((sub,i)=>{
       const r = modeRows.find(x=>
@@ -1196,7 +1192,7 @@ function ReportsPage({ ctx }) {
       if(!r){
         const emptyCols = sel.mode==="term" ? termSeqs.map(()=>`<td style="border:1px solid #1a56a0"></td>`).join("") : SEQ_LABELS.map(()=>`<td style="border:1px solid #1a56a0"></td>`).join("");
         return`<tr style="background:${i%2===0?"#fff":"#F9FAFB"}">
-          <td style="padding:1px 2px;font-size:6.5px;border:1px solid #1a56a0;line-height:1.1">${sub}</td>
+          <td style="padding:2px 3px;font-size:7px;border:1px solid #1a56a0;line-height:1.15">${sub}</td>
           ${emptyCols}
           <td style="border:1px solid #1a56a0"></td>
           <td style="border:1px solid #1a56a0"></td>
@@ -1210,189 +1206,180 @@ function ReportsPage({ ctx }) {
       const pass = avg!==null&&avg>=10;
       const pond = avg!==null?(avg*r.coeff).toFixed(1):"";
       const scoreCols = sel.mode==="term"
-        ? r.termScores.map(s=>`<td style="text-align:center;font-size:7px;border:1px solid #1a56a0;padding:1px">${s!=null?s:""}</td>`).join("")
+        ? r.termScores.map(s=>`<td style="text-align:center;font-size:7.5px;border:1px solid #1a56a0;padding:2px">${s!=null?s:""}</td>`).join("")
         : SEQ_LABELS.map((_,j)=>{
             const sc=[r.s1,r.s2,r.s3,r.s4,r.s5,r.s6][j];
-            return`<td style="text-align:center;font-size:6.5px;border:1px solid #1a56a0;padding:1px">${sc!=null?sc:""}</td>`;
+            return`<td style="text-align:center;font-size:7px;border:1px solid #1a56a0;padding:2px">${sc!=null?sc:""}</td>`;
           }).join("");
       return`<tr style="background:${i%2===0?"#fff":"#F9FAFB"}">
-        <td style="padding:1px 2px;font-size:6.5px;border:1px solid #1a56a0;line-height:1.1">${sub}</td>
+        <td style="padding:2px 3px;font-size:7px;border:1px solid #1a56a0;line-height:1.15">${sub}</td>
         ${scoreCols}
-        <td style="text-align:center;font-size:7px;font-weight:700;border:1px solid #1a56a0;padding:1px">${avg!=null?avg.toFixed(1):""}</td>
-        <td style="text-align:center;font-size:7px;border:1px solid #1a56a0;padding:1px">${r.coeff}</td>
-        <td style="text-align:center;font-size:7px;font-weight:700;border:1px solid #1a56a0;padding:1px">${pond}</td>
-        <td style="text-align:center;font-size:6px;color:${pass?"#15803D":"#B91C1C"};border:1px solid #1a56a0;padding:1px">${remark.slice(0,3)}</td>
-      <td style="padding:1px 2px;font-size:6px;color:#163558;border:1px solid #1a56a0;line-height:1.1">${(r.teacher||"").split(" ").slice(-1)[0]}</td>
+        <td style="text-align:center;font-size:7.5px;font-weight:700;border:1px solid #1a56a0;padding:2px">${avg!=null?avg.toFixed(1):""}</td>
+        <td style="text-align:center;font-size:7.5px;border:1px solid #1a56a0;padding:2px">${r.coeff}</td>
+        <td style="text-align:center;font-size:7.5px;font-weight:700;border:1px solid #1a56a0;padding:2px">${pond}</td>
+        <td style="text-align:center;font-size:6.5px;color:${pass?"#15803D":"#B91C1C"};border:1px solid #1a56a0;padding:2px">${remark.slice(0,3)}</td>
+        <td style="padding:2px 3px;font-size:6.5px;color:#163558;border:1px solid #1a56a0;line-height:1.1">${(r.teacher||"").split(" ").slice(-1)[0]}</td>
       </tr>`;
     }).join("");
 
-    // Build ONE compact card (half of A4 height ≈ 138mm)
-    const cardHTML = `
-<div class="card">
-
-  <!-- HEADER -->
-  <table style="margin-bottom:2px">
-    <tr>
-      <td style="width:33%;font-size:6.5px;line-height:1.3;vertical-align:top">
-        <strong>REPUBLIC OF CAMEROON</strong><br>Peace-Work-Fatherland<br>Min. of Secondary Education
-      </td>
-      <td style="width:34%;text-align:center;vertical-align:middle;font-size:15px">🇨🇲</td>
-      <td style="width:33%;font-size:6.5px;line-height:1.3;vertical-align:top;text-align:right">
-        <strong>REPUBLIQUE DU CAMEROUN</strong><br>Paix – Travail – Patrie<br>Min. De l'Enseignement
-      </td>
-    </tr>
-  </table>
-
-  <!-- SCHOOL NAME -->
-  <div style="background:#1a56a0;color:#fff;text-align:center;padding:3px 4px;margin-bottom:2px">
-    <div style="font-size:11px;font-weight:900;letter-spacing:.4px">SAKER BAPTIST COLLAGE(SBC)-BAWE</div>
-    <div style="font-size:6.5px;margin-top:1px;opacity:.85">Motto: Quality, Discipline, and Excellence education</div>
-  </div>
-
-  <!-- TITLE -->
-  <div style="text-align:center;margin-bottom:2px">
-    <span style="font-size:8.5px;font-weight:800;text-decoration:underline">ACADEMIC REPORT CARD</span>
-    <span style="font-size:7.5px;font-weight:700"> / BULLETIN DE NOTES</span>
-  </div>
-
-  <!-- TERM + STUDENT INFO + PHOTO -->
-  <table style="border:1px solid #000;margin-bottom:2px">
-    <tr>
-      <td colspan="4" style="border-bottom:1px solid #000;padding:1px 4px;font-size:6.5px">
-        <strong>${termLabel}</strong> | Class: <strong>${student.form}</strong> | Roll: <strong>${peers.length}</strong> | Year: <strong>${sel.year}</strong>
-      </td>
-      <td rowspan="4" style="width:46px;padding:2px;border-left:1px solid #000;vertical-align:top;text-align:center">
-        ${photoHtmlSmall}
-      </td>
-    </tr>
-    <tr>
-      <td colspan="2" style="padding:1px 4px;font-size:6.5px;border-bottom:1px solid #ccc;border-right:1px solid #ccc">
-        Name: <strong>${student.name}</strong>
-      </td>
-      <td colspan="2" style="padding:1px 4px;font-size:6.5px;border-bottom:1px solid #ccc">
-        Matricule: <strong>${student.id}</strong>
-      </td>
-    </tr>
-    <tr>
-      <td style="padding:1px 4px;font-size:6.5px;border-bottom:1px solid #ccc;border-right:1px solid #ccc">
-        Sex: <strong>${student.gender}</strong>
-      </td>
-      <td style="padding:1px 4px;font-size:6.5px;border-bottom:1px solid #ccc;border-right:1px solid #ccc">
-        DOB: <strong>${fmtDate(student.dob)}</strong>
-      </td>
-      <td colspan="2" style="padding:1px 4px;font-size:6.5px;border-bottom:1px solid #ccc">
-        Parent: <strong>${student.parent||"—"}</strong>
-      </td>
-    </tr>
-    <tr>
-      <td colspan="4" style="padding:1px 4px;font-size:6.5px">
-        Address: <strong>${student.address||"—"}</strong>
-      </td>
-    </tr>
-  </table>
-
-  <!-- MARKS TABLE -->
-  <table style="border:1px solid #1a56a0;margin-bottom:2px">
-    <thead>
-      <tr style="background:#1a56a0;color:#fff">
-        <th style="text-align:left;padding:1px 2px;font-size:6px;border:1px solid #fff;width:15%">SUBJECT</th>
-        ${seqHeaders}
-        <th style="padding:1px;font-size:5.5px;border:1px solid #fff;width:5%">Avg</th>
-        <th style="padding:1px;font-size:5.5px;border:1px solid #fff;width:3.5%">Cf</th>
-        <th style="padding:1px;font-size:5.5px;border:1px solid #fff;width:5%">Sc</th>
-        <th style="padding:1px;font-size:5.5px;border:1px solid #fff;width:6%">Rmk</th>
-        <th style="padding:1px;font-size:5.5px;border:1px solid #fff;width:12%">Teacher</th>
-      </tr>
-    </thead>
-    <tbody>${rows}</tbody>
-  </table>
-
-  <!-- SUMMARY -->
-  <table style="border:1px solid #000;margin-bottom:2px">
-    <tr>
-      <td style="padding:1px 4px;font-size:6.5px;border-right:1px solid #000;width:25%">
-        Term Avg: <strong>${overallAvg?overallAvg.toFixed(2):"—"}/20</strong>
-      </td>
-      <td style="padding:1px 4px;font-size:6.5px;border-right:1px solid #000;width:25%">
-        Class Avg: <strong>${classAvg}/20</strong>
-      </td>
-      <td style="padding:1px 4px;font-size:6.5px;border-right:1px solid #000;width:25%">
-        Position: <strong>${rankStr}</strong>
-      </td>
-      <td style="padding:1px 4px;font-size:6.5px;width:25%">
-        Promoted/Repeat: ______
-      </td>
-    </tr>
-    <tr>
-      <td style="padding:1px 4px;font-size:6.5px;border-right:1px solid #000;border-top:1px solid #ccc">
-        Annual: <strong>${sel.mode==="annual"&&overallAvg?overallAvg.toFixed(2):"—"}/20</strong>
-      </td>
-      <td style="padding:1px 4px;font-size:6.5px;border-right:1px solid #000;border-top:1px solid #ccc">
-        Absences: <strong>${conduct.absent||"—"}</strong>
-      </td>
-      <td style="padding:1px 4px;font-size:6.5px;border-right:1px solid #000;border-top:1px solid #ccc">
-        Warnings: ______
-      </td>
-      <td style="padding:1px 4px;font-size:6.5px;border-top:1px solid #ccc">
-        Fees Owing: ______
-      </td>
-    </tr>
-    <tr>
-      <td colspan="4" style="padding:1px 4px;font-size:6.5px;border-top:1px solid #ccc">
-        Class Teacher Remark: <strong>${conduct.classTeacherRemark||"________________"}</strong>
-      </td>
-    </tr>
-  </table>
-
-  <!-- SIGNATURES -->
-  <table style="margin-top:3px">
-    <tr>
-      <td style="width:33%;text-align:center;padding:0 4px">
-        <div style="height:12px;border-bottom:1px solid #000;margin-bottom:1px"></div>
-        <div style="font-size:6px">Class Teacher</div>
-      </td>
-      <td style="width:34%;text-align:center;padding:0 4px">
-        <div style="height:12px;border-bottom:1px solid #000;margin-bottom:1px"></div>
-        <div style="font-size:6px">Principal's Signature/Stamp</div>
-      </td>
-      <td style="width:33%;text-align:center;padding:0 4px">
-        <div style="height:12px;border-bottom:1px solid #000;margin-bottom:1px"></div>
-        <div style="font-size:6px">Parent/Guardian</div>
-      </td>
-    </tr>
-  </table>
-
-  <div style="text-align:center;font-size:5.5px;color:#888;margin-top:2px">
-    Saker Baptist Collage (SBC)-Bawe · ${sel.year} · ${new Date().toLocaleDateString("en-GB")}
-  </div>
-</div>`;
-
+    // Single portrait card sized to exactly 190mm x 277mm (200mm page - 10mm margin, minus header space)
     return`<!DOCTYPE html><html><head><meta charset="utf-8">
 <title>Report Card — ${student.name}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  @page{size:A4 portrait;margin:5mm}
+  @page{size:200mm 297mm;margin:5mm}
   html,body{font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff;
     -webkit-print-color-adjust:exact;print-color-adjust:exact}
   table{width:100%;border-collapse:collapse}
-  .sheet{width:200mm;margin:0 auto}
-  .card{width:100%;padding:4mm 5mm;box-sizing:border-box}
-  .cutline{border-top:2px dashed #888;position:relative;margin:0}
-  .cutline::after{content:"✂ trim here";position:absolute;left:50%;top:-7px;transform:translateX(-50%);
-    background:#fff;padding:0 8px;font-size:7px;color:#888;font-family:Arial}
-</style></head><body>
-<div class="sheet">
-  ${cardHTML}
-  <div class="cutline"></div>
-  ${cardHTML}
+  .page{width:190mm;margin:0 auto}
+</style></head><body><div class="page">
+
+<!-- HEADER -->
+<table style="margin-bottom:3px">
+  <tr>
+    <td style="width:33%;font-size:7.5px;line-height:1.5;vertical-align:top">
+      <strong>REPUBLIC OF CAMEROON</strong><br>Peace-Work-Fatherland<br>Ministry of Secondary Education
+    </td>
+    <td style="width:34%;text-align:center;vertical-align:middle;font-size:20px">🇨🇲</td>
+    <td style="width:33%;font-size:7.5px;line-height:1.5;vertical-align:top;text-align:right">
+      <strong>REPUBLIQUE DU CAMEROUN</strong><br>Paix – Travail – Patrie<br>Ministère De l'Enseignement
+    </td>
+  </tr>
+</table>
+
+<!-- SCHOOL NAME -->
+<div style="background:#1a56a0;color:#fff;text-align:center;padding:5px 4px;margin-bottom:3px">
+  <div style="font-size:15px;font-weight:900;letter-spacing:.5px">SAKER BAPTIST COLLAGE(SBC)-BAWE</div>
+  <div style="font-size:8px;margin-top:1px;opacity:.85">Motto: Quality, Discipline, and Excellence education</div>
 </div>
-</body></html>`;
+
+<!-- TITLE -->
+<div style="text-align:center;margin-bottom:3px">
+  <span style="font-size:11px;font-weight:800;text-decoration:underline">ACADEMIC REPORT CARD</span>
+  <span style="font-size:10px;font-weight:700"> / BULLETIN DE NOTES</span>
+</div>
+
+<!-- TERM + STUDENT INFO + PHOTO -->
+<table style="border:1px solid #000;margin-bottom:3px">
+  <tr>
+    <td colspan="4" style="border-bottom:1px solid #000;padding:2px 6px;font-size:8px">
+      <strong>${termLabel}</strong> &nbsp;|&nbsp; Class: <strong>${student.form}</strong> &nbsp;|&nbsp;
+      No. on Roll: <strong>${peers.length}</strong> &nbsp;|&nbsp; Academic Year: <strong>${sel.year}</strong>
+    </td>
+    <td rowspan="4" style="width:66px;padding:3px;border-left:1px solid #000;vertical-align:top;text-align:center">
+      ${photoHtml}
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" style="padding:2px 6px;font-size:8px;border-bottom:1px solid #ccc;border-right:1px solid #ccc">
+      Name / Nom: <strong>${student.name}</strong>
+    </td>
+    <td colspan="2" style="padding:2px 6px;font-size:8px;border-bottom:1px solid #ccc">
+      Matricule / ID: <strong>${student.id}</strong>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:2px 6px;font-size:8px;border-bottom:1px solid #ccc;border-right:1px solid #ccc">
+      Sex / Sexe: <strong>${student.gender}</strong>
+    </td>
+    <td style="padding:2px 6px;font-size:8px;border-bottom:1px solid #ccc;border-right:1px solid #ccc">
+      DOB / Naissance: <strong>${fmtDate(student.dob)}</strong>
+    </td>
+    <td colspan="2" style="padding:2px 6px;font-size:8px;border-bottom:1px solid #ccc">
+      Parent/Guardian: <strong>${student.parent||"—"}</strong>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="4" style="padding:2px 6px;font-size:8px">
+      Address / Domicile: <strong>${student.address||"—"}</strong>
+    </td>
+  </tr>
+</table>
+
+<!-- MARKS TABLE -->
+<table style="border:1px solid #1a56a0;margin-bottom:3px">
+  <thead>
+    <tr style="background:#1a56a0;color:#fff">
+      <th style="text-align:left;padding:2px 4px;font-size:7.5px;border:1px solid #fff;width:16%">SUBJECT</th>
+      ${seqHeaders}
+      <th style="padding:2px 2px;font-size:7px;border:1px solid #fff;width:5.5%">Avg</th>
+      <th style="padding:2px 2px;font-size:7px;border:1px solid #fff;width:4%">Cf</th>
+      <th style="padding:2px 2px;font-size:7px;border:1px solid #fff;width:6%">Score</th>
+      <th style="padding:2px 2px;font-size:7px;border:1px solid #fff;width:7%">Rmk</th>
+      <th style="padding:2px 2px;font-size:7px;border:1px solid #fff;width:12%">Teacher</th>
+    </tr>
+  </thead>
+  <tbody>${rows}</tbody>
+</table>
+
+<!-- SUMMARY -->
+<table style="border:1px solid #000;margin-bottom:3px">
+  <tr>
+    <td style="padding:3px 6px;font-size:8.5px;border-right:1px solid #000;width:25%">
+      Terminal Avg: <strong>${overallAvg?overallAvg.toFixed(2):"—"}/20</strong>
+    </td>
+    <td style="padding:3px 6px;font-size:8.5px;border-right:1px solid #000;width:25%">
+      Class Avg: <strong>${classAvg}/20</strong>
+    </td>
+    <td style="padding:3px 6px;font-size:8.5px;border-right:1px solid #000;width:25%">
+      Position / Rang: <strong>${rankStr}</strong>
+    </td>
+    <td style="padding:3px 6px;font-size:8.5px;width:25%">
+      Promoted/Repeat: __________
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:3px 6px;font-size:8.5px;border-right:1px solid #000;border-top:1px solid #ccc">
+      Annual Avg: <strong>${sel.mode==="annual"&&overallAvg?overallAvg.toFixed(2):"—"}/20</strong>
+    </td>
+    <td style="padding:3px 6px;font-size:8.5px;border-right:1px solid #000;border-top:1px solid #ccc">
+      Absences: <strong>${conduct.absent||"—"}</strong>
+    </td>
+    <td style="padding:3px 6px;font-size:8.5px;border-right:1px solid #000;border-top:1px solid #ccc">
+      No. of Warnings: __________
+    </td>
+    <td style="padding:3px 6px;font-size:8.5px;border-top:1px solid #ccc">
+      Fees Owing: __________
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" style="padding:3px 6px;font-size:8.5px;border-right:1px solid #000;border-top:1px solid #ccc">
+      Class Teacher Remark: <strong>${conduct.classTeacherRemark||"_________________________"}</strong>
+    </td>
+    <td colspan="2" style="padding:3px 6px;font-size:8.5px;border-top:1px solid #ccc">
+      Next Term Begins: __________
+    </td>
+  </tr>
+</table>
+
+<!-- SIGNATURES -->
+<table style="margin-top:6px">
+  <tr>
+    <td style="width:33%;text-align:center;padding:0 8px">
+      <div style="height:22px;border-bottom:1px solid #000;margin-bottom:2px"></div>
+      <div style="font-size:8px">Class Teacher / Prof. Principal</div>
+    </td>
+    <td style="width:34%;text-align:center;padding:0 8px">
+      <div style="height:22px;border-bottom:1px solid #000;margin-bottom:2px"></div>
+      <div style="font-size:8px">Principal's Signature / Stamp</div>
+    </td>
+    <td style="width:33%;text-align:center;padding:0 8px">
+      <div style="height:22px;border-bottom:1px solid #000;margin-bottom:2px"></div>
+      <div style="font-size:8px">Parent / Guardian</div>
+    </td>
+  </tr>
+</table>
+
+<div style="text-align:center;font-size:7px;color:#888;margin-top:5px;border-top:1px dashed #ccc;padding-top:3px">
+  Saker Baptist Collage (SBC)-Bawe · ${sel.year} · Printed: ${new Date().toLocaleDateString("en-GB")}
+</div>
+</div></body></html>`;
   }
 
 
   function printReport() {
     if (!student||!modeRows.length) return;
-    domPrint("sbc-report", buildPrintHTML(), "A4 portrait", "7mm");
+    domPrint("sbc-report", buildPrintHTML(), "200mm 297mm", "5mm");
   }
 
   // Guard: show error if something crashes
