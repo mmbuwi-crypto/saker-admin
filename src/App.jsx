@@ -278,6 +278,24 @@ export default function App() {
     setMenuOpen(false); setPage("dashboard");
   }
 
+  // ── Auto-logout after 15 minutes of inactivity — protects unattended devices ──
+  useEffect(() => {
+    if (!session) return;
+    let timer;
+    const INACTIVITY_LIMIT = 15*60*1000; // 15 minutes
+    const reset = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        doLogout();
+        alert("You were signed out after 15 minutes of inactivity for security.");
+      }, INACTIVITY_LIMIT);
+    };
+    const events = ["mousedown","keydown","touchstart","scroll"];
+    events.forEach(ev => window.addEventListener(ev, reset));
+    reset();
+    return () => { clearTimeout(timer); events.forEach(ev => window.removeEventListener(ev, reset)); };
+  }, [session]);
+
   // ── DB write helpers (passed via ctx) ──────────────────────────────────────
   async function saveStudent(s) {
     // photo_url is already compressed base64 or null — save directly
@@ -453,11 +471,38 @@ function LoginScreen({ onLogin }) {
   const [pass,  setPass]  = useState("");
   const [err,   setErr]   = useState("");
   const [busy,  setBusy]  = useState(false);
+  const [attempts, setAttempts] = useState(0);
+  const [lockedUntil, setLockedUntil] = useState(0);
+  const [now, setNow] = useState(Date.now());
+
+  // Tick every second while locked so the countdown updates
+  useEffect(() => {
+    if (!lockedUntil) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [lockedUntil]);
+
+  const isLocked = lockedUntil > now;
+  const secondsLeft = isLocked ? Math.ceil((lockedUntil-now)/1000) : 0;
 
   async function handle() {
+    if (isLocked) return;
+    if (!email.trim() || !pass) { setErr("Enter your email and password."); return; }
     setErr(""); setBusy(true);
-    try { await onLogin(email, pass); }
-    catch(e) { setErr(e.message.includes("Invalid login") ? "Incorrect email or password." : "Login error: "+e.message); }
+    try {
+      await onLogin(email.trim(), pass);
+      setAttempts(0);
+    } catch(e) {
+      const next = attempts+1;
+      setAttempts(next);
+      if (next>=5) {
+        // Lock out for 60 seconds after 5 failed attempts — slows down brute-force guessing
+        setLockedUntil(Date.now()+60000);
+        setErr("Too many failed attempts. Try again in 60 seconds.");
+      } else {
+        setErr(e.message.includes("Invalid login") ? `Incorrect email or password. (${next}/5 attempts)` : "Login error: "+e.message);
+      }
+    }
     setBusy(false);
   }
 
@@ -473,13 +518,16 @@ function LoginScreen({ onLogin }) {
         <div style={{background:C.white,borderRadius:14,padding:22,boxShadow:"0 20px 60px rgba(0,0,0,0.35)"}}>
           <h2 style={{margin:"0 0 16px",fontSize:16,fontWeight:800,color:C.navy}}>Sign In</h2>
           <Fr label="Email Address">
-            <input style={inp} type="email" placeholder="your@email.com" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handle()}/>
+            <input style={inp} type="email" autoComplete="username" placeholder="your@email.com" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handle()} disabled={isLocked}/>
           </Fr>
           <Fr label="Password">
-            <input style={inp} type="password" placeholder="••••••••" value={pass} onChange={e=>setPass(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handle()}/>
+            <input style={inp} type="password" autoComplete="current-password" placeholder="••••••••" value={pass} onChange={e=>setPass(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handle()} disabled={isLocked}/>
           </Fr>
           {err && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"8px 12px",color:C.red,fontSize:12,marginBottom:12}}>{err}</div>}
-          <Btn onClick={handle} disabled={busy}>{busy?"Signing in…":"Sign In →"}</Btn>
+          {isLocked
+            ? <div style={{width:"100%",padding:"10px",background:C.grayBg,color:C.gray,borderRadius:8,fontWeight:700,fontSize:13,textAlign:"center"}}>🔒 Locked — try again in {secondsLeft}s</div>
+            : <Btn onClick={handle} disabled={busy}>{busy?"Signing in…":"Sign In →"}</Btn>
+          }
           <p style={{textAlign:"center",fontSize:10,color:C.gray,marginTop:14,marginBottom:0}}>Contact your administrator if you forgot your password.</p>
         </div>
       </div>
@@ -1234,11 +1282,14 @@ function ReportsPage({ ctx }) {
 <title>Report Card — ${student.name}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  @page{size:200mm 297mm;margin:5mm}
+  @page{size:200mm 297mm portrait;margin:5mm}
+  @media print{
+    html,body{width:200mm!important;min-height:297mm!important}
+  }
   html,body{font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff;
     -webkit-print-color-adjust:exact;print-color-adjust:exact}
   table{width:100%;border-collapse:collapse}
-  .page{width:190mm;margin:0 auto}
+  .page{width:190mm;max-width:190mm;margin:0 auto}
 </style></head><body><div class="page">
 
 <!-- HEADER -->
@@ -1386,7 +1437,7 @@ function ReportsPage({ ctx }) {
 
   function printReport() {
     if (!student||!modeRows.length) return;
-    domPrint("sbc-report", buildPrintHTML(), "200mm 297mm", "5mm");
+    domPrint("sbc-report", buildPrintHTML(), "200mm 297mm portrait", "5mm");
   }
 
   // Guard: show error if something crashes
