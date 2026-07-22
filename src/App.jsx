@@ -1182,7 +1182,7 @@ function ReportsPage({ ctx }) {
     const seqNums = sel.mode==="term"
       ? termSeqs.map(sq=>sq.replace("SEQ ",""))
       : ["1","2","3","4","5","6"];
-    const seqW = sel.mode==="term" ? "6%" : "4%";
+    const seqW = sel.mode==="term" ? "9%" : "5.2%";
     const seqHeaders = seqNums.map(n=>`<th style="background:#1a56a0;color:#fff;border:1px solid #fff;padding:2px 1px;font-size:7px;width:${seqW}">SQ${n}</th>`).join("");
 
     const rows = SBC_SUBJECTS.map((sub,i)=>{
@@ -1196,7 +1196,7 @@ function ReportsPage({ ctx }) {
       if(!r){
         const emptyCols = sel.mode==="term" ? termSeqs.map(()=>`<td style="border:1px solid #1a56a0"></td>`).join("") : SEQ_LABELS.map(()=>`<td style="border:1px solid #1a56a0"></td>`).join("");
         return`<tr style="background:${i%2===0?"#fff":"#F9FAFB"}">
-          <td style="padding:2px 3px;font-size:7px;border:1px solid #1a56a0;line-height:1.15">${sub}</td>
+          <td style="padding:1px 2px;font-size:6.2px;border:1px solid #1a56a0;line-height:1.05;word-break:break-word">${sub}</td>
           ${emptyCols}
           <td style="border:1px solid #1a56a0"></td>
           <td style="border:1px solid #1a56a0"></td>
@@ -1219,7 +1219,7 @@ function ReportsPage({ ctx }) {
         ? `${sub}<div style="font-size:6px;color:#1a56a0;font-style:italic;line-height:1.1">${teacherName}</div>`
         : sub;
       return`<tr style="background:${i%2===0?"#fff":"#F9FAFB"}">
-        <td style="padding:2px 3px;font-size:7px;border:1px solid #1a56a0;line-height:1.15">${subjectCell}</td>
+        <td style="padding:1px 2px;font-size:6.2px;border:1px solid #1a56a0;line-height:1.05;word-break:break-word">${subjectCell}</td>
         ${scoreCols}
         <td style="text-align:center;font-size:7.5px;font-weight:700;border:1px solid #1a56a0;padding:2px">${avg!=null?avg.toFixed(1):""}</td>
         <td style="text-align:center;font-size:7.5px;border:1px solid #1a56a0;padding:2px">${r.coeff}</td>
@@ -1307,12 +1307,12 @@ function ReportsPage({ ctx }) {
 <table style="border:1px solid #1a56a0;margin-bottom:3px">
   <thead>
     <tr style="background:#1a56a0;color:#fff">
-      <th style="text-align:left;padding:2px 4px;font-size:7.5px;border:1px solid #fff;width:26%">SUBJECT</th>
+      <th style="text-align:left;padding:2px 3px;font-size:7px;border:1px solid #fff;width:18%">SUBJECT</th>
       ${seqHeaders}
-      <th style="padding:2px 2px;font-size:7px;border:1px solid #fff;width:6%">Avg</th>
-      <th style="padding:2px 2px;font-size:7px;border:1px solid #fff;width:6%">Coeff</th>
-      <th style="padding:2px 2px;font-size:7px;border:1px solid #fff;width:7%">Score</th>
-      <th style="padding:2px 2px;font-size:7px;border:1px solid #fff;width:8%">Rmk</th>
+      <th style="padding:2px 1px;font-size:6.5px;border:1px solid #fff;width:8%">Avg</th>
+      <th style="padding:2px 1px;font-size:6.5px;border:1px solid #fff;width:7%">Coeff</th>
+      <th style="padding:2px 1px;font-size:6.5px;border:1px solid #fff;width:8%">Score</th>
+      <th style="padding:2px 1px;font-size:6.5px;border:1px solid #fff;width:7%">Rmk</th>
     </tr>
   </thead>
   <tbody>${rows}</tbody>
@@ -1517,15 +1517,15 @@ function ReportsPage({ ctx }) {
               <table style={{width:"100%",borderCollapse:"collapse",minWidth:480}}>
                 <thead>
                   <tr style={{background:"#1a56a0",color:"#fff"}}>
-                    <th style={{padding:"1px 3px",textAlign:"left",fontSize:6.5,border:"1px solid #1a56a0",width:"26%"}}>SUBJECT</th>
+                    <th style={{padding:"1px 2px",textAlign:"left",fontSize:6,border:"1px solid #1a56a0",width:"18%"}}>SUBJECT</th>
                     {sel.mode==="term"
-                      ? termSeqs.map((sq)=><th key={sq} style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"7%"}}>SQ{sq.replace("SEQ ","")}</th>)
-                      : ["1","2","3","4","5","6"].map(s=><th key={s} style={{padding:"1px",textAlign:"center",fontSize:5.5,border:"1px solid #fff",width:"5%"}}>SQ{s}</th>)
+                      ? termSeqs.map((sq)=><th key={sq} style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"9%"}}>SQ{sq.replace("SEQ ","")}</th>)
+                      : ["1","2","3","4","5","6"].map(s=><th key={s} style={{padding:"1px",textAlign:"center",fontSize:5.5,border:"1px solid #fff",width:"5.2%"}}>SQ{s}</th>)
                     }
-                    <th style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"7%"}}>Avg</th>
+                    <th style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"8%"}}>Avg</th>
                     <th style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"7%"}}>Coeff</th>
                     <th style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"8%"}}>Score</th>
-                    <th style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"9%"}}>Rmk</th>
+                    <th style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"7%"}}>Rmk</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1550,9 +1550,9 @@ function ReportsPage({ ctx }) {
                     const teacherName = r?.teacher && r.teacher!=="—" ? r.teacher : "";
                     return(
                       <tr key={sub} style={{background:i%2===0?"#fff":"#F8FAFC"}}>
-                        <td style={{padding:"1px 2px",fontSize:6.5,border:"1px solid #1a56a0",lineHeight:1.1}}>
+                        <td style={{padding:"1px 2px",fontSize:5.8,border:"1px solid #1a56a0",lineHeight:1.05,wordBreak:"break-word"}}>
                           {sub}
-                          {teacherName && <div style={{fontSize:5.5,color:"#1a56a0",fontStyle:"italic",lineHeight:1.1}}>{teacherName}</div>}
+                          {teacherName && <div style={{fontSize:5,color:"#1a56a0",fontStyle:"italic",lineHeight:1.05}}>{teacherName}</div>}
                         </td>
                         {sel.mode==="term"
                           ? r?.termScores.map((s,j)=><td key={j} style={{textAlign:"center",fontSize:6.5,border:"1px solid #1a56a0",padding:"1px"}}>{s!=null?s:""}</td>)
