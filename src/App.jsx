@@ -292,7 +292,11 @@ export default function App() {
       is_late_reg: s.is_late_reg||false,
     };
     const { error } = await supabase.from("students").upsert(row, { onConflict:"id" });
-    if (error) throw error;
+    if (error) {
+      console.error("saveStudent error:", error);
+      alert("Save error: " + error.message + (error.details?(" — "+error.details):"") );
+      throw error;
+    }
     // Auto-create fee record if not exists
     await supabase.from("fees").upsert({ student_id: s.id, paid: feesMap[s.id]?.paid||0, total: TOTAL_FEE }, { onConflict:"student_id", ignoreDuplicates:true });
     await loadAll();
@@ -1198,7 +1202,6 @@ function ReportsPage({ ctx }) {
           <td style="border:1px solid #1a56a0"></td>
           <td style="border:1px solid #1a56a0"></td>
           <td style="border:1px solid #1a56a0"></td>
-          <td style="border:1px solid #1a56a0"></td>
         </tr>`;
       }
       const avg = sel.mode==="term"?r.termAvg:r.annualAvg;
@@ -1211,16 +1214,20 @@ function ReportsPage({ ctx }) {
             const sc=[r.s1,r.s2,r.s3,r.s4,r.s5,r.s6][j];
             return`<td style="text-align:center;font-size:7px;border:1px solid #1a56a0;padding:2px">${sc!=null?sc:""}</td>`;
           }).join("");
+      const teacherName = r.teacher && r.teacher!=="—" ? r.teacher : "";
+      const subjectCell = teacherName
+        ? `${sub}<div style="font-size:6px;color:#1a56a0;font-style:italic;line-height:1.1">${teacherName}</div>`
+        : sub;
       return`<tr style="background:${i%2===0?"#fff":"#F9FAFB"}">
-        <td style="padding:2px 3px;font-size:7px;border:1px solid #1a56a0;line-height:1.15">${sub}</td>
+        <td style="padding:2px 3px;font-size:7px;border:1px solid #1a56a0;line-height:1.15">${subjectCell}</td>
         ${scoreCols}
         <td style="text-align:center;font-size:7.5px;font-weight:700;border:1px solid #1a56a0;padding:2px">${avg!=null?avg.toFixed(1):""}</td>
         <td style="text-align:center;font-size:7.5px;border:1px solid #1a56a0;padding:2px">${r.coeff}</td>
         <td style="text-align:center;font-size:7.5px;font-weight:700;border:1px solid #1a56a0;padding:2px">${pond}</td>
         <td style="text-align:center;font-size:6.5px;color:${pass?"#15803D":"#B91C1C"};border:1px solid #1a56a0;padding:2px">${remark.slice(0,3)}</td>
-        <td style="padding:2px 3px;font-size:6.5px;color:#163558;border:1px solid #1a56a0;line-height:1.1">${(r.teacher||"").split(" ").slice(-1)[0]}</td>
       </tr>`;
     }).join("");
+
 
     // Single portrait card sized to exactly 190mm x 277mm (200mm page - 10mm margin, minus header space)
     return`<!DOCTYPE html><html><head><meta charset="utf-8">
@@ -1300,16 +1307,16 @@ function ReportsPage({ ctx }) {
 <table style="border:1px solid #1a56a0;margin-bottom:3px">
   <thead>
     <tr style="background:#1a56a0;color:#fff">
-      <th style="text-align:left;padding:2px 4px;font-size:7.5px;border:1px solid #fff;width:16%">SUBJECT</th>
+      <th style="text-align:left;padding:2px 4px;font-size:7.5px;border:1px solid #fff;width:26%">SUBJECT</th>
       ${seqHeaders}
-      <th style="padding:2px 2px;font-size:7px;border:1px solid #fff;width:5.5%">Avg</th>
-      <th style="padding:2px 2px;font-size:7px;border:1px solid #fff;width:4%">Cf</th>
-      <th style="padding:2px 2px;font-size:7px;border:1px solid #fff;width:6%">Score</th>
-      <th style="padding:2px 2px;font-size:7px;border:1px solid #fff;width:7%">Rmk</th>
-      <th style="padding:2px 2px;font-size:7px;border:1px solid #fff;width:12%">Teacher</th>
+      <th style="padding:2px 2px;font-size:7px;border:1px solid #fff;width:6%">Avg</th>
+      <th style="padding:2px 2px;font-size:7px;border:1px solid #fff;width:6%">Coeff</th>
+      <th style="padding:2px 2px;font-size:7px;border:1px solid #fff;width:7%">Score</th>
+      <th style="padding:2px 2px;font-size:7px;border:1px solid #fff;width:8%">Rmk</th>
     </tr>
   </thead>
   <tbody>${rows}</tbody>
+
 </table>
 
 <!-- SUMMARY -->
@@ -1510,16 +1517,15 @@ function ReportsPage({ ctx }) {
               <table style={{width:"100%",borderCollapse:"collapse",minWidth:480}}>
                 <thead>
                   <tr style={{background:"#1a56a0",color:"#fff"}}>
-                    <th style={{padding:"1px 3px",textAlign:"left",fontSize:6.5,border:"1px solid #1a56a0",width:"16%"}}>SUBJECT</th>
+                    <th style={{padding:"1px 3px",textAlign:"left",fontSize:6.5,border:"1px solid #1a56a0",width:"26%"}}>SUBJECT</th>
                     {sel.mode==="term"
-                      ? termSeqs.map((sq)=><th key={sq} style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"6%"}}>SQ{sq.replace("SEQ ","")}</th>)
-                      : ["1","2","3","4","5","6"].map(s=><th key={s} style={{padding:"1px",textAlign:"center",fontSize:5.5,border:"1px solid #fff",width:"4%"}}>SQ{s}</th>)
+                      ? termSeqs.map((sq)=><th key={sq} style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"7%"}}>SQ{sq.replace("SEQ ","")}</th>)
+                      : ["1","2","3","4","5","6"].map(s=><th key={s} style={{padding:"1px",textAlign:"center",fontSize:5.5,border:"1px solid #fff",width:"5%"}}>SQ{s}</th>)
                     }
-                    <th style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"5%"}}>Avg</th>
-                    <th style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"3.5%"}}>Cf</th>
-                    <th style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"5%"}}>Sc</th>
-                    <th style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"7%"}}>Rmk</th>
-                    <th style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"13%"}}>Teacher</th>
+                    <th style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"7%"}}>Avg</th>
+                    <th style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"7%"}}>Coeff</th>
+                    <th style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"8%"}}>Score</th>
+                    <th style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"9%"}}>Rmk</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1541,9 +1547,13 @@ function ReportsPage({ ctx }) {
                     const score=avg!=null&&r?(avg*r.coeff).toFixed(1):"";
                     const {remark}=r&&avg!=null?scoreToGrade(avg):{remark:""};
                     const pass=avg!=null&&avg>=10;
+                    const teacherName = r?.teacher && r.teacher!=="—" ? r.teacher : "";
                     return(
                       <tr key={sub} style={{background:i%2===0?"#fff":"#F8FAFC"}}>
-                        <td style={{padding:"1px 2px",fontSize:6.5,border:"1px solid #1a56a0",lineHeight:1.1}}>{sub}</td>
+                        <td style={{padding:"1px 2px",fontSize:6.5,border:"1px solid #1a56a0",lineHeight:1.1}}>
+                          {sub}
+                          {teacherName && <div style={{fontSize:5.5,color:"#1a56a0",fontStyle:"italic",lineHeight:1.1}}>{teacherName}</div>}
+                        </td>
                         {sel.mode==="term"
                           ? r?.termScores.map((s,j)=><td key={j} style={{textAlign:"center",fontSize:6.5,border:"1px solid #1a56a0",padding:"1px"}}>{s!=null?s:""}</td>)
                           : [r?.s1,r?.s2,r?.s3,r?.s4,r?.s5,r?.s6].map((s,j)=><td key={j} style={{textAlign:"center",fontSize:6,border:"1px solid #1a56a0",padding:"1px"}}>{s!=null?s:""}</td>)
@@ -1552,7 +1562,6 @@ function ReportsPage({ ctx }) {
                         <td style={{textAlign:"center",fontSize:6.5,border:"1px solid #1a56a0",padding:"1px"}}>{r?r.coeff:""}</td>
                         <td style={{textAlign:"center",fontSize:6.5,fontWeight:700,border:"1px solid #1a56a0",padding:"1px"}}>{score}</td>
                         <td style={{textAlign:"center",fontSize:5.5,color:avg!=null?(pass?C.green:C.red):"#000",border:"1px solid #1a56a0",padding:"1px"}}>{remark.slice(0,3)}</td>
-                        <td style={{padding:"1px 2px",fontSize:5.5,color:"#163558",border:"1px solid #1a56a0",lineHeight:1.1}}>{(r?.teacher||"").split(" ").slice(-1)[0]}</td>
                       </tr>
                     );
                   })}
