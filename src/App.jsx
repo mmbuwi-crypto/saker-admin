@@ -828,8 +828,8 @@ function RegistrationPage({ ctx }) {
   return (
     <div>
       <div style={{display:"flex",background:C.white,borderRadius:10,padding:3,marginBottom:13,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
-        {[["register","➕ Register"],["list","📋 List"],["receipt","🧾 Receipt"]].map(([k,l]) => (
-          <button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"9px 4px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:tab===k?C.navy:"transparent",color:tab===k?C.white:C.gray}}>{l}</button>
+        {[["register","➕ Register"],["bulk","📥 Bulk Import"],["list","📋 List"],["receipt","🧾 Receipt"]].map(([k,l]) => (
+          <button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"9px 4px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,fontSize:11,background:tab===k?C.navy:"transparent",color:tab===k?C.white:C.gray}}>{l}</button>
         ))}
       </div>
 
@@ -886,6 +886,10 @@ function RegistrationPage({ ctx }) {
             {saving ? "Saving to Supabase…" : "Register & Generate Receipt →"}
           </button>
         </div>
+      )}
+
+      {tab==="bulk" && (
+        <BulkImportPanel students={students} saveStudent={saveStudent} auth={auth} onDone={()=>setTab("list")}/>
       )}
 
       {tab==="list" && (
@@ -946,6 +950,229 @@ function RegistrationPage({ ctx }) {
             </div>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Bulk Import Panel ───────────────────────────────────────────────────────
+// Expected spreadsheet columns (header row, case-insensitive, order doesn't matter):
+// Name | Form | Gender | Date of Birth | Parent/Guardian | Phone | Address
+function BulkImportPanel({ students, saveStudent, auth, onDone }) {
+  const [rows,     setRows]     = useState([]);   // parsed + validated rows
+  const [fileName, setFileName] = useState("");
+  const [importing,setImporting]= useState(false);
+  const [progress,  setProgress] = useState({done:0,total:0});
+  const [results,   setResults]  = useState(null); // {success:[], failed:[]}
+  const fileInputRef = useRef(null);
+
+  function downloadTemplate() {
+    const sample = [
+      { "Name":"John Nkeng Tabi", "Form":"Form 1", "Gender":"Male",   "Date of Birth":"2013-04-15", "Parent/Guardian":"Mrs. Tabi", "Phone":"677123456", "Address":"Ngeptang" },
+      { "Name":"Grace Fon Achu",  "Form":"Form 2", "Gender":"Female", "Date of Birth":"2012-09-02", "Parent/Guardian":"Mr. Achu",  "Phone":"677987654", "Address":"Noni" },
+    ];
+    exportToExcel(sample, "SBC-Bulk-Import-Template.xlsx", "Students");
+  }
+
+  function normalizeGender(v) {
+    const s = String(v||"").trim().toLowerCase();
+    if (s.startsWith("m")) return "Male";
+    if (s.startsWith("f")) return "Female";
+    return "";
+  }
+  function normalizeForm(v) {
+    const s = String(v||"").trim();
+    const match = FORMS.find(f => f.toLowerCase()===s.toLowerCase() || f.replace("Form ","")===s);
+    return match || "";
+  }
+  function normalizeDate(v) {
+    if (!v) return "";
+    // Handle Excel serial dates
+    if (typeof v === "number") {
+      const d = XLSX.SSF.parse_date_code(v);
+      if (d) return `${d.y}-${String(d.m).padStart(2,"0")}-${String(d.d).padStart(2,"0")}`;
+    }
+    const s = String(v).trim();
+    // Accept YYYY-MM-DD directly
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    // Try to parse common formats
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0,10);
+    return "";
+  }
+
+  function handleFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setFileName(file.name);
+    setResults(null);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const wb = XLSX.read(ev.target.result, { type: "binary", cellDates:false });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const raw = XLSX.utils.sheet_to_json(sheet, { defval:"" });
+
+        // Track how many students already exist per form, to continue ID numbering correctly
+        const formCounts = {};
+        FORMS.forEach(f => { formCounts[f] = students.filter(s=>s.form===f).length; });
+
+        const parsed = raw.map((r, idx) => {
+          // Case-insensitive column lookup
+          const get = (...keys) => {
+            for (const k of Object.keys(r)) {
+              if (keys.some(want => k.toLowerCase().replace(/[^a-z]/g,"") === want)) return r[k];
+            }
+            return "";
+          };
+          const name   = String(get("name","fullname","studentname")||"").trim();
+          const form   = normalizeForm(get("form","class"));
+          const gender = normalizeGender(get("gender","sex"));
+          const dob    = normalizeDate(get("dateofbirth","dob","birthdate"));
+          const parent = String(get("parentguardian","parent","guardian")||"").trim();
+          const phone  = String(get("phone","phonenumber","contact")||"").trim();
+          const address= String(get("address","homeaddress")||"").trim();
+
+          const errors = [];
+          if (!name)   errors.push("Missing name");
+          if (!form)   errors.push("Invalid/missing form");
+          if (!gender) errors.push("Invalid/missing gender");
+          if (!parent) errors.push("Missing parent/guardian");
+          if (!phone)  errors.push("Missing phone");
+
+          let id = "";
+          if (form && !errors.length) {
+            formCounts[form] = (formCounts[form]||0) + 1;
+            const fNum = form.replace("Form ","");
+            id = `SBC0${fNum.padStart(2,"0")}${String(formCounts[form]).padStart(3,"0")}`;
+          }
+
+          return { rowNum:idx+2, name, form, gender, dob, parent, phone, address, id, errors, valid: errors.length===0 };
+        });
+
+        setRows(parsed);
+      } catch(err) {
+        alert("Could not read file: " + err.message + "\n\nMake sure it's a valid .xlsx or .csv file with a header row.");
+        setRows([]);
+      }
+    };
+    reader.readAsBinaryString(file);
+  }
+
+  async function registerAll() {
+    const valid = rows.filter(r => r.valid);
+    if (!valid.length) { alert("No valid rows to import."); return; }
+    if (!window.confirm(`Register ${valid.length} student(s)? This cannot be undone in bulk.`)) return;
+
+    setImporting(true);
+    setProgress({done:0, total:valid.length});
+    const success = [];
+    const failed = [];
+
+    for (const r of valid) {
+      try {
+        const rec = `RCP-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}${Math.floor(Math.random()*90+10)}`;
+        await saveStudent({
+          id: r.id, name: r.name, form: r.form, gender: r.gender,
+          dob: r.dob||null, parent: r.parent, phone: r.phone, address: r.address||null,
+          photo_url: null, active: true,
+          reg_status: "registered", reg_date: todayStr(),
+          reg_fee: REG_NORMAL, reg_receipt: rec,
+          reg_paid_by: r.parent, reg_cashier: auth.user.name,
+          is_late_reg: false,
+        });
+        success.push(r);
+      } catch(e) {
+        failed.push({ ...r, importError: e.message });
+      }
+      setProgress(p => ({ ...p, done: p.done+1 }));
+    }
+
+    setResults({ success, failed });
+    setImporting(false);
+    setRows([]);
+  }
+
+  const validCount   = rows.filter(r=>r.valid).length;
+  const invalidCount = rows.length - validCount;
+
+  return (
+    <div>
+      <div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px 12px",marginBottom:12,fontSize:12,color:"#1e40af"}}>
+        ℹ️ Upload an Excel (.xlsx) or CSV file with columns: <strong>Name, Form, Gender, Date of Birth, Parent/Guardian, Phone, Address</strong>. Column order doesn't matter.
+        <div style={{marginTop:6}}>
+          <SmBtn onClick={downloadTemplate} color={C.navyMid}>📥 Download Template</SmBtn>
+        </div>
+      </div>
+
+      {!results && (
+        <Card title="1. Upload File">
+          <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} style={{display:"none"}}/>
+          <button onClick={()=>fileInputRef.current?.click()} style={{width:"100%",padding:"14px",background:C.grayBg,border:`2px dashed ${C.border}`,borderRadius:10,cursor:"pointer",fontSize:13,fontWeight:700,color:C.navyMid}}>
+            📁 {fileName || "Tap to choose a file…"}
+          </button>
+        </Card>
+      )}
+
+      {rows.length>0 && !results && (
+        <Card title="2. Preview & Validate" style={{marginTop:10}}>
+          <div style={{display:"flex",gap:10,marginBottom:10,flexWrap:"wrap"}}>
+            <Pill color={C.green}>{validCount} valid</Pill>
+            {invalidCount>0 && <Pill color={C.red}>{invalidCount} with errors</Pill>}
+          </div>
+          <div style={{maxHeight:300,overflowY:"auto",border:`1px solid ${C.grayLight}`,borderRadius:8}}>
+            {rows.map(r => (
+              <div key={r.rowNum} style={{padding:"8px 10px",borderBottom:`1px solid ${C.grayBg}`,background:r.valid?C.white:"#fef2f2"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div style={{fontWeight:700,fontSize:12,color:C.navy}}>Row {r.rowNum}: {r.name||"(no name)"}</div>
+                  {r.valid
+                    ? <Pill color={C.green}>✓ {r.id}</Pill>
+                    : <Pill color={C.red}>✕ Error</Pill>
+                  }
+                </div>
+                {r.valid
+                  ? <div style={{fontSize:11,color:C.gray,marginTop:2}}>{r.form} · {r.gender} · {r.parent} · {r.phone}</div>
+                  : <div style={{fontSize:11,color:C.red,marginTop:2}}>{r.errors.join(", ")}</div>
+                }
+              </div>
+            ))}
+          </div>
+          {importing ? (
+            <div style={{marginTop:12}}>
+              <div style={{background:C.grayBg,borderRadius:6,height:10,overflow:"hidden"}}>
+                <div style={{width:`${(progress.done/progress.total)*100}%`,height:"100%",background:C.green,transition:"width .3s"}}/>
+              </div>
+              <div style={{textAlign:"center",fontSize:12,color:C.gray,marginTop:6}}>Registering {progress.done} / {progress.total}…</div>
+            </div>
+          ) : (
+            <button onClick={registerAll} disabled={validCount===0} style={{width:"100%",marginTop:12,padding:"13px",background:validCount?C.navy:C.grayLight,color:C.white,border:"none",borderRadius:10,fontWeight:800,fontSize:14,cursor:validCount?"pointer":"not-allowed"}}>
+              Register {validCount} Valid Student{validCount!==1?"s":""} →
+            </button>
+          )}
+        </Card>
+      )}
+
+      {results && (
+        <Card title="Import Complete" style={{marginTop:10}}>
+          <div style={{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap"}}>
+            <Pill color={C.green}>✓ {results.success.length} registered</Pill>
+            {results.failed.length>0 && <Pill color={C.red}>✕ {results.failed.length} failed</Pill>}
+          </div>
+          {results.failed.length>0 && (
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:12,fontWeight:700,color:C.red,marginBottom:6}}>Failed rows:</div>
+              {results.failed.map(r=>(
+                <div key={r.rowNum} style={{fontSize:11,color:C.gray,padding:"4px 0",borderBottom:`1px solid ${C.grayBg}`}}>
+                  Row {r.rowNum} ({r.name}): {r.importError}
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{display:"flex",gap:8}}>
+            <Btn onClick={()=>{setResults(null);setFileName("");}} outline>Import Another File</Btn>
+            <Btn onClick={onDone}>View Student List →</Btn>
+          </div>
+        </Card>
       )}
     </div>
   );
