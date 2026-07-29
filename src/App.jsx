@@ -153,6 +153,7 @@ const navItems = [
   { key:"students",     label:"Students",     icon:"🎒", roles:["admin","teacher"] },
   { key:"teachers",     label:"Teachers",     icon:"👩‍🏫", roles:["admin"] },
   { key:"marks",        label:"Enter Marks",  icon:"✏️", roles:["admin","teacher"] },
+  { key:"attendance",   label:"Attendance",   icon:"🗓️", roles:["admin","teacher"] },
   { key:"reports",      label:"Report Cards", icon:"📄", roles:["admin","teacher"] },
   { key:"fees",         label:"School Fees",  icon:"💰", roles:["admin"] },
   { key:"notices",      label:"Notices",      icon:"📢", roles:["admin","teacher"] },
@@ -223,6 +224,7 @@ export default function App() {
   const [teachers,   setTeachers]   = useState([]);
   const [marksMap,   setMarksMap]   = useState({}); // key → mark record
   const [feesMap,    setFeesMap]    = useState({}); // studentId → {paid,total}
+  const [attendanceMap, setAttendanceMap] = useState({}); // "studentId-date" → {status}
   const [notices,    setNotices]    = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [dbError,    setDbError]    = useState(null);
@@ -258,13 +260,14 @@ export default function App() {
     try {
       const [
         { data: st }, { data: tc }, { data: mk },
-        { data: fe }, { data: nt }
+        { data: fe }, { data: nt }, { data: at }
       ] = await Promise.all([
         supabase.from("students").select("*").order("form").order("name"),
         supabase.from("teachers").select("*").order("name"),
         supabase.from("marks").select("*"),
         supabase.from("fees").select("*"),
         supabase.from("notices").select("*").order("posted_date", { ascending: false }),
+        supabase.from("attendance").select("*"),
       ]);
       setStudents(st || []);
       setTeachers(tc || []);
@@ -276,6 +279,10 @@ export default function App() {
       const fm = {};
       (fe||[]).forEach(f => { fm[f.student_id] = { paid: f.paid||0, total: f.total||TOTAL_FEE }; });
       setFeesMap(fm);
+      // Build attendance map: "studentId-date" → record {status: present|absent|late}
+      const am = {};
+      (at||[]).forEach(a => { am[`${a.student_id}-${a.date}`] = a; });
+      setAttendanceMap(am);
       setNotices(nt || []);
       setDbError(null);
     } catch(e) {
@@ -292,6 +299,7 @@ export default function App() {
       .on("postgres_changes", { event:"*", schema:"public", table:"marks"    }, () => loadAll())
       .on("postgres_changes", { event:"*", schema:"public", table:"fees"     }, () => loadAll())
       .on("postgres_changes", { event:"*", schema:"public", table:"notices"  }, () => loadAll())
+      .on("postgres_changes", { event:"*", schema:"public", table:"attendance" }, () => loadAll())
       .on("postgres_changes", { event:"*", schema:"public", table:"teachers" }, () => loadAll())
       .subscribe();
     return () => supabase.removeChannel(sub);
@@ -395,6 +403,16 @@ export default function App() {
     await loadAll();
   }
 
+  // records: array of { studentId, status } where status is "present"|"absent"|"late"
+  async function saveAttendanceBulk(date, records, markedBy) {
+    const rows = records.map(r => ({
+      student_id: r.studentId, date, status: r.status, marked_by: markedBy||null,
+    }));
+    const { error } = await supabase.from("attendance").upsert(rows, { onConflict:"student_id,date" });
+    if (error) throw error;
+    await loadAll();
+  }
+
   async function saveNotice(n) {
     const row = { title: n.title, body: n.body, author: n.author, posted_date: n.posted_date||todayStr() };
     if (n.id) { await supabase.from("notices").update(row).eq("id", n.id); }
@@ -429,9 +447,9 @@ export default function App() {
 
   const ctx = {
     auth: { user: currentUser, role: userRole||"teacher" },
-    students, teachers, marksMap, feesMap, notices,
+    students, teachers, marksMap, feesMap, notices, attendanceMap,
     saveStudent, deleteStudent, saveTeacher, saveMark,
-    saveFee, saveNotice, deleteNotice, loadAll,
+    saveFee, saveNotice, deleteNotice, loadAll, saveAttendanceBulk,
   };
 
   return (
@@ -497,6 +515,7 @@ export default function App() {
           {page==="students"     && <StudentsPage     ctx={ctx}/>}
           {page==="teachers"     && ctx.auth.role==="admin" && <TeachersPage    ctx={ctx}/>}
           {page==="marks"        && <MarksPage        ctx={ctx}/>}
+          {page==="attendance"   && <AttendancePage   ctx={ctx}/>}
           {page==="reports"      && <ReportsPage      ctx={ctx}/>}
           {page==="fees"         && ctx.auth.role==="admin" && <FeesPage        ctx={ctx}/>}
           {page==="notices"      && <NoticesPage      ctx={ctx}/>}
@@ -1518,6 +1537,176 @@ function MarksPage({ ctx }) {
 }
 
 // ─── Report Cards ──────────────────────────────────────────────────────────────
+// ─── Attendance ────────────────────────────────────────────────────────────────
+const ATT_STATUSES = ["present","absent","late"];
+const ATT_LABELS = { present:"Present", absent:"Absent", late:"Late" };
+const ATT_COLORS = { present:C.green, absent:C.red, late:C.gold };
+const ATT_ICONS  = { present:"✓", absent:"✕", late:"⏰" };
+
+function AttendancePage({ ctx }) {
+  const { students, attendanceMap, auth, teachers, saveAttendanceBulk } = ctx;
+  const isTeacher  = auth.role==="teacher";
+  const teacher    = teachers.find(t=>t.email===auth.user.email);
+  const availForms = isTeacher ? (teacher?.forms||[]) : FORMS;
+
+  const [tab,   setTab]   = useState("mark"); // "mark" | "summary"
+  const [form,  setForm]  = useState(availForms[0]||"Form 1");
+  const [date,  setDate]  = useState(todayStr());
+  const [local, setLocal] = useState({}); // studentId → status
+  const [saving,setSaving]= useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const formStudents = students.filter(s=>s.active&&s.form===form&&s.reg_status==="registered");
+
+  // Load existing attendance for this form+date whenever either changes
+  useEffect(() => {
+    const init = {};
+    formStudents.forEach(s => {
+      const key = `${s.id}-${date}`;
+      init[s.id] = attendanceMap[key]?.status || "present"; // default assumption: present
+    });
+    setLocal(init);
+    setSaved(false);
+  }, [form, date, students.length]);
+
+  function cycleStatus(studentId) {
+    setLocal(prev => {
+      const cur = prev[studentId] || "present";
+      const idx = ATT_STATUSES.indexOf(cur);
+      const next = ATT_STATUSES[(idx+1) % ATT_STATUSES.length];
+      return { ...prev, [studentId]: next };
+    });
+    setSaved(false);
+  }
+
+  function markAllPresent() {
+    const all = {};
+    formStudents.forEach(s => { all[s.id] = "present"; });
+    setLocal(all);
+    setSaved(false);
+  }
+
+  async function saveAll() {
+    setSaving(true);
+    try {
+      const records = formStudents.map(s => ({ studentId: s.id, status: local[s.id]||"present" }));
+      await saveAttendanceBulk(date, records, auth.user.name);
+      setSaved(true);
+    } catch(e) { alert("Save error: " + e.message); }
+    setSaving(false);
+  }
+
+  const presentCount = formStudents.filter(s=>(local[s.id]||"present")==="present").length;
+  const absentCount  = formStudents.filter(s=>local[s.id]==="absent").length;
+  const lateCount    = formStudents.filter(s=>local[s.id]==="late").length;
+
+  return (
+    <div>
+      <div style={{display:"flex",background:C.white,borderRadius:10,padding:3,marginBottom:13,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+        {[["mark","📝 Mark Today"],["summary","📊 Term Summary"]].map(([k,l]) => (
+          <button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"9px 4px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:tab===k?C.navy:"transparent",color:tab===k?C.white:C.gray}}>{l}</button>
+        ))}
+      </div>
+
+      {tab==="mark" && (
+        <div>
+          <div style={{background:C.white,borderRadius:10,padding:12,marginBottom:11,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div><label style={lbl}>Form</label>
+                <select style={inp} value={form} onChange={e=>setForm(e.target.value)}>{availForms.map(f=><option key={f}>{f}</option>)}</select>
+              </div>
+              <div><label style={lbl}>Date</label>
+                <input style={inp} type="date" value={date} max={todayStr()} onChange={e=>setDate(e.target.value)}/>
+              </div>
+            </div>
+          </div>
+
+          <div style={{display:"flex",gap:8,marginBottom:11,flexWrap:"wrap"}}>
+            <Pill color={C.green}>{presentCount} Present</Pill>
+            {absentCount>0 && <Pill color={C.red}>{absentCount} Absent</Pill>}
+            {lateCount>0 && <Pill color={C.gold}>{lateCount} Late</Pill>}
+            <SmBtn onClick={markAllPresent} color={C.navyMid} style={{marginLeft:"auto"}}>Mark All Present</SmBtn>
+          </div>
+
+          <div style={{background:C.white,borderRadius:10,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+            <div style={{padding:"8px 12px",background:"#fffbeb",borderBottom:`1px solid ${C.grayLight}`,fontSize:11,color:"#92400e"}}>
+              Tap a student's status to cycle: Present → Absent → Late
+            </div>
+            {!formStudents.length
+              ? <Empty text="No registered students in this form."/>
+              : formStudents.map((s,i) => {
+                  const status = local[s.id] || "present";
+                  return (
+                    <div key={s.id} style={{padding:"9px 12px",borderBottom:`1px solid ${C.grayBg}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,background:i%2===0?C.white:C.grayBg}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
+                        <PhotoBox photo={s.photo_url} size={[30,36]}/>
+                        <div style={{minWidth:0}}>
+                          <div style={{fontWeight:700,color:C.navy,fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</div>
+                          <div style={{fontSize:10,fontFamily:"monospace",color:C.gray}}>{s.id}</div>
+                        </div>
+                      </div>
+                      <button onClick={()=>cycleStatus(s.id)} style={{flexShrink:0,padding:"7px 14px",borderRadius:8,border:`2px solid ${ATT_COLORS[status]}`,background:ATT_COLORS[status]+"18",color:ATT_COLORS[status],fontWeight:800,fontSize:12,cursor:"pointer",minWidth:88,textAlign:"center"}}>
+                        {ATT_ICONS[status]} {ATT_LABELS[status]}
+                      </button>
+                    </div>
+                  );
+                })
+            }
+          </div>
+
+          {formStudents.length>0 && (
+            <button onClick={saveAll} disabled={saving} style={{width:"100%",marginTop:13,padding:"13px",background:saved?C.green:C.navy,color:C.white,border:"none",borderRadius:10,fontWeight:800,fontSize:14,cursor:"pointer",opacity:saving?0.6:1}}>
+              {saving?"Saving…":saved?"✓ Attendance Saved":`Save Attendance — ${form} · ${fmtDate(date)}`}
+            </button>
+          )}
+        </div>
+      )}
+
+      {tab==="summary" && <AttendanceSummary form={form} setForm={setForm} availForms={availForms} students={formStudents} attendanceMap={attendanceMap}/>}
+    </div>
+  );
+}
+
+function AttendanceSummary({ form, setForm, availForms, students, attendanceMap }) {
+  // Count how many present/absent/late days each student has recorded, all-time (per current academic year context — simple total for now)
+  const counts = students.map(s => {
+    let present=0, absent=0, late=0;
+    Object.keys(attendanceMap).forEach(key => {
+      if (!key.startsWith(s.id+"-")) return;
+      const st = attendanceMap[key].status;
+      if (st==="present") present++;
+      else if (st==="absent") absent++;
+      else if (st==="late") late++;
+    });
+    return { student:s, present, absent, late, total: present+absent+late };
+  });
+
+  return (
+    <div>
+      <div style={{background:C.white,borderRadius:10,padding:12,marginBottom:11,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+        <label style={lbl}>Form</label>
+        <select style={inp} value={form} onChange={e=>setForm(e.target.value)}>{availForms.map(f=><option key={f}>{f}</option>)}</select>
+      </div>
+      <div style={{background:C.white,borderRadius:10,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+        {!counts.length ? <Empty text="No registered students in this form."/> : counts.map((c,i) => (
+          <div key={c.student.id} style={{padding:"10px 12px",borderBottom:`1px solid ${C.grayBg}`,background:i%2===0?C.white:C.grayBg}}>
+            <div style={{fontWeight:700,color:C.navy,fontSize:13,marginBottom:6}}>{c.student.name}</div>
+            <div style={{display:"flex",gap:14,fontSize:12}}>
+              <span style={{color:C.green}}>✓ {c.present} present</span>
+              <span style={{color:C.red}}>✕ {c.absent} absent</span>
+              <span style={{color:C.gold}}>⏰ {c.late} late</span>
+              <span style={{color:C.gray,marginLeft:"auto"}}>{c.total} days recorded</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{fontSize:11,color:C.gray,marginTop:8,textAlign:"center"}}>
+        These totals automatically appear on each student's report card under "Absences".
+      </div>
+    </div>
+  );
+}
+
 function ReportsPage({ ctx }) {
   const SBC_SUBJECTS_LIST = [
     "English language","French/ Français","Mathematics","Health science",
@@ -1526,7 +1715,7 @@ function ReportsPage({ ctx }) {
     "Literature in English","Computer Studies","Religious Studies",
     "Commerce","Accounts","Hygiene","Sport/Physical education","Manual Labour"
   ];
-  const { students, marksMap, teachers } = ctx;
+  const { students, marksMap, teachers, attendanceMap } = ctx;
   const [sel,     setSel]     = useState({ studentId:"", year:"2026/2027", mode:"term", term:"First Term" });
   const [conduct, setConduct] = useState({ present:"", absent:"", late:"", conduct:"Very Good", classTeacherRemark:"", principalRemark:"" });
   const [showC,   setShowC]   = useState(false);
@@ -1534,6 +1723,32 @@ function ReportsPage({ ctx }) {
   const student  = students.find(s=>s.id===sel.studentId);
   const subjects = student ? (SUBJECTS_BY_FORM[student.form]||[]) : [];
   const termSeqs = TERM_SEQS[sel.term];
+
+  // Auto-compute real attendance totals for this student from the Attendance page's data
+  const attTotals = (()=>{
+    if (!student) return { present:0, absent:0, late:0 };
+    let present=0, absent=0, late=0;
+    Object.keys(attendanceMap||{}).forEach(key => {
+      if (!key.startsWith(student.id+"-")) return;
+      const st = attendanceMap[key].status;
+      if (st==="present") present++;
+      else if (st==="absent") absent++;
+      else if (st==="late") late++;
+    });
+    return { present, absent, late };
+  })();
+
+  // Pre-fill conduct fields with real attendance whenever the selected student changes,
+  // but only if the admin hasn't already typed something for this student
+  useEffect(() => {
+    if (!student) return;
+    setConduct(c => ({
+      ...c,
+      absent: c.absent===""? String(attTotals.absent) : c.absent,
+      present: c.present===""? String(attTotals.present) : c.present,
+      late: c.late===""? String(attTotals.late) : c.late,
+    }));
+  }, [student?.id]);
 
   const teacherFor = sub => {
     const t = teachers.find(t=>t.active&&(t.subjects||[]).includes(sub)&&(t.forms||[]).includes(student?.form));
@@ -1882,6 +2097,10 @@ function ReportsPage({ ctx }) {
             </div>
             {showC && (
               <div style={{borderTop:`1px solid ${C.grayLight}`,paddingTop:11}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                  <span style={{fontSize:10.5,color:C.gray}}>📅 Pre-filled from Attendance records — edit if needed</span>
+                  <SmBtn onClick={()=>setConduct(c=>({...c,present:String(attTotals.present),absent:String(attTotals.absent),late:String(attTotals.late)}))} color={C.navyMid}>Reset to Attendance</SmBtn>
+                </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
                   {[["Days Present","present"],["Days Absent","absent"],["Times Late","late"]].map(([l,k])=>(
                     <div key={k}><label style={lbl}>{l}</label><input style={inp} value={conduct[k]} onChange={e=>setConduct(c=>({...c,[k]:e.target.value}))}/></div>
