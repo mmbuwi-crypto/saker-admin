@@ -355,7 +355,7 @@ export default function App() {
       reg_status: s.reg_status||"pending", reg_date: s.reg_date||null,
       reg_fee: s.reg_fee||null, reg_receipt: s.reg_receipt||null,
       reg_paid_by: s.reg_paid_by||null, reg_cashier: s.reg_cashier||null,
-      is_late_reg: s.is_late_reg||false,
+      is_late_reg: s.is_late_reg||false, graduated: s.graduated||false,
     };
     const { error } = await supabase.from("students").upsert(row, { onConflict:"id" });
     if (error) {
@@ -1204,6 +1204,7 @@ function StudentsPage({ ctx }) {
   const [modal,  setModal]  = useState(null);
   const [viewS,  setViewS]  = useState(null);
   const [saving, setSaving] = useState(false);
+  const [showPromote, setShowPromote] = useState(false);
   const blank = { name:"", form:"Form 1", gender:"Female", dob:"", parent:"", phone:"", address:"", photo_url:null };
   const [form, setForm] = useState(blank);
 
@@ -1258,6 +1259,7 @@ function StudentsPage({ ctx }) {
           <option value="">All Forms</option>{FORMS.map(f=><option key={f}>{f}</option>)}
         </select>
         {auth.role==="admin" && <SmBtn onClick={exportStudents} color={C.green}>📊 Export Excel</SmBtn>}
+        {auth.role==="admin" && <SmBtn onClick={()=>setShowPromote(true)} color={C.gold}>🎓 Promote Students</SmBtn>}
         {auth.role==="admin" && <Btn onClick={()=>{setForm(blank);setModal("add");}}>+ Add</Btn>}
       </div>
 
@@ -1339,7 +1341,161 @@ function StudentsPage({ ctx }) {
           </div>
         </Modal>
       )}
+
+      {showPromote && <PromoteStudentsModal students={students} saveStudent={saveStudent} saveFee={ctx.saveFee} onClose={()=>setShowPromote(false)}/>}
     </div>
+  );
+}
+
+// ─── Promote Students (end-of-year bulk promotion) ──────────────────────────────
+function PromoteStudentsModal({ students, saveStudent, saveFee, onClose }) {
+  const [fromForm, setFromForm] = useState("Form 1");
+  const toFormOptions = FORMS.slice(FORMS.indexOf(fromForm)+1);
+  const isGraduating = fromForm === "Form 5";
+  const [toForm, setToForm] = useState(isGraduating ? "" : (FORMS[FORMS.indexOf(fromForm)+1]||""));
+  const [resetFees, setResetFees] = useState(true);
+  const [excluded, setExcluded] = useState({}); // studentId → true if excluded from promotion
+  const [step, setStep] = useState("select"); // "select" | "confirm" | "running" | "done"
+  const [progress, setProgress] = useState({done:0,total:0});
+  const [results, setResults] = useState(null);
+
+  useEffect(() => {
+    const nextIdx = FORMS.indexOf(fromForm)+1;
+    setToForm(fromForm==="Form 5" ? "" : (FORMS[nextIdx]||""));
+    setExcluded({});
+  }, [fromForm]);
+
+  const eligible = students.filter(s => s.active && s.form===fromForm && s.reg_status==="registered");
+  const included = eligible.filter(s => !excluded[s.id]);
+
+  function toggleExclude(id) {
+    setExcluded(prev => ({ ...prev, [id]: !prev[id] }));
+  }
+
+  async function runPromotion() {
+    setStep("running");
+    setProgress({done:0, total:included.length});
+    const success = [];
+    const failed = [];
+
+    for (const s of included) {
+      try {
+        if (isGraduating) {
+          // Graduating students: mark inactive rather than deleting — preserves their history
+          await saveStudent({ ...s, active:false, reg_status:s.reg_status, graduated:true });
+        } else {
+          await saveStudent({ ...s, form: toForm });
+          if (resetFees) {
+            await saveFee(s.id, 0); // new academic year, fresh balance
+          }
+        }
+        success.push(s);
+      } catch(e) {
+        failed.push({ ...s, error: e.message });
+      }
+      setProgress(p => ({ ...p, done: p.done+1 }));
+    }
+
+    setResults({ success, failed });
+    setStep("done");
+  }
+
+  return (
+    <Modal title={isGraduating ? "🎓 Graduate Form 5 Students" : `🎓 Promote ${fromForm} → ${toForm}`} onClose={onClose}>
+      {step==="select" && (
+        <div>
+          <Fr label="Promote FROM">
+            <select style={inp} value={fromForm} onChange={e=>setFromForm(e.target.value)}>
+              {FORMS.map(f=><option key={f}>{f}</option>)}
+            </select>
+          </Fr>
+          {!isGraduating ? (
+            <Fr label="Promote TO">
+              <select style={inp} value={toForm} onChange={e=>setToForm(e.target.value)}>
+                {toFormOptions.map(f=><option key={f}>{f}</option>)}
+              </select>
+            </Fr>
+          ) : (
+            <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:8,padding:"9px 12px",marginBottom:12,fontSize:12,color:"#92400e"}}>
+              Form 5 is the final form. These students will be marked as <strong>graduated</strong> and moved out of active rolls. Their records (marks, report cards, fee history) are preserved for reference.
+            </div>
+          )}
+          {!isGraduating && (
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+              <input type="checkbox" id="resetFees" checked={resetFees} onChange={e=>setResetFees(e.target.checked)}/>
+              <label htmlFor="resetFees" style={{fontSize:12,color:C.navy}}>Reset fees to 0 paid for the new academic year</label>
+            </div>
+          )}
+
+          <div style={{fontSize:12,fontWeight:700,color:C.navy,marginBottom:6}}>
+            {eligible.length} student(s) in {fromForm} · {included.length} will be {isGraduating?"graduated":"promoted"}
+          </div>
+          <div style={{maxHeight:220,overflowY:"auto",border:`1px solid ${C.grayLight}`,borderRadius:8,marginBottom:12}}>
+            {!eligible.length
+              ? <div style={{padding:16,textAlign:"center",color:C.gray,fontSize:12}}>No registered students in {fromForm}.</div>
+              : eligible.map(s => (
+                  <div key={s.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderBottom:`1px solid ${C.grayBg}`}}>
+                    <input type="checkbox" checked={!excluded[s.id]} onChange={()=>toggleExclude(s.id)}/>
+                    <span style={{fontSize:12,color:excluded[s.id]?C.gray:C.navy,textDecoration:excluded[s.id]?"line-through":"none",flex:1}}>{s.name}</span>
+                    <span style={{fontSize:10,fontFamily:"monospace",color:C.gold}}>{s.id}</span>
+                  </div>
+                ))
+            }
+          </div>
+
+          <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+            <Btn onClick={onClose} outline>Cancel</Btn>
+            <Btn onClick={()=>setStep("confirm")} disabled={!included.length || (!isGraduating && !toForm)} color={isGraduating?C.red:C.gold}>
+              {isGraduating ? `Graduate ${included.length} Student(s) →` : `Promote ${included.length} Student(s) →`}
+            </Btn>
+          </div>
+        </div>
+      )}
+
+      {step==="confirm" && (
+        <div>
+          <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:10,padding:"14px",marginBottom:14,textAlign:"center"}}>
+            <div style={{fontSize:28,marginBottom:6}}>⚠️</div>
+            <div style={{fontWeight:800,color:C.red,fontSize:14,marginBottom:4}}>This action cannot be undone in bulk</div>
+            <div style={{fontSize:12,color:C.gray}}>
+              {isGraduating
+                ? `${included.length} student(s) will be marked as graduated and removed from active rolls.`
+                : `${included.length} student(s) will move from ${fromForm} to ${toForm}${resetFees?" and their fee balance will reset to 0":""}.`}
+            </div>
+          </div>
+          <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+            <Btn onClick={()=>setStep("select")} outline>← Back</Btn>
+            <Btn onClick={runPromotion} color={isGraduating?C.red:C.gold}>Yes, Confirm →</Btn>
+          </div>
+        </div>
+      )}
+
+      {step==="running" && (
+        <div style={{textAlign:"center",padding:"20px 0"}}>
+          <div style={{background:C.grayBg,borderRadius:6,height:10,overflow:"hidden",marginBottom:10}}>
+            <div style={{width:`${(progress.done/Math.max(progress.total,1))*100}%`,height:"100%",background:C.gold,transition:"width .3s"}}/>
+          </div>
+          <div style={{fontSize:13,color:C.gray}}>Processing {progress.done} / {progress.total}…</div>
+        </div>
+      )}
+
+      {step==="done" && results && (
+        <div>
+          <div style={{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap"}}>
+            <Pill color={C.green}>✓ {results.success.length} {isGraduating?"graduated":"promoted"}</Pill>
+            {results.failed.length>0 && <Pill color={C.red}>✕ {results.failed.length} failed</Pill>}
+          </div>
+          {results.failed.length>0 && (
+            <div style={{marginBottom:12,maxHeight:150,overflowY:"auto"}}>
+              {results.failed.map(f=>(
+                <div key={f.id} style={{fontSize:11,color:C.gray,padding:"4px 0",borderBottom:`1px solid ${C.grayBg}`}}>{f.name}: {f.error}</div>
+              ))}
+            </div>
+          )}
+          <Btn onClick={onClose}>Done</Btn>
+        </div>
+      )}
+    </Modal>
   );
 }
 
