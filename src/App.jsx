@@ -216,6 +216,7 @@ export default function App() {
   const [userProfile,setUserProfile]= useState(null);
   const [page,       setPage]       = useState("dashboard");
   const [menuOpen,   setMenuOpen]   = useState(false);
+  const [recoveryMode, setRecoveryMode] = useState(false); // true when user arrived via password-reset email link
 
   // Data state
   const [students,   setStudents]   = useState([]);
@@ -229,7 +230,11 @@ export default function App() {
   // ── Auth ───────────────────────────────────────────────────────────────────
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => setSession(session));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setSession(session);
+      // Supabase fires this exact event when the user clicks the reset-password link in their email
+      if (event === "PASSWORD_RECOVERY") setRecoveryMode(true);
+    });
     return () => subscription.unsubscribe();
   }, []);
 
@@ -300,6 +305,17 @@ export default function App() {
   async function doLogout() {
     await supabase.auth.signOut();
     setMenuOpen(false); setPage("dashboard");
+  }
+  async function doRequestPasswordReset(email) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin, // Supabase appends its own recovery tokens to this URL
+    });
+    if (error) throw error;
+  }
+  async function doSetNewPassword(newPassword) {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw error;
+    setRecoveryMode(false);
   }
 
   // ── Auto-logout after 15 minutes of inactivity — protects unattended devices ──
@@ -407,7 +423,9 @@ export default function App() {
       <div style={{color:C.goldLight,fontSize:13}}>Starting up…</div>
     </div>
   );
-  if (!session) return <LoginScreen onLogin={doLogin} />;
+  // Password recovery gives a temporary session — intercept it before normal routing
+  if (recoveryMode) return <SetNewPasswordScreen onSetPassword={doSetNewPassword} onCancel={doLogout}/>;
+  if (!session) return <LoginScreen onLogin={doLogin} onRequestReset={doRequestPasswordReset}/>;
 
   const ctx = {
     auth: { user: currentUser, role: userRole||"teacher" },
@@ -490,10 +508,12 @@ export default function App() {
 }
 
 // ─── Login Screen ──────────────────────────────────────────────────────────────
-function LoginScreen({ onLogin }) {
+function LoginScreen({ onLogin, onRequestReset }) {
+  const [mode,  setMode]  = useState("login"); // "login" | "forgot"
   const [email, setEmail] = useState("");
   const [pass,  setPass]  = useState("");
   const [err,   setErr]   = useState("");
+  const [info,  setInfo]  = useState("");
   const [busy,  setBusy]  = useState(false);
   const [attempts, setAttempts] = useState(0);
   const [lockedUntil, setLockedUntil] = useState(0);
@@ -530,6 +550,43 @@ function LoginScreen({ onLogin }) {
     setBusy(false);
   }
 
+  async function handleReset() {
+    if (!email.trim()) { setErr("Enter your email address first."); return; }
+    setErr(""); setInfo(""); setBusy(true);
+    try {
+      await onRequestReset(email.trim());
+      setInfo("Check your email — we sent a link to reset your password. It may take a minute to arrive.");
+    } catch(e) {
+      setErr("Could not send reset email: " + e.message);
+    }
+    setBusy(false);
+  }
+
+  if (mode === "forgot") {
+    return (
+      <div style={{minHeight:"100vh",background:`linear-gradient(160deg,${C.navy},${C.navyMid} 55%,#1a4a6e)`,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+        <div style={{width:"100%",maxWidth:380}}>
+          <div style={{textAlign:"center",marginBottom:24}}>
+            <div style={{width:70,height:70,borderRadius:"50%",background:C.gold,margin:"0 auto 12px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,boxShadow:"0 0 0 5px rgba(201,150,42,0.25)"}}>🔑</div>
+            <h1 style={{color:C.white,fontSize:20,fontWeight:900,margin:0}}>Reset Password</h1>
+            <p style={{color:C.goldLight,fontSize:11,margin:"4px 0 0",letterSpacing:1.5}}>SAKER BAPTIST COLLEGE</p>
+          </div>
+          <div style={{background:C.white,borderRadius:14,padding:22,boxShadow:"0 20px 60px rgba(0,0,0,0.35)"}}>
+            <h2 style={{margin:"0 0 10px",fontSize:16,fontWeight:800,color:C.navy}}>Forgot your password?</h2>
+            <p style={{fontSize:12,color:C.gray,margin:"0 0 16px"}}>Enter your email and we'll send you a link to set a new one.</p>
+            <Fr label="Email Address">
+              <input style={inp} type="email" autoComplete="username" placeholder="your@email.com" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleReset()} disabled={busy}/>
+            </Fr>
+            {err  && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"8px 12px",color:C.red,fontSize:12,marginBottom:12}}>{err}</div>}
+            {info && <div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:8,padding:"8px 12px",color:C.green,fontSize:12,marginBottom:12}}>{info}</div>}
+            <Btn onClick={handleReset} disabled={busy}>{busy?"Sending…":"Send Reset Link →"}</Btn>
+            <button onClick={()=>{setMode("login");setErr("");setInfo("");}} style={{width:"100%",marginTop:10,padding:"9px",background:"transparent",border:"none",color:C.navyMid,fontSize:12,fontWeight:700,cursor:"pointer"}}>← Back to Sign In</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{minHeight:"100vh",background:`linear-gradient(160deg,${C.navy},${C.navyMid} 55%,#1a4a6e)`,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
       <div style={{width:"100%",maxWidth:380}}>
@@ -552,7 +609,65 @@ function LoginScreen({ onLogin }) {
             ? <div style={{width:"100%",padding:"10px",background:C.grayBg,color:C.gray,borderRadius:8,fontWeight:700,fontSize:13,textAlign:"center"}}>🔒 Locked — try again in {secondsLeft}s</div>
             : <Btn onClick={handle} disabled={busy}>{busy?"Signing in…":"Sign In →"}</Btn>
           }
-          <p style={{textAlign:"center",fontSize:10,color:C.gray,marginTop:14,marginBottom:0}}>Contact your administrator if you forgot your password.</p>
+          <button onClick={()=>{setMode("forgot");setErr("");setInfo("");}} style={{width:"100%",marginTop:12,padding:"6px",background:"transparent",border:"none",color:C.navyMid,fontSize:12,fontWeight:700,cursor:"pointer",textDecoration:"underline"}}>Forgot your password?</button>
+          <p style={{textAlign:"center",fontSize:10,color:C.gray,marginTop:10,marginBottom:0}}>Contact your administrator if you need a new account.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Set New Password Screen (reached via email reset link) ────────────────────
+function SetNewPasswordScreen({ onSetPassword, onCancel }) {
+  const [pass1, setPass1] = useState("");
+  const [pass2, setPass2] = useState("");
+  const [err,   setErr]   = useState("");
+  const [busy,  setBusy]  = useState(false);
+  const [done,  setDone]  = useState(false);
+
+  async function handle() {
+    setErr("");
+    if (pass1.length < 6) { setErr("Password must be at least 6 characters."); return; }
+    if (pass1 !== pass2)  { setErr("Passwords do not match."); return; }
+    setBusy(true);
+    try {
+      await onSetPassword(pass1);
+      setDone(true);
+    } catch(e) { setErr("Could not update password: " + e.message); }
+    setBusy(false);
+  }
+
+  if (done) {
+    return (
+      <div style={{minHeight:"100vh",background:`linear-gradient(160deg,${C.navy},${C.navyMid} 55%,#1a4a6e)`,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+        <div style={{width:"100%",maxWidth:380,background:C.white,borderRadius:14,padding:26,boxShadow:"0 20px 60px rgba(0,0,0,0.35)",textAlign:"center"}}>
+          <div style={{fontSize:40,marginBottom:10}}>✅</div>
+          <h2 style={{margin:"0 0 8px",fontSize:16,fontWeight:800,color:C.navy}}>Password Updated</h2>
+          <p style={{fontSize:12,color:C.gray,marginBottom:16}}>You're signed in with your new password.</p>
+          <Btn onClick={onCancel}>Continue →</Btn>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{minHeight:"100vh",background:`linear-gradient(160deg,${C.navy},${C.navyMid} 55%,#1a4a6e)`,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div style={{width:"100%",maxWidth:380}}>
+        <div style={{textAlign:"center",marginBottom:24}}>
+          <div style={{width:70,height:70,borderRadius:"50%",background:C.gold,margin:"0 auto 12px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,boxShadow:"0 0 0 5px rgba(201,150,42,0.25)"}}>🔑</div>
+          <h1 style={{color:C.white,fontSize:20,fontWeight:900,margin:0}}>Set New Password</h1>
+          <p style={{color:C.goldLight,fontSize:11,margin:"4px 0 0",letterSpacing:1.5}}>SAKER BAPTIST COLLEGE</p>
+        </div>
+        <div style={{background:C.white,borderRadius:14,padding:22,boxShadow:"0 20px 60px rgba(0,0,0,0.35)"}}>
+          <Fr label="New Password">
+            <input style={inp} type="password" autoComplete="new-password" placeholder="At least 6 characters" value={pass1} onChange={e=>setPass1(e.target.value)} disabled={busy}/>
+          </Fr>
+          <Fr label="Confirm New Password">
+            <input style={inp} type="password" autoComplete="new-password" placeholder="Re-type password" value={pass2} onChange={e=>setPass2(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handle()} disabled={busy}/>
+          </Fr>
+          {err && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"8px 12px",color:C.red,fontSize:12,marginBottom:12}}>{err}</div>}
+          <Btn onClick={handle} disabled={busy}>{busy?"Updating…":"Update Password →"}</Btn>
+          <button onClick={onCancel} style={{width:"100%",marginTop:10,padding:"9px",background:"transparent",border:"none",color:C.gray,fontSize:12,cursor:"pointer"}}>Cancel</button>
         </div>
       </div>
     </div>
@@ -2008,9 +2123,32 @@ function ProfilePage({ ctx }) {
   const { auth, teachers } = ctx;
   const u = auth.user;
   const t = teachers.find(x=>x.email===u.email);
+
+  const [showPwForm, setShowPwForm] = useState(false);
+  const [pass1, setPass1] = useState("");
+  const [pass2, setPass2] = useState("");
+  const [pwErr, setPwErr] = useState("");
+  const [pwOk,  setPwOk]  = useState("");
+  const [pwBusy,setPwBusy]= useState(false);
+
+  async function changePassword() {
+    setPwErr(""); setPwOk("");
+    if (pass1.length < 6) { setPwErr("Password must be at least 6 characters."); return; }
+    if (pass1 !== pass2)  { setPwErr("Passwords do not match."); return; }
+    setPwBusy(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: pass1 });
+      if (error) throw error;
+      setPwOk("Password updated successfully.");
+      setPass1(""); setPass2("");
+      setTimeout(()=>setShowPwForm(false), 1500);
+    } catch(e) { setPwErr("Could not update password: " + e.message); }
+    setPwBusy(false);
+  }
+
   return (
     <div style={{maxWidth:480,margin:"0 auto"}}>
-      <div style={{background:C.white,borderRadius:13,padding:22,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+      <div style={{background:C.white,borderRadius:13,padding:22,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",marginBottom:12}}>
         <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:18}}>
           <div style={{width:56,height:56,borderRadius:"50%",background:`linear-gradient(135deg,${C.navy},${C.navyMid})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>
             {auth.role==="admin"?"🏫":"👩‍🏫"}
@@ -2033,6 +2171,26 @@ function ProfilePage({ ctx }) {
             <span style={{fontSize:12,fontWeight:600,color:C.navy,maxWidth:"60%",textAlign:"right"}}>{v||"—"}</span>
           </div>
         ))}
+      </div>
+
+      <div style={{background:C.white,borderRadius:13,padding:22,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:showPwForm?14:0}}>
+          <div style={{fontWeight:800,fontSize:14,color:C.navy}}>🔑 Password</div>
+          <SmBtn onClick={()=>{setShowPwForm(v=>!v);setPwErr("");setPwOk("");}} color={C.navyMid}>{showPwForm?"Cancel":"Change Password"}</SmBtn>
+        </div>
+        {showPwForm && (
+          <div>
+            <Fr label="New Password">
+              <input style={inp} type="password" autoComplete="new-password" placeholder="At least 6 characters" value={pass1} onChange={e=>setPass1(e.target.value)} disabled={pwBusy}/>
+            </Fr>
+            <Fr label="Confirm New Password">
+              <input style={inp} type="password" autoComplete="new-password" placeholder="Re-type password" value={pass2} onChange={e=>setPass2(e.target.value)} onKeyDown={e=>e.key==="Enter"&&changePassword()} disabled={pwBusy}/>
+            </Fr>
+            {pwErr && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"8px 12px",color:C.red,fontSize:12,marginBottom:10}}>{pwErr}</div>}
+            {pwOk  && <div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:8,padding:"8px 12px",color:C.green,fontSize:12,marginBottom:10}}>{pwOk}</div>}
+            <Btn onClick={changePassword} disabled={pwBusy}>{pwBusy?"Updating…":"Update Password"}</Btn>
+          </div>
+        )}
       </div>
     </div>
   );
