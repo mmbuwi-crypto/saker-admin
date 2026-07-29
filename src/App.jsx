@@ -3,6 +3,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "./supabase.js";
+import * as XLSX from "xlsx";
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const C = {
@@ -120,6 +121,29 @@ function domPrint(id, html, size="A4 portrait", margin="8mm") {
     window.print();
     setTimeout(()=>{ document.getElementById(id)?.remove(); document.getElementById(id+"-s")?.remove(); }, 2500);
   }, 300);
+}
+
+// Export an array of row-objects to a downloadable .xlsx file.
+// rows: array of plain objects (keys become column headers)
+// filename: e.g. "SBC-Students-2026-2027.xlsx"
+// sheetName: tab name inside the workbook (max 31 chars, Excel limit)
+function exportToExcel(rows, filename, sheetName="Sheet1") {
+  if (!rows || !rows.length) { alert("Nothing to export."); return; }
+  try {
+    const ws = XLSX.utils.json_to_sheet(rows);
+    // Auto-size columns roughly based on content length
+    const colWidths = Object.keys(rows[0]).map(key => {
+      const maxLen = Math.max(key.length, ...rows.map(r => String(r[key]??"").length));
+      return { wch: Math.min(Math.max(maxLen+2, 8), 40) };
+    });
+    ws["!cols"] = colWidths;
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0,31));
+    XLSX.writeFile(wb, filename);
+  } catch(e) {
+    console.error("Excel export error:", e);
+    alert("Export failed: " + e.message);
+  }
 }
 
 // ─── Nav ──────────────────────────────────────────────────────────────────────
@@ -814,7 +838,7 @@ function RegistrationPage({ ctx }) {
 
 // ─── Students ──────────────────────────────────────────────────────────────────
 function StudentsPage({ ctx }) {
-  const { students, saveStudent, deleteStudent, auth } = ctx;
+  const { students, saveStudent, deleteStudent, auth, feesMap } = ctx;
   const [filter, setFilter] = useState({ form:"", search:"" });
   const [modal,  setModal]  = useState(null);
   const [viewS,  setViewS]  = useState(null);
@@ -826,6 +850,27 @@ function StudentsPage({ ctx }) {
     && (!filter.form   || s.form===filter.form)
     && (!filter.search || s.name?.toLowerCase().includes(filter.search.toLowerCase()) || s.id?.includes(filter.search))
   );
+
+  function exportStudents() {
+    const rows = filtered.map(s => ({
+      "Matricule":    s.id,
+      "Name":         s.name,
+      "Form":         s.form,
+      "Gender":       s.gender,
+      "Date of Birth":fmtDate(s.dob),
+      "Parent/Guardian": s.parent||"",
+      "Phone":        s.phone||"",
+      "Address":      s.address||"",
+      "Registration Status": s.reg_status==="registered"?"Registered":"Pending",
+      "Registration Date":   fmtDate(s.reg_date),
+      "Fees Paid (FCFA)":    feesMap?.[s.id]?.paid ?? 0,
+      "Fees Total (FCFA)":   feesMap?.[s.id]?.total ?? TOTAL_FEE,
+      "Balance (FCFA)":      (feesMap?.[s.id]?.total ?? TOTAL_FEE) - (feesMap?.[s.id]?.paid ?? 0),
+    }));
+    const label = filter.form ? filter.form.replace(" ","") : "AllForms";
+    exportToExcel(rows, `SBC-Students-${label}-${sel_year_safe()}.xlsx`, "Students");
+  }
+  function sel_year_safe(){ return "2026-2027"; }
 
   async function save() {
     if (!form.name?.trim()) return;
@@ -851,6 +896,7 @@ function StudentsPage({ ctx }) {
         <select style={{...inp,width:114}} value={filter.form} onChange={e=>setFilter(f=>({...f,form:e.target.value}))}>
           <option value="">All Forms</option>{FORMS.map(f=><option key={f}>{f}</option>)}
         </select>
+        {auth.role==="admin" && <SmBtn onClick={exportStudents} color={C.green}>📊 Export Excel</SmBtn>}
         {auth.role==="admin" && <Btn onClick={()=>{setForm(blank);setModal("add");}}>+ Add</Btn>}
       </div>
 
@@ -1708,6 +1754,31 @@ function FeesPage({ ctx }) {
       &&   (!filter.status || st===filter.status);
   });
 
+  function exportFeesExcel() {
+    const scope = allActive.filter(s => !filter.form || s.form===filter.form)
+      .sort((a,b)=>a.form.localeCompare(b.form)||a.name.localeCompare(b.name));
+    if (!scope.length) { alert("No students to export."); return; }
+    const rows = scope.map(s => {
+      const paid = feesMap[s.id]?.paid||0;
+      const bal  = TOTAL_FEE-paid;
+      const pct  = Math.round(paid/TOTAL_FEE*100);
+      const st   = pct>=100?"Paid":pct>0?"Partial":"Unpaid";
+      return {
+        "Matricule": s.id,
+        "Name":      s.name,
+        "Form":      s.form,
+        "Parent/Guardian": s.parent||"",
+        "Phone":     s.phone||"",
+        "Total Fee (FCFA)": TOTAL_FEE,
+        "Paid (FCFA)":      paid,
+        "Balance (FCFA)":   bal,
+        "% Paid":           pct,
+        "Status":           st,
+      };
+    });
+    exportToExcel(rows, `SBC-Fees-${filter.form?filter.form.replace(" ",""):"AllForms"}-2026-2027.xlsx`, "Fees");
+  }
+
   function printDebtors() {
     const debtors = allActive.filter(s => {
       const pct = Math.round((feesMap[s.id]?.paid||0)/TOTAL_FEE*100);
@@ -1811,6 +1882,9 @@ function FeesPage({ ctx }) {
         </select>
         <button onClick={printDebtors} style={{width:"100%",padding:"10px",background:C.red,color:C.white,border:"none",borderRadius:8,fontWeight:800,fontSize:13,cursor:"pointer"}}>
           🖨 Print Defaulters — Below {threshold}%{filter.form?` (${filter.form})`:""}
+        </button>
+        <button onClick={exportFeesExcel} style={{width:"100%",padding:"10px",marginTop:8,background:C.green,color:C.white,border:"none",borderRadius:8,fontWeight:800,fontSize:13,cursor:"pointer"}}>
+          📊 Export Full Fees Report — Excel {filter.form?`(${filter.form})`:"(All Forms)"}
         </button>
       </div>
 
