@@ -212,6 +212,7 @@ const PhotoBox = ({ photo, size=[64,78] }) => photo
 //  MAIN APP
 // ══════════════════════════════════════════════════════════════════════════════
 export default function App() {
+  const [portalMode, setPortalMode] = useState(false); // true = showing the public Parent Portal instead of staff login
   const [session,    setSession]    = useState(undefined); // undefined=loading
   const [userRole,   setUserRole]   = useState(null);
   const [userProfile,setUserProfile]= useState(null);
@@ -348,6 +349,9 @@ export default function App() {
   async function saveStudent(s) {
     // photo_url is already compressed base64 or null — save directly
     let photoUrl = s.photo_url || null;
+    // Auto-generate a PIN for students who don't have one yet (e.g. registered before this feature existed)
+    const existing = students.find(x=>x.id===s.id);
+    const parentPin = s.parent_pin || existing?.parent_pin || String(Math.floor(1000 + Math.random()*9000));
     const row = {
       id: s.id, name: s.name, form: s.form, gender: s.gender,
       dob: s.dob||null, parent: s.parent, phone: s.phone, address: s.address,
@@ -356,6 +360,7 @@ export default function App() {
       reg_fee: s.reg_fee||null, reg_receipt: s.reg_receipt||null,
       reg_paid_by: s.reg_paid_by||null, reg_cashier: s.reg_cashier||null,
       is_late_reg: s.is_late_reg||false, graduated: s.graduated||false,
+      parent_pin: parentPin,
     };
     const { error } = await supabase.from("students").upsert(row, { onConflict:"id" });
     if (error) {
@@ -434,6 +439,9 @@ export default function App() {
   };
 
   // ── Loading / not-logged-in screens ────────────────────────────────────────
+  // Parent Portal doesn't need staff auth at all — short-circuit everything else
+  if (portalMode) return <ParentPortal onBack={()=>setPortalMode(false)}/>;
+
   if (session === undefined) return (
     <div style={{minHeight:"100vh",background:C.navy,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:14}}>
       <div style={{fontSize:48}}>🎓</div>
@@ -443,7 +451,7 @@ export default function App() {
   );
   // Password recovery gives a temporary session — intercept it before normal routing
   if (recoveryMode) return <SetNewPasswordScreen onSetPassword={doSetNewPassword} onCancel={doLogout}/>;
-  if (!session) return <LoginScreen onLogin={doLogin} onRequestReset={doRequestPasswordReset}/>;
+  if (!session) return <LoginScreen onLogin={doLogin} onRequestReset={doRequestPasswordReset} onOpenPortal={()=>setPortalMode(true)}/>;
 
   const ctx = {
     auth: { user: currentUser, role: userRole||"teacher" },
@@ -527,7 +535,7 @@ export default function App() {
 }
 
 // ─── Login Screen ──────────────────────────────────────────────────────────────
-function LoginScreen({ onLogin, onRequestReset }) {
+function LoginScreen({ onLogin, onRequestReset, onOpenPortal }) {
   const [mode,  setMode]  = useState("login"); // "login" | "forgot"
   const [email, setEmail] = useState("");
   const [pass,  setPass]  = useState("");
@@ -631,6 +639,9 @@ function LoginScreen({ onLogin, onRequestReset }) {
           <button onClick={()=>{setMode("forgot");setErr("");setInfo("");}} style={{width:"100%",marginTop:12,padding:"6px",background:"transparent",border:"none",color:C.navyMid,fontSize:12,fontWeight:700,cursor:"pointer",textDecoration:"underline"}}>Forgot your password?</button>
           <p style={{textAlign:"center",fontSize:10,color:C.gray,marginTop:10,marginBottom:0}}>Contact your administrator if you need a new account.</p>
         </div>
+        <button onClick={onOpenPortal} style={{width:"100%",marginTop:14,padding:"11px",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:10,color:C.white,fontSize:13,fontWeight:700,cursor:"pointer"}}>
+          👨‍👩‍👧 Parent? Check Your Child's Records →
+        </button>
       </div>
     </div>
   );
@@ -688,6 +699,183 @@ function SetNewPasswordScreen({ onSetPassword, onCancel }) {
           <Btn onClick={handle} disabled={busy}>{busy?"Updating…":"Update Password →"}</Btn>
           <button onClick={onCancel} style={{width:"100%",marginTop:10,padding:"9px",background:"transparent",border:"none",color:C.gray,fontSize:12,cursor:"pointer"}}>Cancel</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Parent Portal ───────────────────────────────────────────────────────────
+// Public, read-only lookup. No staff login required — parents authenticate with
+// Matricule + 4-digit PIN, verified server-side by the `parent_portal_lookup`
+// Postgres function (see PARENT_PORTAL.sql). The raw tables stay protected by
+// RLS; only this narrow, rate-limitable function is reachable with the PIN.
+function ParentPortal({ onBack }) {
+  const [matricule, setMatricule] = useState("");
+  const [pin, setPin] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [data, setData] = useState(null); // { student, marks, attendance, fee }
+  const [attempts, setAttempts] = useState(0);
+  const [lockedUntil, setLockedUntil] = useState(0);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    if (!lockedUntil) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [lockedUntil]);
+
+  const isLocked = lockedUntil > now;
+  const secondsLeft = isLocked ? Math.ceil((lockedUntil-now)/1000) : 0;
+
+  async function lookup() {
+    if (isLocked) return;
+    if (!matricule.trim() || pin.length!==4) { setErr("Enter your child's Matricule and 4-digit PIN."); return; }
+    setErr(""); setBusy(true);
+    try {
+      const { data: result, error } = await supabase.rpc("parent_portal_lookup", {
+        p_matricule: matricule.trim().toUpperCase(),
+        p_pin: pin.trim(),
+      });
+      if (error) throw error;
+      if (!result || !result.student) {
+        const next = attempts+1;
+        setAttempts(next);
+        if (next>=5) {
+          setLockedUntil(Date.now()+60000);
+          setErr("Too many failed attempts. Try again in 60 seconds.");
+        } else {
+          setErr(`Matricule or PIN not recognized. (${next}/5 attempts)`);
+        }
+      } else {
+        setData(result);
+        setAttempts(0);
+      }
+    } catch(e) {
+      setErr("Lookup failed: " + e.message);
+    }
+    setBusy(false);
+  }
+
+  if (data) return <ParentPortalResults data={data} onBack={()=>{setData(null);setMatricule("");setPin("");}} onExit={onBack}/>;
+
+  return (
+    <div style={{minHeight:"100vh",background:`linear-gradient(160deg,${C.navy},${C.navyMid} 55%,#1a4a6e)`,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div style={{width:"100%",maxWidth:380}}>
+        <div style={{textAlign:"center",marginBottom:24}}>
+          <div style={{width:70,height:70,borderRadius:"50%",background:C.gold,margin:"0 auto 12px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,boxShadow:"0 0 0 5px rgba(201,150,42,0.25)"}}>👨‍👩‍👧</div>
+          <h1 style={{color:C.white,fontSize:20,fontWeight:900,margin:0}}>Parent Portal</h1>
+          <p style={{color:C.goldLight,fontSize:11,margin:"4px 0 0",letterSpacing:1.5}}>SAKER BAPTIST COLLEGE</p>
+          <p style={{color:"rgba(255,255,255,0.45)",fontSize:10,margin:"5px 0 0"}}>View your child's marks, attendance & fees</p>
+        </div>
+        <div style={{background:C.white,borderRadius:14,padding:22,boxShadow:"0 20px 60px rgba(0,0,0,0.35)"}}>
+          <Fr label="Student Matricule">
+            <input style={inp} placeholder="e.g. SBC01001" value={matricule} onChange={e=>setMatricule(e.target.value)} disabled={isLocked} onKeyDown={e=>e.key==="Enter"&&lookup()}/>
+          </Fr>
+          <Fr label="4-Digit PIN">
+            <input style={{...inp,letterSpacing:4,fontWeight:700,textAlign:"center"}} type="tel" maxLength={4} placeholder="••••" value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,"").slice(0,4))} disabled={isLocked} onKeyDown={e=>e.key==="Enter"&&lookup()}/>
+          </Fr>
+          {err && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"8px 12px",color:C.red,fontSize:12,marginBottom:12}}>{err}</div>}
+          {isLocked
+            ? <div style={{width:"100%",padding:"10px",background:C.grayBg,color:C.gray,borderRadius:8,fontWeight:700,fontSize:13,textAlign:"center"}}>🔒 Locked — try again in {secondsLeft}s</div>
+            : <Btn onClick={lookup} disabled={busy}>{busy?"Looking up…":"View Records →"}</Btn>
+          }
+          <p style={{textAlign:"center",fontSize:10,color:C.gray,marginTop:14,marginBottom:0}}>The Matricule and PIN were printed on your child's registration receipt. Contact the school office if you've lost them.</p>
+        </div>
+        <button onClick={onBack} style={{width:"100%",marginTop:14,padding:"9px",background:"transparent",border:"none",color:"rgba(255,255,255,0.6)",fontSize:12,cursor:"pointer"}}>← Staff Sign In</button>
+      </div>
+    </div>
+  );
+}
+
+function ParentPortalResults({ data, onBack, onExit }) {
+  const { student, marks, attendance, fee } = data;
+  const [tab, setTab] = useState("marks");
+
+  // Group marks by subject, term
+  const bySubject = {};
+  (marks||[]).forEach(m => {
+    if (!bySubject[m.subject]) bySubject[m.subject] = [];
+    bySubject[m.subject].push(m);
+  });
+
+  const paid = fee?.paid||0;
+  const total = fee?.total||TOTAL_FEE;
+  const balance = total-paid;
+  const pct = Math.round(paid/total*100);
+
+  return (
+    <div style={{minHeight:"100vh",background:C.grayBg}}>
+      <div style={{background:C.navy,padding:"14px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <PhotoBox photo={student.photo_url} size={[36,44]}/>
+          <div>
+            <div style={{color:C.white,fontWeight:800,fontSize:14}}>{student.name}</div>
+            <div style={{color:C.goldLight,fontSize:10}}>{student.id} · {student.form}</div>
+          </div>
+        </div>
+        <button onClick={onBack} style={{background:"rgba(255,255,255,0.12)",border:"none",borderRadius:8,color:C.white,fontSize:12,padding:"7px 12px",cursor:"pointer",fontWeight:700}}>← Back</button>
+      </div>
+
+      <div style={{padding:"14px 12px",maxWidth:600,margin:"0 auto"}}>
+        <div style={{display:"flex",background:C.white,borderRadius:10,padding:3,marginBottom:13,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+          {[["marks","📝 Marks"],["attendance","🗓️ Attendance"],["fees","💰 Fees"]].map(([k,l]) => (
+            <button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"9px 4px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:tab===k?C.navy:"transparent",color:tab===k?C.white:C.gray}}>{l}</button>
+          ))}
+        </div>
+
+        {tab==="marks" && (
+          <div style={{background:C.white,borderRadius:10,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+            {Object.keys(bySubject).length===0
+              ? <Empty text="No marks recorded yet."/>
+              : Object.entries(bySubject).map(([sub, entries], i) => (
+                  <div key={sub} style={{padding:"10px 12px",borderBottom:`1px solid ${C.grayBg}`,background:i%2===0?C.white:C.grayBg}}>
+                    <div style={{fontWeight:700,color:C.navy,fontSize:13,marginBottom:6}}>{sub}</div>
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                      {entries.sort((a,b)=>a.seq.localeCompare(b.seq)).map(m=>{
+                        const {grade}=scoreToGrade(m.score);
+                        return <span key={m.seq} style={{fontSize:11,background:gradeCol(grade)+"18",color:gradeCol(grade),padding:"3px 8px",borderRadius:6,fontWeight:700}}>{m.seq.replace("SEQ ","S")}: {m.score}/20</span>;
+                      })}
+                    </div>
+                  </div>
+                ))
+            }
+          </div>
+        )}
+
+        {tab==="attendance" && (
+          <div style={{background:C.white,borderRadius:10,padding:16,boxShadow:"0 1px 3px rgba(0,0,0,0.06)",textAlign:"center"}}>
+            {(()=>{
+              let present=0,absent=0,late=0;
+              (attendance||[]).forEach(a=>{ if(a.status==="present")present++; else if(a.status==="absent")absent++; else if(a.status==="late")late++; });
+              return(
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+                  <div><div style={{fontSize:24,fontWeight:900,color:C.green}}>{present}</div><div style={{fontSize:11,color:C.gray}}>Present</div></div>
+                  <div><div style={{fontSize:24,fontWeight:900,color:C.red}}>{absent}</div><div style={{fontSize:11,color:C.gray}}>Absent</div></div>
+                  <div><div style={{fontSize:24,fontWeight:900,color:C.gold}}>{late}</div><div style={{fontSize:11,color:C.gray}}>Late</div></div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {tab==="fees" && (
+          <div style={{background:C.white,borderRadius:10,padding:16,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+            <div style={{background:C.grayBg,borderRadius:8,height:10,overflow:"hidden",marginBottom:10}}>
+              <div style={{width:`${pct}%`,height:"100%",background:pct>=100?C.green:pct>0?C.gold:C.red,borderRadius:8}}/>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:4}}>
+              <span style={{color:C.gray}}>Paid: <strong style={{color:C.navy}}>{paid.toLocaleString()} FCFA</strong></span>
+              <span style={{color:C.gray}}>Total: <strong style={{color:C.navy}}>{total.toLocaleString()} FCFA</strong></span>
+            </div>
+            <div style={{textAlign:"center",marginTop:12,padding:"10px",background:balance>0?"#fef2f2":"#f0fdf4",borderRadius:8}}>
+              <div style={{fontSize:11,color:C.gray}}>{balance>0?"Balance Owing":"Fully Paid"}</div>
+              <div style={{fontSize:22,fontWeight:900,color:balance>0?C.red:C.green}}>{balance.toLocaleString()} FCFA</div>
+            </div>
+          </div>
+        )}
+
+        <button onClick={onExit} style={{width:"100%",marginTop:16,padding:"10px",background:"transparent",border:"none",color:C.gray,fontSize:12,cursor:"pointer"}}>← Exit Parent Portal</button>
       </div>
     </div>
   );
@@ -772,6 +960,7 @@ function RegistrationPage({ ctx }) {
     const n    = students.filter(s=>s.form===form.form).length + 1;
     const id   = `SBC0${fNum.padStart(2,"0")}${String(n).padStart(3,"0")}`;
     const rec  = `RCP-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
+    const pin  = String(Math.floor(1000 + Math.random()*9000)); // 4-digit parent portal PIN
     try {
       // Compress photo then save student
       let photoUrl = null;
@@ -788,6 +977,7 @@ function RegistrationPage({ ctx }) {
         reg_paid_by:form.paidBy||form.parent,
         reg_cashier:auth.user.name,
         is_late_reg:form.isLate,
+        parent_pin: pin,
       };
       await saveStudent(studentData);
       setReceipt({ ...studentData });
@@ -829,6 +1019,15 @@ function RegistrationPage({ ctx }) {
             <div style="font-size:10px;color:#6b7280;margin-bottom:2px">AMOUNT PAID</div>
             <div style="font-size:26px;font-weight:900;color:${amtCol}">${(receipt.reg_fee||0).toLocaleString()} FCFA</div>
             <div style="font-size:10px;color:#6b7280;margin-top:2px">${receipt.reg_fee===REG_LATE?"Late":"Normal"} Registration Fee</div>
+          </div>
+          <div style="background:#eff6ff;border:1px dashed #93c5fd;border-radius:8px;padding:12px;margin-top:11px;text-align:center">
+            <div style="font-size:10px;color:#1e40af;font-weight:700;margin-bottom:4px">📱 PARENT PORTAL ACCESS</div>
+            <div style="font-size:10px;color:#374151;margin-bottom:6px">Check marks, attendance & fees online</div>
+            <div style="display:flex;justify-content:center;gap:16px">
+              <div><div style="font-size:8px;color:#6b7280">Matricule</div><div style="font-family:monospace;font-weight:900;font-size:14px;color:#1e40af">${receipt.id}</div></div>
+              <div><div style="font-size:8px;color:#6b7280">PIN</div><div style="font-family:monospace;font-weight:900;font-size:14px;color:#1e40af">${receipt.parent_pin||"----"}</div></div>
+            </div>
+            <div style="font-size:8px;color:#6b7280;margin-top:6px">Keep this PIN safe — needed to view your child's records</div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">
             <div style="border-top:1px solid #999;padding-top:3px;font-size:8px;color:#6b7280;margin-top:24px;text-align:center">Cashier Signature</div>
@@ -962,6 +1161,13 @@ function RegistrationPage({ ctx }) {
                   <div style={{background:receipt.reg_fee===REG_LATE?"#fffbeb":"#f0fdf4",borderRadius:8,padding:"11px",margin:"11px 0",textAlign:"center"}}>
                     <div style={{fontSize:10,color:C.gray,marginBottom:1}}>AMOUNT PAID</div>
                     <div style={{fontSize:26,fontWeight:900,color:receipt.reg_fee===REG_LATE?C.gold:C.green}}>{(receipt.reg_fee||0).toLocaleString()} FCFA</div>
+                  </div>
+                  <div style={{background:"#eff6ff",border:"1px dashed #93c5fd",borderRadius:8,padding:"11px",textAlign:"center"}}>
+                    <div style={{fontSize:10,color:"#1e40af",fontWeight:700,marginBottom:4}}>📱 PARENT PORTAL ACCESS</div>
+                    <div style={{display:"flex",justifyContent:"center",gap:20}}>
+                      <div><div style={{fontSize:9,color:C.gray}}>Matricule</div><div style={{fontFamily:"monospace",fontWeight:900,fontSize:15,color:"#1e40af"}}>{receipt.id}</div></div>
+                      <div><div style={{fontSize:9,color:C.gray}}>PIN</div><div style={{fontFamily:"monospace",fontWeight:900,fontSize:15,color:"#1e40af"}}>{receipt.parent_pin||"----"}</div></div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1251,6 +1457,20 @@ function StudentsPage({ ctx }) {
     setSaving(false);
   }
 
+  const missingPinCount = students.filter(s=>s.active && !s.parent_pin).length;
+
+  async function generateMissingPins() {
+    const toFix = students.filter(s=>s.active && !s.parent_pin);
+    if (!toFix.length) return;
+    if (!window.confirm(`Generate parent portal PINs for ${toFix.length} student(s) who don't have one yet?`)) return;
+    setSaving(true);
+    for (const s of toFix) {
+      try { await saveStudent(s); } catch(e) { console.error(`Failed for ${s.id}:`, e); }
+    }
+    setSaving(false);
+    alert(`Done. Generated PINs for ${toFix.length} student(s).`);
+  }
+
   return (
     <div>
       <div style={{display:"flex",gap:8,marginBottom:11,flexWrap:"wrap"}}>
@@ -1260,6 +1480,7 @@ function StudentsPage({ ctx }) {
         </select>
         {auth.role==="admin" && <SmBtn onClick={exportStudents} color={C.green}>📊 Export Excel</SmBtn>}
         {auth.role==="admin" && <SmBtn onClick={()=>setShowPromote(true)} color={C.gold}>🎓 Promote Students</SmBtn>}
+        {auth.role==="admin" && missingPinCount>0 && <SmBtn onClick={generateMissingPins} color={C.navyMid}>📱 Generate {missingPinCount} Missing PIN{missingPinCount!==1?"s":""}</SmBtn>}
         {auth.role==="admin" && <Btn onClick={()=>{setForm(blank);setModal("add");}}>+ Add</Btn>}
       </div>
 
@@ -1305,6 +1526,21 @@ function StudentsPage({ ctx }) {
               <span style={{fontSize:12,fontWeight:600,color:C.navy}}>{v||"—"}</span>
             </div>
           ))}
+          <div style={{background:"#eff6ff",borderRadius:8,padding:"10px 12px",marginTop:10}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontSize:11,color:"#1e40af",fontWeight:700}}>📱 Parent Portal PIN</div>
+                <div style={{fontFamily:"monospace",fontWeight:900,fontSize:18,color:"#1e40af",marginTop:2}}>{viewS.parent_pin||"—"}</div>
+              </div>
+              {auth.role==="admin" && (
+                <SmBtn onClick={async()=>{
+                  const newPin = String(Math.floor(1000+Math.random()*9000));
+                  try { await saveStudent({ ...viewS, parent_pin:newPin }); setViewS(v=>({...v, parent_pin:newPin})); }
+                  catch(e){ alert("Error: "+e.message); }
+                }} color={C.navyMid}>Reset PIN</SmBtn>
+              )}
+            </div>
+          </div>
         </Modal>
       )}
 
