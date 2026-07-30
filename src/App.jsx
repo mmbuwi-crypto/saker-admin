@@ -29,6 +29,7 @@ const TOTAL_FEE   = 35000;
 const REG_NORMAL  = 500;
 const REG_LATE    = 1000;
 const LATE_CUTOFF = "2026-09-30";
+const MOMO_MERCHANT_NUMBER = "PASTE_YOUR_MOMO_NUMBER_HERE"; // e.g. "677123456" — the school's MTN Mobile Money receiving number
 
 const DEFAULT_COEFF = {
   "English language":4,"French/ Français":4,"Mathematics":4,
@@ -757,7 +758,7 @@ function ParentPortal({ onBack }) {
     setBusy(false);
   }
 
-  if (data) return <ParentPortalResults data={data} onBack={()=>{setData(null);setMatricule("");setPin("");}} onExit={onBack}/>;
+  if (data) return <ParentPortalResults data={data} matricule={matricule.trim().toUpperCase()} pin={pin.trim()} onBack={()=>{setData(null);setMatricule("");setPin("");}} onExit={onBack}/>;
 
   return (
     <div style={{minHeight:"100vh",background:`linear-gradient(160deg,${C.navy},${C.navyMid} 55%,#1a4a6e)`,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
@@ -788,9 +789,10 @@ function ParentPortal({ onBack }) {
   );
 }
 
-function ParentPortalResults({ data, onBack, onExit }) {
-  const { student, marks, attendance, fee } = data;
+function ParentPortalResults({ data, matricule, pin, onBack, onExit }) {
+  const { student, marks, attendance, fee, recent_submissions } = data;
   const [tab, setTab] = useState("marks");
+  const [refreshedData, setRefreshedData] = useState(data);
 
   // Group marks by subject, term
   const bySubject = {};
@@ -799,10 +801,20 @@ function ParentPortalResults({ data, onBack, onExit }) {
     bySubject[m.subject].push(m);
   });
 
-  const paid = fee?.paid||0;
-  const total = fee?.total||TOTAL_FEE;
+  const curFee = refreshedData.fee || fee;
+  const paid = curFee?.paid||0;
+  const total = curFee?.total||TOTAL_FEE;
   const balance = total-paid;
   const pct = Math.round(paid/total*100);
+  const submissions = refreshedData.recent_submissions || recent_submissions || [];
+  const pendingSubmission = submissions.find(s=>s.status==="pending");
+
+  async function refresh() {
+    try {
+      const { data: result } = await supabase.rpc("parent_portal_lookup", { p_matricule: matricule, p_pin: pin });
+      if (result?.student) setRefreshedData(result);
+    } catch(e) { /* silent — refresh is best-effort */ }
+  }
 
   return (
     <div style={{minHeight:"100vh",background:C.grayBg}}>
@@ -860,23 +872,155 @@ function ParentPortalResults({ data, onBack, onExit }) {
         )}
 
         {tab==="fees" && (
-          <div style={{background:C.white,borderRadius:10,padding:16,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
-            <div style={{background:C.grayBg,borderRadius:8,height:10,overflow:"hidden",marginBottom:10}}>
-              <div style={{width:`${pct}%`,height:"100%",background:pct>=100?C.green:pct>0?C.gold:C.red,borderRadius:8}}/>
+          <div>
+            <div style={{background:C.white,borderRadius:10,padding:16,boxShadow:"0 1px 3px rgba(0,0,0,0.06)",marginBottom:11}}>
+              <div style={{background:C.grayBg,borderRadius:8,height:10,overflow:"hidden",marginBottom:10}}>
+                <div style={{width:`${pct}%`,height:"100%",background:pct>=100?C.green:pct>0?C.gold:C.red,borderRadius:8}}/>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:4}}>
+                <span style={{color:C.gray}}>Paid: <strong style={{color:C.navy}}>{paid.toLocaleString()} FCFA</strong></span>
+                <span style={{color:C.gray}}>Total: <strong style={{color:C.navy}}>{total.toLocaleString()} FCFA</strong></span>
+              </div>
+              <div style={{textAlign:"center",marginTop:12,padding:"10px",background:balance>0?"#fef2f2":"#f0fdf4",borderRadius:8}}>
+                <div style={{fontSize:11,color:C.gray}}>{balance>0?"Balance Owing":"Fully Paid"}</div>
+                <div style={{fontSize:22,fontWeight:900,color:balance>0?C.red:C.green}}>{balance.toLocaleString()} FCFA</div>
+              </div>
             </div>
-            <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:4}}>
-              <span style={{color:C.gray}}>Paid: <strong style={{color:C.navy}}>{paid.toLocaleString()} FCFA</strong></span>
-              <span style={{color:C.gray}}>Total: <strong style={{color:C.navy}}>{total.toLocaleString()} FCFA</strong></span>
-            </div>
-            <div style={{textAlign:"center",marginTop:12,padding:"10px",background:balance>0?"#fef2f2":"#f0fdf4",borderRadius:8}}>
-              <div style={{fontSize:11,color:C.gray}}>{balance>0?"Balance Owing":"Fully Paid"}</div>
-              <div style={{fontSize:22,fontWeight:900,color:balance>0?C.red:C.green}}>{balance.toLocaleString()} FCFA</div>
-            </div>
+
+            {balance>0 && (
+              pendingSubmission
+                ? <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:14,textAlign:"center"}}>
+                    <div style={{fontSize:24,marginBottom:6}}>⏳</div>
+                    <div style={{fontWeight:800,color:"#92400e",fontSize:13,marginBottom:2}}>Payment Under Review</div>
+                    <div style={{fontSize:11,color:"#92400e"}}>{pendingSubmission.amount.toLocaleString()} FCFA submitted on {fmtDate(pendingSubmission.submitted_at?.slice(0,10))}. The school office will confirm it shortly.</div>
+                    <button onClick={refresh} style={{marginTop:10,padding:"6px 14px",background:"transparent",border:"1px solid #fde68a",borderRadius:6,color:"#92400e",fontSize:11,fontWeight:700,cursor:"pointer"}}>🔄 Check Status</button>
+                  </div>
+                : <PayFeesPanel matricule={matricule} pin={pin} balance={balance} onSubmitted={refresh}/>
+            )}
+
+            {submissions.filter(s=>s.status!=="pending").length>0 && (
+              <div style={{marginTop:11}}>
+                <div style={{fontSize:11,fontWeight:700,color:C.gray,marginBottom:6}}>Recent Payment History</div>
+                {submissions.filter(s=>s.status!=="pending").map(s=>(
+                  <div key={s.id} style={{background:C.white,borderRadius:8,padding:"9px 12px",marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+                    <div>
+                      <div style={{fontSize:12,fontWeight:700,color:C.navy}}>{s.amount.toLocaleString()} FCFA</div>
+                      <div style={{fontSize:10,color:C.gray}}>{fmtDate(s.submitted_at?.slice(0,10))}</div>
+                    </div>
+                    <Pill color={s.status==="approved"?C.green:C.red}>{s.status==="approved"?"✓ Approved":"✕ Rejected"}</Pill>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
         <button onClick={onExit} style={{width:"100%",marginTop:16,padding:"10px",background:"transparent",border:"none",color:C.gray,fontSize:12,cursor:"pointer"}}>← Exit Parent Portal</button>
       </div>
+    </div>
+  );
+}
+
+// ─── Pay Fees Panel (MTN MoMo USSD + screenshot upload) ─────────────────────────
+function PayFeesPanel({ matricule, pin, balance, onSubmitted }) {
+  const [step, setStep] = useState("amount"); // "amount" | "instructions" | "upload" | "done"
+  const [amount, setAmount] = useState(String(balance));
+  const [momoNumber, setMomoNumber] = useState("");
+  const [screenshot, setScreenshot] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const fileInputRef = useRef(null);
+
+  const ussdCode = `*126*16*${MOMO_MERCHANT_NUMBER}*${amount}#`;
+
+  function handleShot(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const compressed = await compressPhoto(ev.target.result);
+      setScreenshot(compressed);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function submit() {
+    if (!screenshot) { setErr("Please attach a screenshot of your payment confirmation."); return; }
+    setErr(""); setBusy(true);
+    try {
+      const { data: result, error } = await supabase.rpc("parent_submit_payment", {
+        p_matricule: matricule, p_pin: pin,
+        p_amount: Number(amount), p_momo_number: momoNumber||null,
+        p_screenshot: screenshot,
+      });
+      if (error) throw error;
+      if (!result?.success) throw new Error(result?.error || "Submission failed");
+      setStep("done");
+      onSubmitted?.();
+    } catch(e) { setErr("Could not submit: " + e.message); }
+    setBusy(false);
+  }
+
+  if (step==="done") {
+    return (
+      <div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:10,padding:16,textAlign:"center"}}>
+        <div style={{fontSize:28,marginBottom:6}}>✅</div>
+        <div style={{fontWeight:800,color:C.green,fontSize:14,marginBottom:4}}>Payment Submitted</div>
+        <div style={{fontSize:12,color:C.gray}}>The school office will review your payment and confirm it. Check back here for the status.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{background:C.white,borderRadius:10,padding:14,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+      {step==="amount" && (
+        <div>
+          <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:10}}>💰 Pay School Fees</div>
+          <Fr label="Amount to Pay (FCFA)">
+            <input style={inp} type="number" value={amount} onChange={e=>setAmount(e.target.value)} max={balance} min={1}/>
+          </Fr>
+          <div style={{fontSize:11,color:C.gray,marginBottom:10}}>Balance owing: {balance.toLocaleString()} FCFA. You can pay in full or in part.</div>
+          <Btn onClick={()=>setStep("instructions")} disabled={!amount||Number(amount)<=0}>Continue →</Btn>
+        </div>
+      )}
+
+      {step==="instructions" && (
+        <div>
+          <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:10}}>📞 Dial This on Your Phone</div>
+          <div style={{background:"#1a4a2e",borderRadius:10,padding:16,textAlign:"center",marginBottom:12}}>
+            <div style={{fontFamily:"monospace",fontWeight:900,fontSize:20,color:"#fff",letterSpacing:1}}>{ussdCode}</div>
+          </div>
+          <ol style={{fontSize:12,color:C.gray,paddingLeft:18,marginBottom:14,lineHeight:1.8}}>
+            <li>Dial the code above on the phone paying via MTN Mobile Money</li>
+            <li>Confirm the payment of <strong>{Number(amount).toLocaleString()} FCFA</strong> to Saker Baptist College</li>
+            <li>Take a screenshot of the confirmation message</li>
+            <li>Come back here and upload it</li>
+          </ol>
+          <div style={{display:"flex",gap:8}}>
+            <Btn onClick={()=>setStep("amount")} outline>← Back</Btn>
+            <Btn onClick={()=>setStep("upload")}>I've Paid — Upload Proof →</Btn>
+          </div>
+        </div>
+      )}
+
+      {step==="upload" && (
+        <div>
+          <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:10}}>📤 Upload Payment Proof</div>
+          <Fr label="Phone Number Used (optional, helps us verify faster)">
+            <input style={inp} type="tel" placeholder="e.g. 677123456" value={momoNumber} onChange={e=>setMomoNumber(e.target.value)}/>
+          </Fr>
+          <input ref={fileInputRef} type="file" accept="image/*" onChange={handleShot} style={{display:"none"}}/>
+          <button onClick={()=>fileInputRef.current?.click()} style={{width:"100%",padding:"12px",background:C.grayBg,border:`2px dashed ${C.border}`,borderRadius:10,cursor:"pointer",fontSize:12,fontWeight:700,color:C.navyMid,marginBottom:10}}>
+            {screenshot ? "✓ Screenshot attached — tap to change" : "📸 Tap to attach screenshot"}
+          </button>
+          {screenshot && <img src={screenshot} alt="preview" style={{width:"100%",maxHeight:180,objectFit:"contain",borderRadius:8,marginBottom:10,border:`1px solid ${C.grayLight}`}}/>}
+          {err && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"8px 12px",color:C.red,fontSize:12,marginBottom:10}}>{err}</div>}
+          <div style={{display:"flex",gap:8}}>
+            <Btn onClick={()=>setStep("instructions")} outline disabled={busy}>← Back</Btn>
+            <Btn onClick={submit} disabled={busy||!screenshot}>{busy?"Submitting…":"Submit for Review →"}</Btn>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2687,12 +2831,54 @@ function ReportsPage({ ctx }) {
 
 // ─── Fees ──────────────────────────────────────────────────────────────────────
 function FeesPage({ ctx }) {
-  const { students, feesMap, saveFee } = ctx;
+  const { students, feesMap, saveFee, auth } = ctx;
   const [filter,    setFilter]    = useState({ form:"", search:"", status:"" });
   const [threshold, setThreshold] = useState(50);
   const [modal,     setModal]     = useState(null);
   const [amount,    setAmount]    = useState("");
   const [saving,    setSaving]    = useState(false);
+  const [pendingPayments, setPendingPayments] = useState([]);
+  const [loadingPending,  setLoadingPending]  = useState(true);
+  const [reviewing,       setReviewing]       = useState(null); // submission being viewed full-size
+
+  async function loadPendingPayments() {
+    setLoadingPending(true);
+    try {
+      const { data, error } = await supabase
+        .from("payment_submissions")
+        .select("*, students(name, form)")
+        .eq("status","pending")
+        .order("submitted_at",{ascending:false});
+      if (error) throw error;
+      setPendingPayments(data||[]);
+    } catch(e) { console.error("Failed to load pending payments:", e); }
+    setLoadingPending(false);
+  }
+
+  useEffect(() => { loadPendingPayments(); }, []);
+
+  async function approvePayment(sub) {
+    if (!window.confirm(`Approve ${sub.amount.toLocaleString()} FCFA for ${sub.students?.name||sub.student_id}? This will add it to their fee balance.`)) return;
+    try {
+      const currentPaid = feesMap[sub.student_id]?.paid||0;
+      await saveFee(sub.student_id, currentPaid + sub.amount);
+      await supabase.from("payment_submissions").update({
+        status:"approved", reviewed_at:new Date().toISOString(), reviewed_by:auth.user.name,
+      }).eq("id", sub.id);
+      await loadPendingPayments();
+      setReviewing(null);
+    } catch(e) { alert("Error approving: "+e.message); }
+  }
+
+  async function rejectPayment(sub, reason) {
+    try {
+      await supabase.from("payment_submissions").update({
+        status:"rejected", reviewed_at:new Date().toISOString(), reviewed_by:auth.user.name, reject_reason:reason||null,
+      }).eq("id", sub.id);
+      await loadPendingPayments();
+      setReviewing(null);
+    } catch(e) { alert("Error rejecting: "+e.message); }
+  }
 
   const allActive       = students.filter(s=>s.active);
   const totalExpected   = allActive.length * TOTAL_FEE;
@@ -2819,6 +3005,24 @@ function FeesPage({ ctx }) {
         ))}
       </div>
 
+      {pendingPayments.length>0 && (
+        <div style={{background:C.white,borderRadius:10,padding:12,marginBottom:11,boxShadow:"0 1px 3px rgba(0,0,0,0.06)",border:`2px solid ${C.gold}`}}>
+          <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:9,display:"flex",alignItems:"center",gap:6}}>
+            💳 Pending Payment Confirmations <Pill color={C.gold}>{pendingPayments.length}</Pill>
+          </div>
+          {pendingPayments.map(sub => (
+            <div key={sub.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderBottom:`1px solid ${C.grayBg}`}}>
+              {sub.screenshot && <img src={sub.screenshot} alt="" onClick={()=>setReviewing(sub)} style={{width:44,height:44,objectFit:"cover",borderRadius:6,cursor:"pointer",border:`1px solid ${C.grayLight}`,flexShrink:0}}/>}
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:700,fontSize:12,color:C.navy}}>{sub.students?.name||sub.student_id} <span style={{color:C.gray,fontWeight:400}}>({sub.students?.form})</span></div>
+                <div style={{fontSize:11,color:C.gray}}>{sub.amount.toLocaleString()} FCFA · {sub.momo_number||"no number given"} · {fmtDate(sub.submitted_at?.slice(0,10))}</div>
+              </div>
+              <SmBtn onClick={()=>setReviewing(sub)} color={C.navyMid}>Review</SmBtn>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Defaulter print panel */}
       <div style={{background:C.white,borderRadius:10,padding:12,marginBottom:11,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
         <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:8}}>🖨 Print Defaulter List</div>
@@ -2902,7 +3106,53 @@ function FeesPage({ ctx }) {
           </div>
         </Modal>
       )}
+
+      {reviewing && <PaymentReviewModal submission={reviewing} onApprove={approvePayment} onReject={rejectPayment} onClose={()=>setReviewing(null)}/>}
     </div>
+  );
+}
+
+// ─── Payment Screenshot Review Modal ─────────────────────────────────────────────
+function PaymentReviewModal({ submission, onApprove, onReject, onClose }) {
+  const [showReject, setShowReject] = useState(false);
+  const [reason, setReason] = useState("");
+
+  return (
+    <Modal title={`Review Payment — ${submission.students?.name||submission.student_id}`} onClose={onClose}>
+      {submission.screenshot && (
+        <img src={submission.screenshot} alt="Payment screenshot" style={{width:"100%",borderRadius:8,marginBottom:12,border:`1px solid ${C.grayLight}`}}/>
+      )}
+      <div style={{background:C.grayBg,borderRadius:8,padding:"10px 12px",marginBottom:12}}>
+        {[
+          ["Student", `${submission.students?.name||submission.student_id} (${submission.students?.form||""})`],
+          ["Amount", `${submission.amount.toLocaleString()} FCFA`],
+          ["Phone Used", submission.momo_number||"Not provided"],
+          ["Submitted", fmtDate(submission.submitted_at?.slice(0,10))],
+        ].map(([l,v])=>(
+          <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:`1px solid ${C.grayLight}`}}>
+            <span style={{fontSize:12,color:C.gray}}>{l}</span>
+            <strong style={{fontSize:12,color:C.navy}}>{v}</strong>
+          </div>
+        ))}
+      </div>
+
+      {!showReject ? (
+        <div style={{display:"flex",gap:8}}>
+          <Btn onClick={()=>setShowReject(true)} outline color={C.red}>Reject</Btn>
+          <Btn onClick={()=>onApprove(submission)} color={C.green}>✓ Approve & Record Payment</Btn>
+        </div>
+      ) : (
+        <div>
+          <Fr label="Reason for rejection (optional)">
+            <input style={inp} placeholder="e.g. Screenshot unclear, amount mismatch…" value={reason} onChange={e=>setReason(e.target.value)}/>
+          </Fr>
+          <div style={{display:"flex",gap:8}}>
+            <Btn onClick={()=>setShowReject(false)} outline>Cancel</Btn>
+            <Btn onClick={()=>onReject(submission, reason)} color={C.red}>Confirm Reject</Btn>
+          </div>
+        </div>
+      )}
+    </Modal>
   );
 }
 
