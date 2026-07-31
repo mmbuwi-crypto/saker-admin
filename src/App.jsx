@@ -30,6 +30,7 @@ const REG_NORMAL  = 500;
 const REG_LATE    = 1000;
 const LATE_CUTOFF = "2026-09-30";
 const MOMO_MERCHANT_NUMBER = "PASTE_YOUR_MOMO_NUMBER_HERE"; // e.g. "677123456" — the school's MTN Mobile Money receiving number
+const TEACHER_SERVER_URL = "PASTE_YOUR_TEACHER_SERVER_URL_HERE"; // e.g. "https://saker-teacher-server.onrender.com" — set after deploying saker-teacher-server
 
 const DEFAULT_COEFF = {
   "English language":4,"French/ Français":4,"Mathematics":4,
@@ -1975,27 +1976,64 @@ function PromoteStudentsModal({ students, saveStudent, saveFee, onClose }) {
 function TeachersPage({ ctx }) {
   const { teachers, saveTeacher } = ctx;
   const [modal,  setModal]  = useState(null);
-  const [form,   setForm]   = useState({ name:"", email:"", subjects:[], forms:[], active:true });
+  const [form,   setForm]   = useState({ name:"", email:"", password:"", subjects:[], forms:[], active:true });
   const [saving, setSaving] = useState(false);
+  const [err,    setErr]    = useState("");
 
   const toggle = (k,v) => setForm(f => ({ ...f, [k]: f[k].includes(v) ? f[k].filter(x=>x!==v) : [...f[k],v] }));
 
-  async function save() {
-    if (!form.name?.trim()||!form.email?.trim()) return;
-    setSaving(true);
-    const id = modal==="add" ? "TCH"+Date.now().toString().slice(-6) : modal.id;
-    try { await saveTeacher({ ...form, id, joined: form.joined||todayStr() }); setModal(null); }
-    catch(e) { alert("Error: "+e.message); }
+  function randomPassword() {
+    // Easy-to-read 8-character password: avoids ambiguous characters (0/O, 1/l/I)
+    const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+    let p = "";
+    for (let i=0;i<8;i++) p += chars[Math.floor(Math.random()*chars.length)];
+    return p;
+  }
+
+  async function createTeacher() {
+    if (!form.name?.trim()||!form.email?.trim()||!form.password) return;
+    setErr(""); setSaving(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${TEACHER_SERVER_URL}/create-teacher`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ name:form.name.trim(), email:form.email.trim(), password:form.password, subjects:form.subjects, forms:form.forms }),
+      });
+      const data = await res.json();
+      if (!res.ok || data?.error) throw new Error(data?.error || `Server error (${res.status})`);
+      setModal({ justCreated:true, name:form.name, email:form.email, password:form.password });
+    } catch(e) { setErr("Could not create teacher: " + e.message); }
     setSaving(false);
+  }
+
+  async function editTeacher() {
+    if (!form.name?.trim()) return;
+    setSaving(true);
+    try { await saveTeacher({ id:modal.id, name:form.name, email:form.email, subjects:form.subjects, forms:form.forms, active:form.active, joined:form.joined }); setModal(null); }
+    catch(e) { setErr("Error: "+e.message); }
+    setSaving(false);
+  }
+
+  async function deleteTeacherFully(t) {
+    if (!window.confirm(`Permanently delete ${t.name}'s account? They will no longer be able to log in. This cannot be undone.`)) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${TEACHER_SERVER_URL}/delete-teacher`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ teacherId:t.id, userId:t.user_id }),
+      });
+      const data = await res.json();
+      if (!res.ok || data?.error) throw new Error(data?.error || `Server error (${res.status})`);
+      alert(`${t.name}'s account has been removed.`);
+    } catch(e) { alert("Could not delete: " + e.message); }
   }
 
   return (
     <div>
-      <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:9,padding:"9px 12px",marginBottom:11,fontSize:12,color:"#92400e"}}>
-        ℹ️ After creating a teacher here, go to <strong>Supabase → Authentication → Add User</strong> with the same email to activate their login. Then add their role in the <strong>users</strong> table.
-      </div>
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:9}}>
-        <Btn onClick={()=>{setForm({name:"",email:"",subjects:[],forms:[],active:true,joined:todayStr()});setModal("add");}}>+ Create Teacher Portal</Btn>
+        <Btn onClick={()=>{setForm({name:"",email:"",password:randomPassword(),subjects:[],forms:[],active:true,joined:todayStr()});setErr("");setModal("add");}}>+ Create Teacher Account</Btn>
       </div>
       {teachers.map(t => (
         <div key={t.id} style={{background:C.white,borderRadius:10,padding:13,marginBottom:9,boxShadow:"0 1px 3px rgba(0,0,0,0.06)",borderTop:`4px solid ${t.active?C.navy:C.gray}`}}>
@@ -2009,17 +2047,45 @@ function TeachersPage({ ctx }) {
           </div>
           <div style={{marginTop:7,display:"flex",flexWrap:"wrap",gap:4}}>{(t.subjects||[]).map(s=><Pill key={s} color={C.navyMid}>{s}</Pill>)}</div>
           <div style={{marginTop:5,display:"flex",flexWrap:"wrap",gap:4}}>{(t.forms||[]).map(f=><Pill key={f} color={C.gold}>{f}</Pill>)}</div>
-          <div style={{display:"flex",gap:7,marginTop:8}}>
-            <SmBtn onClick={()=>{setForm({...t});setModal(t);}} color={C.green}>Edit</SmBtn>
+          <div style={{display:"flex",gap:7,marginTop:8,flexWrap:"wrap"}}>
+            <SmBtn onClick={()=>{setForm({...t,password:""});setErr("");setModal(t);}} color={C.green}>Edit</SmBtn>
             <SmBtn onClick={()=>saveTeacher({...t,active:!t.active})} color={t.active?C.red:C.green}>{t.active?"Deactivate":"Activate"}</SmBtn>
+            <SmBtn onClick={()=>deleteTeacherFully(t)} color={C.red}>Delete Account</SmBtn>
           </div>
         </div>
       ))}
 
-      {modal && (
-        <Modal title={modal==="add"?"Create Teacher Portal":"Edit Teacher"} onClose={()=>setModal(null)}>
+      {modal && modal!=="add" && modal.justCreated && (
+        <Modal title="✅ Teacher Account Created" onClose={()=>setModal(null)}>
+          <div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:10,padding:14,marginBottom:14,textAlign:"center"}}>
+            <div style={{fontSize:32,marginBottom:6}}>🎉</div>
+            <div style={{fontWeight:800,color:C.green,fontSize:14}}>{modal.name} can now log in</div>
+          </div>
+          <div style={{background:C.grayBg,borderRadius:8,padding:"10px 12px",marginBottom:14}}>
+            {[["Email",modal.email],["Password",modal.password]].map(([l,v])=>(
+              <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:`1px solid ${C.grayLight}`}}>
+                <span style={{fontSize:12,color:C.gray}}>{l}</span>
+                <strong style={{fontSize:13,fontFamily:l==="Password"?"monospace":"inherit",color:C.navy}}>{v}</strong>
+              </div>
+            ))}
+          </div>
+          <div style={{fontSize:11,color:C.gray,marginBottom:12}}>⚠️ Write this down or share it now — the password won't be shown again. The teacher can change it themselves later from their Profile page.</div>
+          <Btn onClick={()=>setModal(null)}>Done</Btn>
+        </Modal>
+      )}
+
+      {modal && (modal==="add"||(!modal.justCreated)) && (
+        <Modal title={modal==="add"?"Create Teacher Account":"Edit Teacher"} onClose={()=>setModal(null)}>
           <Fr label="Full Name"><input style={inp} value={form.name||""} onChange={e=>setForm(f=>({...f,name:e.target.value}))}/></Fr>
-          <Fr label="Email (used for login)"><input style={inp} type="email" value={form.email||""} onChange={e=>setForm(f=>({...f,email:e.target.value}))}/></Fr>
+          <Fr label={modal==="add"?"Email (used for login)":"Email"}><input style={inp} type="email" value={form.email||""} disabled={modal!=="add"} onChange={e=>setForm(f=>({...f,email:e.target.value}))}/></Fr>
+          {modal==="add" && (
+            <Fr label="Temporary Password">
+              <div style={{display:"flex",gap:6}}>
+                <input style={{...inp,flex:1,fontFamily:"monospace"}} value={form.password||""} onChange={e=>setForm(f=>({...f,password:e.target.value}))}/>
+                <SmBtn onClick={()=>setForm(f=>({...f,password:randomPassword()}))} color={C.navyMid}>🎲 New</SmBtn>
+              </div>
+            </Fr>
+          )}
           <div style={{marginTop:8}}>
             <label style={lbl}>Subjects</label>
             <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:5}}>
@@ -2036,9 +2102,10 @@ function TeachersPage({ ctx }) {
               ))}
             </div>
           </div>
+          {err && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"8px 12px",color:C.red,fontSize:12,marginTop:10}}>{err}</div>}
           <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:13}}>
             <Btn onClick={()=>setModal(null)} outline>Cancel</Btn>
-            <Btn onClick={save} disabled={saving}>{saving?"Saving…":modal==="add"?"Create":"Save"}</Btn>
+            <Btn onClick={modal==="add"?createTeacher:editTeacher} disabled={saving}>{saving?"Saving…":modal==="add"?"Create Account":"Save"}</Btn>
           </div>
         </Modal>
       )}
