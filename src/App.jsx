@@ -147,6 +147,76 @@ function exportToExcel(rows, filename, sheetName="Sheet1") {
   }
 }
 
+// Export one workbook with multiple sheets — one sheet per group.
+// sheets: array of { name: string, rows: array of row-objects }
+// Sheet names are Excel-sanitized and de-duplicated (Excel forbids
+// \ / ? * [ ] and caps names at 31 characters).
+function exportToExcelMultiSheet(sheets, filename) {
+  const usable = (sheets||[]).filter(s => s.rows && s.rows.length);
+  if (!usable.length) { alert("Nothing to export."); return; }
+  try {
+    const wb = XLSX.utils.book_new();
+    const usedNames = new Set();
+    usable.forEach(({ name, rows }) => {
+      let safeName = String(name||"Sheet").replace(/[\\/?*[\]:]/g,"").slice(0,31) || "Sheet";
+      let finalName = safeName;
+      let n = 2;
+      while (usedNames.has(finalName)) { finalName = safeName.slice(0,28)+"_"+n; n++; }
+      usedNames.add(finalName);
+
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const colWidths = Object.keys(rows[0]).map(key => {
+        const maxLen = Math.max(key.length, ...rows.map(r => String(r[key]??"").length));
+        return { wch: Math.min(Math.max(maxLen+2, 8), 40) };
+      });
+      ws["!cols"] = colWidths;
+      XLSX.utils.book_append_sheet(wb, ws, finalName);
+    });
+    XLSX.writeFile(wb, filename);
+  } catch(e) {
+    console.error("Excel export error:", e);
+    alert("Export failed: " + e.message);
+  }
+}
+
+// Print a downloadable payment slip for an approved fee payment submission.
+// sub: the payment_submissions row (amount, momo_number, submitted_at, reviewed_at, reviewed_by, id)
+// student: the student record (name, id, form)
+function printPaymentSlip(sub, student) {
+  if (!sub || !student) return;
+  const html = `<div style="font-family:Segoe UI,sans-serif;padding:14px;color:#0D2340">
+    <div style="max-width:360px;margin:0 auto;border:2px solid #0D2340;border-radius:10px;overflow:hidden">
+      <div style="background:#0D2340;color:#fff;padding:14px;text-align:center">
+        <div style="font-size:26px">🎓</div>
+        <h2 style="font-size:14px;font-weight:900;margin:4px 0">SAKER BAPTIST COLLEGE</h2>
+        <p style="font-size:9px;opacity:.65;margin:0">NGEPTANG · NONI · NW REGION</p>
+        <div style="background:#15803D;display:inline-block;padding:2px 12px;border-radius:10px;font-size:10px;font-weight:800;margin-top:7px">FEE PAYMENT SLIP</div>
+      </div>
+      <div style="padding:14px">
+        <div style="font-family:monospace;font-weight:900;font-size:13px;text-align:center;margin-bottom:9px;padding-bottom:7px;border-bottom:1px dashed #e5e7eb">PMT-${String(sub.id).padStart(6,"0")}</div>
+        ${[
+          ["Student Name", student.name],
+          ["Matricule", student.id],
+          ["Form", student.form],
+          ["Amount Paid", `${sub.amount.toLocaleString()} FCFA`],
+          ["Payment Method", "MTN Mobile Money"],
+          ["Phone Used", sub.momo_number||"—"],
+          ["Submitted", fmtDate(sub.submitted_at?.slice(0,10))],
+          ["Confirmed By", sub.reviewed_by||"School Office"],
+          ["Confirmed On", fmtDate(sub.reviewed_at?.slice(0,10))],
+        ].map(([l,v])=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f0f0;font-size:11.5px"><span style="color:#6B7280">${l}</span><span style="font-weight:600">${v||"—"}</span></div>`).join("")}
+        <div style="background:#f0fdf4;border-radius:8px;padding:12px;margin-top:11px;text-align:center">
+          <div style="font-size:10px;color:#6b7280;margin-bottom:2px">AMOUNT CONFIRMED</div>
+          <div style="font-size:26px;font-weight:900;color:#15803D">${sub.amount.toLocaleString()} FCFA</div>
+          <div style="font-size:10px;color:#6b7280;margin-top:2px">✓ Approved Payment</div>
+        </div>
+      </div>
+      <div style="text-align:center;font-size:9px;color:#9ca3af;border-top:1px dashed #e5e7eb;padding:8px 14px">This slip confirms a payment toward school fees for Academic Year 2026/2027.<br>Keep for your records.</div>
+    </div>
+  </div>`;
+  domPrint("sbc-payment-slip", html, "A5 portrait", "7mm");
+}
+
 // ─── Nav ──────────────────────────────────────────────────────────────────────
 const navItems = [
   { key:"dashboard",    label:"Dashboard",    icon:"📊", roles:["admin","teacher"] },
@@ -907,7 +977,10 @@ function ParentPortalResults({ data, matricule, pin, onBack, onExit }) {
                       <div style={{fontSize:12,fontWeight:700,color:C.navy}}>{s.amount.toLocaleString()} FCFA</div>
                       <div style={{fontSize:10,color:C.gray}}>{fmtDate(s.submitted_at?.slice(0,10))}</div>
                     </div>
-                    <Pill color={s.status==="approved"?C.green:C.red}>{s.status==="approved"?"✓ Approved":"✕ Rejected"}</Pill>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <Pill color={s.status==="approved"?C.green:C.red}>{s.status==="approved"?"✓ Approved":"✕ Rejected"}</Pill>
+                      {s.status==="approved" && <SmBtn onClick={()=>printPaymentSlip(s, student)} color={C.navyMid}>📄 Slip</SmBtn>}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1094,6 +1167,7 @@ function RegistrationPage({ ctx }) {
   const [saving,  setSaving] = useState(false);
   const blank = { name:"", form:"Form 1", gender:"Female", dob:"", parent:"", phone:"", address:"", paidBy:"", isLate:false, photo_url:null };
   const [form, setForm] = useState(blank);
+  const photoInputRef = useRef(null);
 
   const fee = form.isLate ? REG_LATE : REG_NORMAL;
 
@@ -1106,15 +1180,11 @@ function RegistrationPage({ ctx }) {
     const rec  = `RCP-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
     const pin  = String(Math.floor(1000 + Math.random()*9000)); // 4-digit parent portal PIN
     try {
-      // Compress photo then save student
-      let photoUrl = null;
-      if (form.photo_url) {
-        photoUrl = await compressPhoto(form.photo_url);
-      }
+      // Photo was already compressed when selected — use as-is
       const studentData = {
         name:form.name, form:form.form, gender:form.gender,
         dob:form.dob||null, parent:form.parent, phone:form.phone,
-        address:form.address||null, photo_url:photoUrl,
+        address:form.address||null, photo_url:form.photo_url||null,
         id, active:true,
         reg_status:"registered", reg_date:todayStr(),
         reg_fee:fee, reg_receipt:rec,
@@ -1205,16 +1275,20 @@ function RegistrationPage({ ctx }) {
             <div style={{display:"flex",alignItems:"flex-start",gap:13,marginBottom:11}}>
               <div style={{flexShrink:0,textAlign:"center"}}>
                 <PhotoBox photo={form.photo_url} size={[78,94]}/>
-                <label style={{display:"block",marginTop:4,fontSize:10,color:C.navyMid,cursor:"pointer",fontWeight:700,background:C.grayBg,borderRadius:4,padding:"3px 5px",textAlign:"center"}}>
+                <input ref={photoInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{
+                  const f=e.target.files[0]; if(!f) return;
+                  const r=new FileReader();
+                  r.onload=async ev=>{
+                    const compressed = await compressPhoto(ev.target.result);
+                    setForm(prev=>({...prev,photo_url:compressed}));
+                  };
+                  r.readAsDataURL(f);
+                  e.target.value=""; // allow choosing the same file again after Remove
+                }}/>
+                <button type="button" onClick={()=>photoInputRef.current?.click()} style={{display:"block",width:"100%",marginTop:4,fontSize:10,color:C.navyMid,cursor:"pointer",fontWeight:700,background:C.grayBg,border:"none",borderRadius:4,padding:"5px 5px",textAlign:"center"}}>
                   📷 {form.photo_url?"Change":"Upload"}
-                  <input type="file" accept="image/*" style={{display:"none"}} onChange={e=>{
-                    const f=e.target.files[0]; if(!f) return;
-                    const r=new FileReader();
-                    r.onload=ev=>setForm(f=>({...f,photo_url:ev.target.result}));
-                    r.readAsDataURL(f);
-                  }}/>
-                </label>
-                {form.photo_url && <button onClick={()=>setForm(f=>({...f,photo_url:null}))} style={{marginTop:2,fontSize:9,color:C.red,background:"none",border:"none",cursor:"pointer"}}>✕ Remove</button>}
+                </button>
+                {form.photo_url && <button type="button" onClick={()=>setForm(f=>({...f,photo_url:null}))} style={{marginTop:2,fontSize:9,color:C.red,background:"none",border:"none",cursor:"pointer"}}>✕ Remove</button>}
               </div>
               <div style={{flex:1}}>
                 <Fr label="Full Name *"><input style={inp} value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}/></Fr>
@@ -1557,14 +1631,15 @@ function StudentsPage({ ctx }) {
   const [showPromote, setShowPromote] = useState(false);
   const blank = { name:"", form:"Form 1", gender:"Female", dob:"", parent:"", phone:"", address:"", photo_url:null };
   const [form, setForm] = useState(blank);
+  const photoInputRef = useRef(null);
 
   const filtered = students.filter(s => s.active
     && (!filter.form   || s.form===filter.form)
     && (!filter.search || s.name?.toLowerCase().includes(filter.search.toLowerCase()) || s.id?.includes(filter.search))
   );
 
-  function exportStudents() {
-    const rows = filtered.map(s => ({
+  function studentExportRow(s) {
+    return {
       "Matricule":    s.id,
       "Name":         s.name,
       "Form":         s.form,
@@ -1578,9 +1653,22 @@ function StudentsPage({ ctx }) {
       "Fees Paid (FCFA)":    feesMap?.[s.id]?.paid ?? 0,
       "Fees Total (FCFA)":   feesMap?.[s.id]?.total ?? TOTAL_FEE,
       "Balance (FCFA)":      (feesMap?.[s.id]?.total ?? TOTAL_FEE) - (feesMap?.[s.id]?.paid ?? 0),
-    }));
-    const label = filter.form ? filter.form.replace(" ","") : "AllForms";
-    exportToExcel(rows, `SBC-Students-${label}-${sel_year_safe()}.xlsx`, "Students");
+    };
+  }
+
+  function exportStudents() {
+    if (filter.form) {
+      // A single form is already selected — one sheet is enough
+      const rows = filtered.map(studentExportRow);
+      exportToExcel(rows, `SBC-Students-${filter.form.replace(" ","")}-${sel_year_safe()}.xlsx`, filter.form);
+    } else {
+      // No form filter — split into one sheet per class, all in one workbook
+      const sheets = FORMS.map(f => ({
+        name: f,
+        rows: filtered.filter(s=>s.form===f).map(studentExportRow),
+      }));
+      exportToExcelMultiSheet(sheets, `SBC-Students-AllForms-${sel_year_safe()}.xlsx`);
+    }
   }
   function sel_year_safe(){ return "2026-2027"; }
 
@@ -1693,15 +1781,19 @@ function StudentsPage({ ctx }) {
           <div style={{display:"flex",gap:11,alignItems:"flex-start",marginBottom:10}}>
             <div style={{flexShrink:0}}>
               <PhotoBox photo={form.photo_url} size={[62,76]}/>
-              <label style={{display:"block",marginTop:3,fontSize:9,color:C.navyMid,cursor:"pointer",fontWeight:700,background:C.grayBg,borderRadius:4,padding:"2px 5px",textAlign:"center"}}>
+              <input ref={photoInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{
+                const f=e.target.files[0]; if(!f) return;
+                const r=new FileReader();
+                r.onload=async ev=>{
+                  const compressed = await compressPhoto(ev.target.result);
+                  setForm(prev=>({...prev,photo_url:compressed}));
+                };
+                r.readAsDataURL(f);
+                e.target.value="";
+              }}/>
+              <button type="button" onClick={()=>photoInputRef.current?.click()} style={{display:"block",width:"100%",marginTop:3,fontSize:9,color:C.navyMid,cursor:"pointer",fontWeight:700,background:C.grayBg,border:"none",borderRadius:4,padding:"3px 5px",textAlign:"center"}}>
                 📷 Photo
-                <input type="file" accept="image/*" style={{display:"none"}} onChange={e=>{
-                  const f=e.target.files[0]; if(!f) return;
-                  const r=new FileReader();
-                  r.onload=ev=>setForm(f=>({...f,photo_url:ev.target.result}));
-                  r.readAsDataURL(f);
-                }}/>
-              </label>
+              </button>
             </div>
             <div style={{flex:1}}>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
@@ -2862,11 +2954,18 @@ function FeesPage({ ctx }) {
     try {
       const currentPaid = feesMap[sub.student_id]?.paid||0;
       await saveFee(sub.student_id, currentPaid + sub.amount);
+      const reviewedAt = new Date().toISOString();
       await supabase.from("payment_submissions").update({
-        status:"approved", reviewed_at:new Date().toISOString(), reviewed_by:auth.user.name,
+        status:"approved", reviewed_at:reviewedAt, reviewed_by:auth.user.name,
       }).eq("id", sub.id);
       await loadPendingPayments();
       setReviewing(null);
+      if (window.confirm("Payment approved. Print a slip for the parent now?")) {
+        printPaymentSlip(
+          { ...sub, reviewed_at:reviewedAt, reviewed_by:auth.user.name },
+          { id: sub.student_id, name: sub.students?.name, form: sub.students?.form }
+        );
+      }
     } catch(e) { alert("Error approving: "+e.message); }
   }
 
@@ -2893,29 +2992,40 @@ function FeesPage({ ctx }) {
       &&   (!filter.status || st===filter.status);
   });
 
+  function feeExportRow(s) {
+    const paid = feesMap[s.id]?.paid||0;
+    const bal  = TOTAL_FEE-paid;
+    const pct  = Math.round(paid/TOTAL_FEE*100);
+    const st   = pct>=100?"Paid":pct>0?"Partial":"Unpaid";
+    return {
+      "Matricule": s.id,
+      "Name":      s.name,
+      "Form":      s.form,
+      "Parent/Guardian": s.parent||"",
+      "Phone":     s.phone||"",
+      "Total Fee (FCFA)": TOTAL_FEE,
+      "Paid (FCFA)":      paid,
+      "Balance (FCFA)":   bal,
+      "% Paid":           pct,
+      "Status":           st,
+    };
+  }
+
   function exportFeesExcel() {
-    const scope = allActive.filter(s => !filter.form || s.form===filter.form)
-      .sort((a,b)=>a.form.localeCompare(b.form)||a.name.localeCompare(b.name));
-    if (!scope.length) { alert("No students to export."); return; }
-    const rows = scope.map(s => {
-      const paid = feesMap[s.id]?.paid||0;
-      const bal  = TOTAL_FEE-paid;
-      const pct  = Math.round(paid/TOTAL_FEE*100);
-      const st   = pct>=100?"Paid":pct>0?"Partial":"Unpaid";
-      return {
-        "Matricule": s.id,
-        "Name":      s.name,
-        "Form":      s.form,
-        "Parent/Guardian": s.parent||"",
-        "Phone":     s.phone||"",
-        "Total Fee (FCFA)": TOTAL_FEE,
-        "Paid (FCFA)":      paid,
-        "Balance (FCFA)":   bal,
-        "% Paid":           pct,
-        "Status":           st,
-      };
-    });
-    exportToExcel(rows, `SBC-Fees-${filter.form?filter.form.replace(" ",""):"AllForms"}-2026-2027.xlsx`, "Fees");
+    if (filter.form) {
+      // A single form is already selected — one sheet is enough
+      const scope = allActive.filter(s => s.form===filter.form).sort((a,b)=>a.name.localeCompare(b.name));
+      if (!scope.length) { alert("No students to export."); return; }
+      exportToExcel(scope.map(feeExportRow), `SBC-Fees-${filter.form.replace(" ","")}-2026-2027.xlsx`, filter.form);
+    } else {
+      // No form filter — split into one sheet per class, all in one workbook
+      if (!allActive.length) { alert("No students to export."); return; }
+      const sheets = FORMS.map(f => ({
+        name: f,
+        rows: allActive.filter(s=>s.form===f).sort((a,b)=>a.name.localeCompare(b.name)).map(feeExportRow),
+      }));
+      exportToExcelMultiSheet(sheets, `SBC-Fees-AllForms-2026-2027.xlsx`);
+    }
   }
 
   function printDebtors() {
