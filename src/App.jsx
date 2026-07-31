@@ -67,14 +67,14 @@ function compressPhoto(base64) {
     if (!base64 || !base64.startsWith("data:")) { resolve(null); return; }
     const img = new Image();
     img.onload = () => {
-      const MAX = 200;
+      const MAX = 500; // passport photos print sharp at this size; still small enough for DB storage
       let w = img.width, h = img.height;
       const scale = Math.min(MAX/w, MAX/h, 1);
       w = Math.round(w*scale); h = Math.round(h*scale);
       const canvas = document.createElement("canvas");
       canvas.width = w; canvas.height = h;
       canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL("image/jpeg", 0.6));
+      resolve(canvas.toDataURL("image/jpeg", 0.85));
     };
     img.onerror = () => resolve(null);
     img.src = base64;
