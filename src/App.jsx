@@ -30,7 +30,7 @@ const REG_NORMAL  = 500;
 const REG_LATE    = 1000;
 const LATE_CUTOFF = "2026-09-30";
 const MOMO_MERCHANT_NUMBER = "PASTE_YOUR_MOMO_NUMBER_HERE"; // e.g. "677123456" — the school's MTN Mobile Money receiving number
-const TEACHER_SERVER_URL = "PASTE_YOUR_TEACHER_SERVER_URL_HERE"; // e.g. "https://saker-teacher-server.onrender.com" — set after deploying saker-teacher-server
+const TEACHER_SERVER_URL = "https://saker-teacher-sever.onrender.com"; // e.g. "https://saker-teacher-server.onrender.com" — set after deploying saker-teacher-server
 
 const DEFAULT_COEFF = {
   "English language":4,"French/ Français":4,"Mathematics":4,
