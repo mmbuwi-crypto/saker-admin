@@ -30,7 +30,7 @@ const REG_NORMAL  = 500;
 const REG_LATE    = 1000;
 const LATE_CUTOFF = "2026-09-30";
 const MOMO_MERCHANT_NUMBER = "PASTE_YOUR_MOMO_NUMBER_HERE"; // e.g. "677123456" — the school's MTN Mobile Money receiving number
-const TEACHER_SERVER_URL = "https://saker-teacher-sever.onrender.com"; // e.g. "https://saker-teacher-server.onrender.com" — set after deploying saker-teacher-server
+const TEACHER_SERVER_URL = "PASTE_YOUR_TEACHER_SERVER_URL_HERE"; // e.g. "https://saker-teacher-server.onrender.com" — set after deploying saker-teacher-server
 
 const DEFAULT_COEFF = {
   "English language":4,"French/ Français":4,"Mathematics":4,
@@ -1994,14 +1994,28 @@ function TeachersPage({ ctx }) {
     if (!form.name?.trim()||!form.email?.trim()||!form.password) return;
     setErr(""); setSaving(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`${TEACHER_SERVER_URL}/create-teacher`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ name:form.name.trim(), email:form.email.trim(), password:form.password, subjects:form.subjects, forms:form.forms }),
-      });
-      const data = await res.json();
-      if (!res.ok || data?.error) throw new Error(data?.error || `Server error (${res.status})`);
+      const { data: { session }, error: sessErr } = await supabase.auth.getSession();
+      if (sessErr) throw new Error("Session error: " + sessErr.message);
+      if (!session?.access_token) throw new Error("No active session — please log out and log back in, then try again.");
+
+      let res;
+      try {
+        res = await fetch(`${TEACHER_SERVER_URL}/create-teacher`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session.access_token}` },
+          body: JSON.stringify({ name:form.name.trim(), email:form.email.trim(), password:form.password, subjects:form.subjects, forms:form.forms }),
+        });
+      } catch(networkErr) {
+        throw new Error(`Could not reach the server at ${TEACHER_SERVER_URL} — check the URL is correct and the service is live. (${networkErr.message})`);
+      }
+
+      let data;
+      try { data = await res.json(); }
+      catch { throw new Error(`Server returned an unreadable response (HTTP ${res.status}). It may still be starting up — wait 30 seconds and try again.`); }
+
+      if (!res.ok || data?.error) {
+        throw new Error(`${data?.error || "Unknown error"} (HTTP ${res.status})`);
+      }
       setModal({ justCreated:true, name:form.name, email:form.email, password:form.password });
     } catch(e) { setErr("Could not create teacher: " + e.message); }
     setSaving(false);
@@ -2018,14 +2032,28 @@ function TeachersPage({ ctx }) {
   async function deleteTeacherFully(t) {
     if (!window.confirm(`Permanently delete ${t.name}'s account? They will no longer be able to log in. This cannot be undone.`)) return;
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`${TEACHER_SERVER_URL}/delete-teacher`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ teacherId:t.id, userId:t.user_id }),
-      });
-      const data = await res.json();
-      if (!res.ok || data?.error) throw new Error(data?.error || `Server error (${res.status})`);
+      const { data: { session }, error: sessErr } = await supabase.auth.getSession();
+      if (sessErr) throw new Error("Session error: " + sessErr.message);
+      if (!session?.access_token) throw new Error("No active session — please log out and log back in, then try again.");
+
+      let res;
+      try {
+        res = await fetch(`${TEACHER_SERVER_URL}/delete-teacher`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session.access_token}` },
+          body: JSON.stringify({ teacherId:t.id, userId:t.user_id }),
+        });
+      } catch(networkErr) {
+        throw new Error(`Could not reach the server at ${TEACHER_SERVER_URL} — check the URL is correct and the service is live. (${networkErr.message})`);
+      }
+
+      let data;
+      try { data = await res.json(); }
+      catch { throw new Error(`Server returned an unreadable response (HTTP ${res.status}). It may still be starting up — wait 30 seconds and try again.`); }
+
+      if (!res.ok || data?.error) {
+        throw new Error(`${data?.error || "Unknown error"} (HTTP ${res.status})`);
+      }
       alert(`${t.name}'s account has been removed.`);
     } catch(e) { alert("Could not delete: " + e.message); }
   }
