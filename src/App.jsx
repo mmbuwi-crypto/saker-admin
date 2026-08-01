@@ -2009,9 +2009,16 @@ function TeachersPage({ ctx }) {
         throw new Error(`Could not reach the server at ${TEACHER_SERVER_URL} — check the URL is correct and the service is live. (${networkErr.message})`);
       }
 
+      // Always read as raw text first — this way, whatever the server actually
+      // sent (valid JSON, broken JSON, an HTML error page, empty body) is
+      // visible on screen rather than being swallowed by a failed .json() call.
+      const rawText = await res.text();
       let data;
-      try { data = await res.json(); }
-      catch { throw new Error(`Server returned an unreadable response (HTTP ${res.status}). It may still be starting up — wait 30 seconds and try again.`); }
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        throw new Error(`Server sent back something that isn't valid JSON (HTTP ${res.status}). Raw response: ${rawText ? rawText.slice(0,300) : "(empty response body)"}`);
+      }
 
       if (!res.ok || data?.error) {
         throw new Error(`${data?.error || "Unknown error"} (HTTP ${res.status})`);
