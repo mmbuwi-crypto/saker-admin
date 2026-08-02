@@ -398,22 +398,45 @@ export default function App() {
     setRecoveryMode(false);
   }
 
-  // ── Auto-logout after 15 minutes of inactivity — protects unattended devices ──
+  // ── Auto-logout after inactivity — protects unattended/shared devices ──
+  // Two layers: (1) this timer catches an open tab left unattended,
+  // (2) persistSession:false in supabase.js catches the tab/app being
+  // closed entirely, so nothing lingers logged in for the next person
+  // who opens the site on a shared phone.
   useEffect(() => {
     if (!session) return;
     let timer;
-    const INACTIVITY_LIMIT = 15*60*1000; // 15 minutes
+    const INACTIVITY_LIMIT = 10*60*1000; // 10 minutes
     const reset = () => {
       clearTimeout(timer);
       timer = setTimeout(() => {
         doLogout();
-        alert("You were signed out after 15 minutes of inactivity for security.");
+        alert("You were signed out after 10 minutes of inactivity for security.");
       }, INACTIVITY_LIMIT);
     };
     const events = ["mousedown","keydown","touchstart","scroll"];
     events.forEach(ev => window.addEventListener(ev, reset));
+    // Also reset when the tab becomes visible again (e.g. switching back
+    // from another app) — and immediately check if we've already been
+    // away long enough that we should log out right now rather than wait.
+    let hiddenAt = null;
+    const onVisibility = () => {
+      if (document.hidden) {
+        hiddenAt = Date.now();
+      } else if (hiddenAt && Date.now()-hiddenAt >= INACTIVITY_LIMIT) {
+        doLogout();
+        alert("You were signed out after being away for security.");
+      } else {
+        reset();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
     reset();
-    return () => { clearTimeout(timer); events.forEach(ev => window.removeEventListener(ev, reset)); };
+    return () => {
+      clearTimeout(timer);
+      events.forEach(ev => window.removeEventListener(ev, reset));
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [session]);
 
   // ── DB write helpers (passed via ctx) ──────────────────────────────────────
@@ -709,6 +732,7 @@ function LoginScreen({ onLogin, onRequestReset, onOpenPortal }) {
           }
           <button onClick={()=>{setMode("forgot");setErr("");setInfo("");}} style={{width:"100%",marginTop:12,padding:"6px",background:"transparent",border:"none",color:C.navyMid,fontSize:12,fontWeight:700,cursor:"pointer",textDecoration:"underline"}}>Forgot your password?</button>
           <p style={{textAlign:"center",fontSize:10,color:C.gray,marginTop:10,marginBottom:0}}>Contact your administrator if you need a new account.</p>
+          <p style={{textAlign:"center",fontSize:9.5,color:C.gray,marginTop:6,marginBottom:0}}>🔒 For security, you'll need to sign in again each time you open this site — this keeps your account safe on shared devices.</p>
         </div>
         <button onClick={onOpenPortal} style={{width:"100%",marginTop:14,padding:"11px",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:10,color:C.white,fontSize:13,fontWeight:700,cursor:"pointer"}}>
           👨‍👩‍👧 Parent? Check Your Child's Records →
@@ -1989,6 +2013,32 @@ function TeachersPage({ ctx }) {
     return p;
   }
 
+  // Temporary diagnostic — calls the function with plain fetch, bypassing the
+  // Supabase client wrapper entirely, so the literal HTTP status and response
+  // text are visible with zero interpretation in between.
+  async function rawDiagnostic() {
+    setErr("Running diagnostic…");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) { setErr("DIAGNOSTIC: no active session — log out and back in first."); return; }
+
+      const url = `https://xapbkapxpdvdvelcbpyo.supabase.co/functions/v1/manage-teacher`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+          "apikey": session.access_token, // some setups need this too; harmless if not required
+        },
+        body: JSON.stringify({ action:"create", name:"Diagnostic Test", email:`diagtest${Date.now()}@example.com`, password:"testpass123", subjects:[], forms:[] }),
+      });
+      const rawText = await res.text();
+      setErr(`DIAGNOSTIC RESULT — HTTP ${res.status}: ${rawText}`);
+    } catch(e) {
+      setErr("DIAGNOSTIC network error: " + e.message);
+    }
+  }
+
   async function createTeacher() {
     if (!form.name?.trim()||!form.email?.trim()||!form.password) return;
     setErr(""); setSaving(true);
@@ -2043,9 +2093,11 @@ function TeachersPage({ ctx }) {
 
   return (
     <div>
-      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:9}}>
+      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:9,gap:8}}>
+        <SmBtn onClick={rawDiagnostic} color={C.red}>🔧 Run Diagnostic</SmBtn>
         <Btn onClick={()=>{setForm({name:"",email:"",password:randomPassword(),subjects:[],forms:[],active:true,joined:todayStr()});setErr("");setModal("add");}}>+ Create Teacher Account</Btn>
       </div>
+      {err && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"10px 12px",color:C.red,fontSize:11,marginBottom:11,wordBreak:"break-word",whiteSpace:"pre-wrap"}}>{err}</div>}
       {teachers.map(t => (
         <div key={t.id} style={{background:C.white,borderRadius:10,padding:13,marginBottom:9,boxShadow:"0 1px 3px rgba(0,0,0,0.06)",borderTop:`4px solid ${t.active?C.navy:C.gray}`}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
