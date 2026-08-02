@@ -1996,7 +1996,18 @@ function TeachersPage({ ctx }) {
       const { data, error } = await supabase.functions.invoke("manage-teacher", {
         body: { action:"create", name:form.name.trim(), email:form.email.trim(), password:form.password, subjects:form.subjects, forms:form.forms },
       });
-      if (error) throw new Error(error.message || "Could not reach the function.");
+      if (error) {
+        // The Supabase client's error.message is a generic wrapper on non-2xx
+        // responses ("Edge Function returned a non-2xx status code"). The
+        // actual JSON body our function sent is on error.context, which is
+        // the raw fetch Response — read it directly to get the real message.
+        let realMessage = error.message;
+        try {
+          const body = await error.context.json();
+          if (body?.error) realMessage = body.error;
+        } catch { /* context wasn't readable JSON — fall back to error.message */ }
+        throw new Error(realMessage);
+      }
       if (data?.error) throw new Error(data.error);
       setModal({ justCreated:true, name:form.name, email:form.email, password:form.password });
     } catch(e) { setErr("Could not create teacher: " + e.message); }
@@ -2017,7 +2028,14 @@ function TeachersPage({ ctx }) {
       const { data, error } = await supabase.functions.invoke("manage-teacher", {
         body: { action:"delete", teacherId:t.id, userId:t.user_id },
       });
-      if (error) throw new Error(error.message || "Could not reach the function.");
+      if (error) {
+        let realMessage = error.message;
+        try {
+          const body = await error.context.json();
+          if (body?.error) realMessage = body.error;
+        } catch { /* fall back to error.message */ }
+        throw new Error(realMessage);
+      }
       if (data?.error) throw new Error(data.error);
       alert(`${t.name}'s account has been removed.`);
     } catch(e) { alert("Could not delete: " + e.message); }
