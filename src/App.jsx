@@ -3482,6 +3482,7 @@ const MONTH_NAMES = ["January","February","March","April","May","June","July","A
 function CalendarPage({ ctx }) {
   const { calendarEvents, saveCalendarEvent, deleteCalendarEvent, auth } = ctx;
   const [viewDate, setViewDate] = useState(new Date());
+  const [jumpToDate, setJumpToDate] = useState(null); // when set, highlights that date's events in the list below
   const [filterCat, setFilterCat] = useState("");
   const [modal, setModal] = useState(null);
   const blank = { title:"", description:"", event_date:todayStr(), end_date:"", category:"other", forms:[] };
@@ -3513,8 +3514,25 @@ function CalendarPage({ ctx }) {
   });
 
   const upcoming = calendarEvents
-    .filter(ev => (!filterCat || ev.category===filterCat) && (ev.end_date||ev.event_date) >= todayStr())
+    .filter(ev => {
+      if (filterCat && ev.category!==filterCat) return false;
+      const isUpcoming = (ev.end_date||ev.event_date) >= todayStr();
+      const matchesJump = jumpToDate && ev.event_date<=jumpToDate && (ev.end_date||ev.event_date)>=jumpToDate;
+      return isUpcoming || matchesJump;
+    })
     .sort((a,b)=>a.event_date.localeCompare(b.event_date));
+
+  // Scroll to and briefly highlight the tapped day's event(s) in the list
+  const eventRefs = useRef({});
+  useEffect(() => {
+    if (!jumpToDate) return;
+    const firstMatch = upcoming.find(ev => ev.event_date<=jumpToDate && (ev.end_date||ev.event_date)>=jumpToDate);
+    if (firstMatch && eventRefs.current[firstMatch.id]) {
+      eventRefs.current[firstMatch.id].scrollIntoView({ behavior:"smooth", block:"center" });
+    }
+    const t = setTimeout(()=>setJumpToDate(null), 2000); // clear the highlight after a moment
+    return () => clearTimeout(t);
+  }, [jumpToDate]);
 
   async function save() {
     if (!form.title?.trim()||!form.event_date) return;
@@ -3546,15 +3564,46 @@ function CalendarPage({ ctx }) {
             const key = dateStr(year,month,d);
             const dayEvents = eventsByDate[key]||[];
             const isToday = key===todayStr();
+            const hasEvents = dayEvents.length>0;
+            const dominantColor = hasEvents ? (EVENT_CATEGORIES[dayEvents[0].category]?.color||C.gray) : null;
+            const uniqueCats = [...new Set(dayEvents.map(ev=>ev.category))];
+
+            // Background priority: today always shows solid navy so it never
+            // gets lost, but if today ALSO has an event, a colored ring makes
+            // that visible too. A non-today day with events gets a tinted
+            // background in that event's category color, so it's obvious
+            // at a glance which dates have something on them.
+            let bg = "transparent";
+            let border = "2px solid transparent";
+            if (isToday) {
+              bg = C.navy;
+              if (hasEvents) border = `2px solid ${dominantColor}`;
+            } else if (hasEvents) {
+              bg = dominantColor + "28"; // soft tint, not a solid block
+              border = `1.5px solid ${dominantColor}60`;
+            }
+
             return (
-              <div key={i} style={{aspectRatio:"1",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",borderRadius:6,background:isToday?C.navy:"transparent",color:isToday?C.white:C.navy,fontSize:11,fontWeight:isToday?800:500,position:"relative"}}>
+              <button
+                key={i}
+                onClick={()=>hasEvents && setJumpToDate(key)}
+                style={{
+                  aspectRatio:"1", display:"flex", flexDirection:"column",
+                  alignItems:"center", justifyContent:"center",
+                  borderRadius:7, background:bg, border, boxSizing:"border-box",
+                  color:isToday?C.white:(hasEvents?dominantColor:C.navy),
+                  fontSize:11, fontWeight:(isToday||hasEvents)?800:500,
+                  position:"relative", cursor:hasEvents?"pointer":"default",
+                  padding:0,
+                }}
+              >
                 {d}
-                {dayEvents.length>0 && (
-                  <div style={{display:"flex",gap:1,marginTop:1,position:"absolute",bottom:2}}>
-                    {dayEvents.slice(0,3).map((ev,j)=><div key={j} style={{width:4,height:4,borderRadius:"50%",background:isToday?C.white:EVENT_CATEGORIES[ev.category]?.color||C.gray}}/>)}
+                {hasEvents && (
+                  <div style={{display:"flex",gap:1.5,marginTop:1,position:"absolute",bottom:2}}>
+                    {uniqueCats.slice(0,3).map((cat,j)=><div key={j} style={{width:4,height:4,borderRadius:"50%",background:isToday?C.white:EVENT_CATEGORIES[cat]?.color||C.gray}}/>)}
                   </div>
                 )}
-              </div>
+              </button>
             );
           })}
         </div>
@@ -3582,8 +3631,18 @@ function CalendarPage({ ctx }) {
           : upcoming.map((ev,i) => {
               const cat = EVENT_CATEGORIES[ev.category]||EVENT_CATEGORIES.other;
               const isRange = ev.end_date && ev.end_date!==ev.event_date;
+              const isJumped = jumpToDate && ev.event_date<=jumpToDate && (ev.end_date||ev.event_date)>=jumpToDate;
               return (
-                <div key={ev.id} style={{padding:"10px 12px",borderBottom:`1px solid ${C.grayBg}`,background:i%2===0?C.white:C.grayBg,borderLeft:`4px solid ${cat.color}`}}>
+                <div
+                  key={ev.id}
+                  ref={el => { if(el) eventRefs.current[ev.id]=el; }}
+                  style={{
+                    padding:"10px 12px", borderBottom:`1px solid ${C.grayBg}`,
+                    background:isJumped?cat.color+"22":(i%2===0?C.white:C.grayBg),
+                    borderLeft:`4px solid ${cat.color}`,
+                    transition:"background 0.6s ease",
+                  }}
+                >
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontWeight:700,color:C.navy,fontSize:13}}>{cat.icon} {ev.title}</div>
