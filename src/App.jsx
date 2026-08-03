@@ -63,7 +63,7 @@ const gradeCol = g =>
 
 // Compress photo using canvas before storing in DB
 function compressPhoto(base64) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     if (!base64 || !base64.startsWith("data:")) { resolve(null); return; }
     const img = new Image();
     img.onload = () => {
@@ -76,7 +76,7 @@ function compressPhoto(base64) {
       canvas.getContext("2d").drawImage(img, 0, 0, w, h);
       resolve(canvas.toDataURL("image/jpeg", 0.85));
     };
-    img.onerror = () => resolve(null);
+    img.onerror = () => reject(new Error("That file couldn't be loaded as an image."));
     img.src = base64;
   });
 }
@@ -1322,15 +1322,26 @@ function RegistrationPage({ ctx }) {
             <div style={{display:"flex",alignItems:"flex-start",gap:13,marginBottom:11}}>
               <div style={{flexShrink:0,textAlign:"center"}}>
                 <PhotoBox photo={form.photo_url} size={[78,94]}/>
-                <input ref={photoInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{
+                <input ref={photoInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{
                   const f=e.target.files[0]; if(!f) return;
+                  const inputEl = e.target;
                   const r=new FileReader();
-                  r.onload=async ev=>{
-                    const compressed = await compressPhoto(ev.target.result);
-                    setForm(prev=>({...prev,photo_url:compressed}));
+                  r.onload = async ev => {
+                    try {
+                      const compressed = await compressPhoto(ev.target.result);
+                      setForm(prev=>({...prev,photo_url:compressed}));
+                    } catch(err) {
+                      console.error("Photo compress error:", err);
+                      alert("Could not process that photo. Please try a different image.");
+                    } finally {
+                      inputEl.value=""; // reset only after the read+compress is fully done, so choosing the same file again works
+                    }
+                  };
+                  r.onerror = () => {
+                    alert("Could not read that photo. Please try again.");
+                    inputEl.value="";
                   };
                   r.readAsDataURL(f);
-                  e.target.value=""; // allow choosing the same file again after Remove
                 }}/>
                 <button type="button" onClick={()=>photoInputRef.current?.click()} style={{display:"block",width:"100%",marginTop:4,fontSize:10,color:C.navyMid,cursor:"pointer",fontWeight:700,background:C.grayBg,border:"none",borderRadius:4,padding:"5px 5px",textAlign:"center"}}>
                   📷 {form.photo_url?"Change":"Upload"}
@@ -1830,13 +1841,24 @@ function StudentsPage({ ctx }) {
               <PhotoBox photo={form.photo_url} size={[62,76]}/>
               <input ref={photoInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{
                 const f=e.target.files[0]; if(!f) return;
+                const inputEl = e.target;
                 const r=new FileReader();
-                r.onload=async ev=>{
-                  const compressed = await compressPhoto(ev.target.result);
-                  setForm(prev=>({...prev,photo_url:compressed}));
+                r.onload = async ev => {
+                  try {
+                    const compressed = await compressPhoto(ev.target.result);
+                    setForm(prev=>({...prev,photo_url:compressed}));
+                  } catch(err) {
+                    console.error("Photo compress error:", err);
+                    alert("Could not process that photo. Please try a different image.");
+                  } finally {
+                    inputEl.value="";
+                  }
+                };
+                r.onerror = () => {
+                  alert("Could not read that photo. Please try again.");
+                  inputEl.value="";
                 };
                 r.readAsDataURL(f);
-                e.target.value="";
               }}/>
               <button type="button" onClick={()=>photoInputRef.current?.click()} style={{display:"block",width:"100%",marginTop:3,fontSize:9,color:C.navyMid,cursor:"pointer",fontWeight:700,background:C.grayBg,border:"none",borderRadius:4,padding:"3px 5px",textAlign:"center"}}>
                 📷 Photo
