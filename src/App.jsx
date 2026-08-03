@@ -228,6 +228,7 @@ const navItems = [
   { key:"reports",      label:"Report Cards", icon:"📄", roles:["admin","teacher"] },
   { key:"fees",         label:"School Fees",  icon:"💰", roles:["admin"] },
   { key:"notices",      label:"Notices",      icon:"📢", roles:["admin","teacher"] },
+  { key:"calendar",     label:"Calendar",     icon:"📅", roles:["admin","teacher"] },
   { key:"profile",      label:"My Profile",   icon:"👤", roles:["admin","teacher"] },
 ];
 
@@ -297,6 +298,7 @@ export default function App() {
   const [marksMap,   setMarksMap]   = useState({}); // key → mark record
   const [feesMap,    setFeesMap]    = useState({}); // studentId → {paid,total}
   const [attendanceMap, setAttendanceMap] = useState({}); // "studentId-date" → {status}
+  const [calendarEvents, setCalendarEvents] = useState([]);
   const [notices,    setNotices]    = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [dbError,    setDbError]    = useState(null);
@@ -332,7 +334,7 @@ export default function App() {
     try {
       const [
         { data: st }, { data: tc }, { data: mk },
-        { data: fe }, { data: nt }, { data: at }
+        { data: fe }, { data: nt }, { data: at }, { data: cal }
       ] = await Promise.all([
         supabase.from("students").select("*").order("form").order("name"),
         supabase.from("teachers").select("*").order("name"),
@@ -340,6 +342,7 @@ export default function App() {
         supabase.from("fees").select("*"),
         supabase.from("notices").select("*").order("posted_date", { ascending: false }),
         supabase.from("attendance").select("*"),
+        supabase.from("calendar_events").select("*").order("event_date"),
       ]);
       setStudents(st || []);
       setTeachers(tc || []);
@@ -356,6 +359,7 @@ export default function App() {
       (at||[]).forEach(a => { am[`${a.student_id}-${a.date}`] = a; });
       setAttendanceMap(am);
       setNotices(nt || []);
+      setCalendarEvents(cal || []);
       setDbError(null);
     } catch(e) {
       setDbError(e.message);
@@ -372,6 +376,7 @@ export default function App() {
       .on("postgres_changes", { event:"*", schema:"public", table:"fees"     }, () => loadAll())
       .on("postgres_changes", { event:"*", schema:"public", table:"notices"  }, () => loadAll())
       .on("postgres_changes", { event:"*", schema:"public", table:"attendance" }, () => loadAll())
+      .on("postgres_changes", { event:"*", schema:"public", table:"calendar_events" }, () => loadAll())
       .on("postgres_changes", { event:"*", schema:"public", table:"teachers" }, () => loadAll())
       .subscribe();
     return () => supabase.removeChannel(sub);
@@ -524,6 +529,22 @@ export default function App() {
     await loadAll();
   }
 
+  async function saveCalendarEvent(ev) {
+    const row = {
+      title: ev.title, description: ev.description||null,
+      event_date: ev.event_date, end_date: ev.end_date||null,
+      category: ev.category||"other", forms: ev.forms||[],
+    };
+    if (ev.id) { await supabase.from("calendar_events").update(row).eq("id", ev.id); }
+    else       { await supabase.from("calendar_events").insert(row); }
+    await loadAll();
+  }
+
+  async function deleteCalendarEvent(id) {
+    await supabase.from("calendar_events").delete().eq("id", id);
+    await loadAll();
+  }
+
   // ── Current user info ───────────────────────────────────────────────────────
   const currentTeacher = teachers.find(t => t.email === session?.user?.email);
   const currentUser = {
@@ -549,9 +570,10 @@ export default function App() {
 
   const ctx = {
     auth: { user: currentUser, role: userRole||"teacher" },
-    students, teachers, marksMap, feesMap, notices, attendanceMap,
+    students, teachers, marksMap, feesMap, notices, attendanceMap, calendarEvents,
     saveStudent, deleteStudent, saveTeacher, saveMark,
     saveFee, saveNotice, deleteNotice, loadAll, saveAttendanceBulk,
+    saveCalendarEvent, deleteCalendarEvent,
   };
 
   return (
@@ -621,6 +643,7 @@ export default function App() {
           {page==="reports"      && <ReportsPage      ctx={ctx}/>}
           {page==="fees"         && ctx.auth.role==="admin" && <FeesPage        ctx={ctx}/>}
           {page==="notices"      && <NoticesPage      ctx={ctx}/>}
+          {page==="calendar"     && <CalendarPage     ctx={ctx}/>}
           {page==="profile"      && <ProfilePage      ctx={ctx}/>}
         </>}
       </div>
@@ -3439,6 +3462,174 @@ function NoticesPage({ ctx }) {
           <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:12}}>
             <Btn onClick={()=>setModal(null)} outline>Cancel</Btn>
             <Btn onClick={save}>{modal==="add"?"Post":"Save"}</Btn>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ─── Calendar ──────────────────────────────────────────────────────────────────
+const EVENT_CATEGORIES = {
+  exam:     { label:"Exam",     color:C.red,    icon:"📝" },
+  holiday:  { label:"Holiday",  color:C.green,  icon:"🏖️" },
+  meeting:  { label:"Meeting",  color:C.navyMid,icon:"👥" },
+  deadline: { label:"Deadline", color:C.gold,   icon:"⏰" },
+  other:    { label:"Other",    color:C.gray,   icon:"📌" },
+};
+const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+function CalendarPage({ ctx }) {
+  const { calendarEvents, saveCalendarEvent, deleteCalendarEvent, auth } = ctx;
+  const [viewDate, setViewDate] = useState(new Date());
+  const [filterCat, setFilterCat] = useState("");
+  const [modal, setModal] = useState(null);
+  const blank = { title:"", description:"", event_date:todayStr(), end_date:"", category:"other", forms:[] };
+  const [form, setForm] = useState(blank);
+  const [saving, setSaving] = useState(false);
+
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  const firstOfMonth = new Date(year, month, 1);
+  const startWeekday = firstOfMonth.getDay(); // 0=Sun
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+
+  function dateStr(y,m,d) { return `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`; }
+
+  const eventsByDate = {};
+  calendarEvents.forEach(ev => {
+    if (filterCat && ev.category!==filterCat) return;
+    const start = ev.event_date;
+    const end = ev.end_date || ev.event_date;
+    // Mark every day in a multi-day range, not just the start
+    let cur = new Date(start+"T00:00:00");
+    const endD = new Date(end+"T00:00:00");
+    while (cur <= endD) {
+      const key = cur.toISOString().slice(0,10);
+      if (!eventsByDate[key]) eventsByDate[key]=[];
+      eventsByDate[key].push(ev);
+      cur.setDate(cur.getDate()+1);
+    }
+  });
+
+  const upcoming = calendarEvents
+    .filter(ev => (!filterCat || ev.category===filterCat) && (ev.end_date||ev.event_date) >= todayStr())
+    .sort((a,b)=>a.event_date.localeCompare(b.event_date));
+
+  async function save() {
+    if (!form.title?.trim()||!form.event_date) return;
+    setSaving(true);
+    try { await saveCalendarEvent(form); setModal(null); }
+    catch(e) { alert("Error: "+e.message); }
+    setSaving(false);
+  }
+
+  const cells = [];
+  for (let i=0;i<startWeekday;i++) cells.push(null);
+  for (let d=1;d<=daysInMonth;d++) cells.push(d);
+
+  return (
+    <div>
+      {/* Month navigator */}
+      <div style={{background:C.white,borderRadius:10,padding:12,marginBottom:11,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+          <button onClick={()=>setViewDate(new Date(year,month-1,1))} style={{background:C.grayBg,border:"none",borderRadius:8,width:32,height:32,fontSize:16,cursor:"pointer",color:C.navy}}>‹</button>
+          <div style={{fontWeight:800,color:C.navy,fontSize:14}}>{MONTH_NAMES[month]} {year}</div>
+          <button onClick={()=>setViewDate(new Date(year,month+1,1))} style={{background:C.grayBg,border:"none",borderRadius:8,width:32,height:32,fontSize:16,cursor:"pointer",color:C.navy}}>›</button>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}>
+          {["S","M","T","W","T","F","S"].map((d,i)=><div key={i} style={{textAlign:"center",fontSize:10,color:C.gray,fontWeight:700}}>{d}</div>)}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
+          {cells.map((d,i) => {
+            if (d===null) return <div key={i}/>;
+            const key = dateStr(year,month,d);
+            const dayEvents = eventsByDate[key]||[];
+            const isToday = key===todayStr();
+            return (
+              <div key={i} style={{aspectRatio:"1",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",borderRadius:6,background:isToday?C.navy:"transparent",color:isToday?C.white:C.navy,fontSize:11,fontWeight:isToday?800:500,position:"relative"}}>
+                {d}
+                {dayEvents.length>0 && (
+                  <div style={{display:"flex",gap:1,marginTop:1,position:"absolute",bottom:2}}>
+                    {dayEvents.slice(0,3).map((ev,j)=><div key={j} style={{width:4,height:4,borderRadius:"50%",background:isToday?C.white:EVENT_CATEGORIES[ev.category]?.color||C.gray}}/>)}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Category filter */}
+      <div style={{display:"flex",gap:6,marginBottom:11,flexWrap:"wrap"}}>
+        <button onClick={()=>setFilterCat("")} style={{padding:"5px 10px",borderRadius:14,border:`1.5px solid ${!filterCat?C.navy:C.grayLight}`,background:!filterCat?C.navy:C.white,color:!filterCat?C.white:C.gray,fontSize:11,fontWeight:700,cursor:"pointer"}}>All</button>
+        {Object.entries(EVENT_CATEGORIES).map(([k,c])=>(
+          <button key={k} onClick={()=>setFilterCat(k)} style={{padding:"5px 10px",borderRadius:14,border:`1.5px solid ${filterCat===k?c.color:C.grayLight}`,background:filterCat===k?c.color:C.white,color:filterCat===k?C.white:C.gray,fontSize:11,fontWeight:700,cursor:"pointer"}}>{c.icon} {c.label}</button>
+        ))}
+      </div>
+
+      {auth.role==="admin" && (
+        <div style={{display:"flex",justifyContent:"flex-end",marginBottom:11}}>
+          <Btn onClick={()=>{setForm(blank);setModal("add");}}>+ Add Event</Btn>
+        </div>
+      )}
+
+      {/* Upcoming list */}
+      <div style={{fontSize:12,fontWeight:700,color:C.gray,marginBottom:7}}>Upcoming</div>
+      <div style={{background:C.white,borderRadius:10,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+        {!upcoming.length
+          ? <Empty text="No upcoming events."/>
+          : upcoming.map((ev,i) => {
+              const cat = EVENT_CATEGORIES[ev.category]||EVENT_CATEGORIES.other;
+              const isRange = ev.end_date && ev.end_date!==ev.event_date;
+              return (
+                <div key={ev.id} style={{padding:"10px 12px",borderBottom:`1px solid ${C.grayBg}`,background:i%2===0?C.white:C.grayBg,borderLeft:`4px solid ${cat.color}`}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontWeight:700,color:C.navy,fontSize:13}}>{cat.icon} {ev.title}</div>
+                      <div style={{fontSize:11,color:C.gray,marginTop:2}}>
+                        {fmtDate(ev.event_date)}{isRange?` – ${fmtDate(ev.end_date)}`:""}
+                        {ev.forms?.length>0 && <span> · {ev.forms.join(", ")}</span>}
+                      </div>
+                      {ev.description && <div style={{fontSize:11,color:C.gray,marginTop:3}}>{ev.description}</div>}
+                    </div>
+                    {auth.role==="admin" && (
+                      <div style={{display:"flex",gap:5,flexShrink:0}}>
+                        <SmBtn onClick={()=>{setForm({...ev});setModal(ev);}} color={C.green}>Edit</SmBtn>
+                        <SmBtn onClick={()=>{if(window.confirm(`Delete "${ev.title}"?`))deleteCalendarEvent(ev.id);}} color={C.red}>Del</SmBtn>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+        }
+      </div>
+
+      {modal && (
+        <Modal title={modal==="add"?"Add Calendar Event":"Edit Event"} onClose={()=>setModal(null)}>
+          <Fr label="Title"><input style={inp} value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))}/></Fr>
+          <Fr label="Category">
+            <select style={inp} value={form.category} onChange={e=>setForm(f=>({...f,category:e.target.value}))}>
+              {Object.entries(EVENT_CATEGORIES).map(([k,c])=><option key={k} value={k}>{c.icon} {c.label}</option>)}
+            </select>
+          </Fr>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
+            <Fr label="Start Date"><input style={inp} type="date" value={form.event_date} onChange={e=>setForm(f=>({...f,event_date:e.target.value}))}/></Fr>
+            <Fr label="End Date (optional)"><input style={inp} type="date" value={form.end_date||""} onChange={e=>setForm(f=>({...f,end_date:e.target.value}))}/></Fr>
+          </div>
+          <Fr label="Description (optional)"><textarea style={{...inp,minHeight:60,resize:"vertical"}} value={form.description||""} onChange={e=>setForm(f=>({...f,description:e.target.value}))}/></Fr>
+          <div style={{marginTop:4,marginBottom:8}}>
+            <label style={lbl}>Applies to (leave blank for whole school)</label>
+            <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:5}}>
+              {FORMS.map(f => (
+                <button key={f} onClick={()=>setForm(prev=>({...prev,forms:prev.forms?.includes(f)?prev.forms.filter(x=>x!==f):[...(prev.forms||[]),f]}))} style={{padding:"4px 8px",borderRadius:12,border:`1px solid ${form.forms?.includes(f)?C.gold:C.grayLight}`,background:form.forms?.includes(f)?C.gold:C.white,color:form.forms?.includes(f)?C.white:C.gray,fontSize:11,cursor:"pointer"}}>{f}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:12}}>
+            <Btn onClick={()=>setModal(null)} outline>Cancel</Btn>
+            <Btn onClick={save} disabled={saving}>{saving?"Saving…":modal==="add"?"Add Event":"Save"}</Btn>
           </div>
         </Modal>
       )}
