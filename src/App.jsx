@@ -122,7 +122,7 @@ function domPrint(id, html, size="A4 portrait", margin="8mm") {
     window.print();
     setTimeout(()=>{ document.getElementById(id)?.remove(); document.getElementById(id+"-s")?.remove(); }, 2500);
   }, 300);
-}
+} 
 
 // Export an array of row-objects to a downloadable .xlsx file.
 // rows: array of plain objects (keys become column headers)
