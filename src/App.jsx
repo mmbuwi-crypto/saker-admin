@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-//  SAKER BAPTIST COLLEGE — Main App (Supabase backend)
+//  SAKER COMPREHENSIVE COLLEGE BAWE — Main App (Supabase backend)
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "./supabase.js";
@@ -122,7 +122,7 @@ function domPrint(id, html, size="A4 portrait", margin="8mm") {
     window.print();
     setTimeout(()=>{ document.getElementById(id)?.remove(); document.getElementById(id+"-s")?.remove(); }, 2500);
   }, 300);
-} 
+}
 
 // Export an array of row-objects to a downloadable .xlsx file.
 // rows: array of plain objects (keys become column headers)
@@ -188,7 +188,7 @@ function printPaymentSlip(sub, student) {
     <div style="max-width:360px;margin:0 auto;border:2px solid #0D2340;border-radius:10px;overflow:hidden">
       <div style="background:#0D2340;color:#fff;padding:14px;text-align:center">
         <div style="font-size:26px">🎓</div>
-        <h2 style="font-size:14px;font-weight:900;margin:4px 0">SAKER BAPTIST COLLEGE</h2>
+        <h2 style="font-size:14px;font-weight:900;margin:4px 0">SAKER COMPREHENSIVE COLLEGE BAWE</h2>
         <p style="font-size:9px;opacity:.65;margin:0">NGEPTANG · NONI · NW REGION</p>
         <div style="background:#15803D;display:inline-block;padding:2px 12px;border-radius:10px;font-size:10px;font-weight:800;margin-top:7px">FEE PAYMENT SLIP</div>
       </div>
@@ -560,7 +560,7 @@ export default function App() {
   if (session === undefined) return (
     <div style={{minHeight:"100vh",background:C.navy,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:14}}>
       <div style={{fontSize:48}}>🎓</div>
-      <div style={{color:C.white,fontWeight:800,fontSize:18}}>Saker Baptist College</div>
+      <div style={{color:C.white,fontWeight:800,fontSize:18}}>Saker Comprehensive College Bawe</div>
       <div style={{color:C.goldLight,fontSize:13}}>Starting up…</div>
     </div>
   );
@@ -583,7 +583,7 @@ export default function App() {
         <div style={{display:"flex",alignItems:"center",gap:9}}>
           <span style={{fontSize:20}}>🎓</span>
           <div>
-            <div style={{color:C.white,fontWeight:800,fontSize:13,lineHeight:1.2}}>Saker Baptist College</div>
+            <div style={{color:C.white,fontWeight:800,fontSize:13,lineHeight:1.2}}>Saker Comprehensive College Bawe</div>
             <div style={{color:C.goldLight,fontSize:9,letterSpacing:1}}>NGEPTANG · NONI</div>
           </div>
         </div>
@@ -713,7 +713,7 @@ function LoginScreen({ onLogin, onRequestReset, onOpenPortal }) {
           <div style={{textAlign:"center",marginBottom:24}}>
             <div style={{width:70,height:70,borderRadius:"50%",background:C.gold,margin:"0 auto 12px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,boxShadow:"0 0 0 5px rgba(201,150,42,0.25)"}}>🔑</div>
             <h1 style={{color:C.white,fontSize:20,fontWeight:900,margin:0}}>Reset Password</h1>
-            <p style={{color:C.goldLight,fontSize:11,margin:"4px 0 0",letterSpacing:1.5}}>SAKER BAPTIST COLLEGE</p>
+            <p style={{color:C.goldLight,fontSize:11,margin:"4px 0 0",letterSpacing:1.5}}>SAKER COMPREHENSIVE COLLEGE BAWE</p>
           </div>
           <div style={{background:C.white,borderRadius:14,padding:22,boxShadow:"0 20px 60px rgba(0,0,0,0.35)"}}>
             <h2 style={{margin:"0 0 10px",fontSize:16,fontWeight:800,color:C.navy}}>Forgot your password?</h2>
@@ -736,7 +736,7 @@ function LoginScreen({ onLogin, onRequestReset, onOpenPortal }) {
       <div style={{width:"100%",maxWidth:380}}>
         <div style={{textAlign:"center",marginBottom:24}}>
           <div style={{width:70,height:70,borderRadius:"50%",background:C.gold,margin:"0 auto 12px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,boxShadow:"0 0 0 5px rgba(201,150,42,0.25)"}}>🎓</div>
-          <h1 style={{color:C.white,fontSize:20,fontWeight:900,margin:0}}>Saker Baptist College</h1>
+          <h1 style={{color:C.white,fontSize:20,fontWeight:900,margin:0}}>Saker Comprehensive College Bawe</h1>
           <p style={{color:C.goldLight,fontSize:11,margin:"4px 0 0",letterSpacing:1.5}}>NGEPTANG · NONI</p>
           <p style={{color:"rgba(255,255,255,0.45)",fontSize:10,margin:"5px 0 0"}}>School Administrative Portal · 2026/2027</p>
         </div>
@@ -804,7 +804,7 @@ function SetNewPasswordScreen({ onSetPassword, onCancel }) {
         <div style={{textAlign:"center",marginBottom:24}}>
           <div style={{width:70,height:70,borderRadius:"50%",background:C.gold,margin:"0 auto 12px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,boxShadow:"0 0 0 5px rgba(201,150,42,0.25)"}}>🔑</div>
           <h1 style={{color:C.white,fontSize:20,fontWeight:900,margin:0}}>Set New Password</h1>
-          <p style={{color:C.goldLight,fontSize:11,margin:"4px 0 0",letterSpacing:1.5}}>SAKER BAPTIST COLLEGE</p>
+          <p style={{color:C.goldLight,fontSize:11,margin:"4px 0 0",letterSpacing:1.5}}>SAKER COMPREHENSIVE COLLEGE BAWE</p>
         </div>
         <div style={{background:C.white,borderRadius:14,padding:22,boxShadow:"0 20px 60px rgba(0,0,0,0.35)"}}>
           <Fr label="New Password">
@@ -883,7 +883,7 @@ function ParentPortal({ onBack }) {
         <div style={{textAlign:"center",marginBottom:24}}>
           <div style={{width:70,height:70,borderRadius:"50%",background:C.gold,margin:"0 auto 12px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,boxShadow:"0 0 0 5px rgba(201,150,42,0.25)"}}>👨‍👩‍👧</div>
           <h1 style={{color:C.white,fontSize:20,fontWeight:900,margin:0}}>Parent Portal</h1>
-          <p style={{color:C.goldLight,fontSize:11,margin:"4px 0 0",letterSpacing:1.5}}>SAKER BAPTIST COLLEGE</p>
+          <p style={{color:C.goldLight,fontSize:11,margin:"4px 0 0",letterSpacing:1.5}}>SAKER COMPREHENSIVE COLLEGE BAWE</p>
           <p style={{color:"rgba(255,255,255,0.45)",fontSize:10,margin:"5px 0 0"}}>View your child's marks, attendance & fees</p>
         </div>
         <div style={{background:C.white,borderRadius:14,padding:22,boxShadow:"0 20px 60px rgba(0,0,0,0.35)"}}>
@@ -1112,7 +1112,7 @@ function PayFeesPanel({ matricule, pin, balance, onSubmitted }) {
           </div>
           <ol style={{fontSize:12,color:C.gray,paddingLeft:18,marginBottom:14,lineHeight:1.8}}>
             <li>Dial the code above on the phone paying via MTN Mobile Money</li>
-            <li>Confirm the payment of <strong>{Number(amount).toLocaleString()} FCFA</strong> to Saker Baptist College</li>
+            <li>Confirm the payment of <strong>{Number(amount).toLocaleString()} FCFA</strong> to Saker Comprehensive College Bawe</li>
             <li>Take a screenshot of the confirmation message</li>
             <li>Come back here and upload it</li>
           </ol>
@@ -1163,7 +1163,7 @@ function DashboardPage({ ctx, setPage }) {
     <div>
       <div style={{background:`linear-gradient(135deg,${C.navy},${C.navyMid})`,borderRadius:12,padding:"18px",marginBottom:16,color:C.white}}>
         <h2 style={{margin:0,fontSize:17,fontWeight:800}}>Welcome, {auth.user.name.split(" ")[0]}! 👋</h2>
-        <p style={{margin:"4px 0 0",color:"rgba(255,255,255,0.6)",fontSize:12}}>Academic Year 2026/2027 · Saker Baptist College</p>
+        <p style={{margin:"4px 0 0",color:"rgba(255,255,255,0.6)",fontSize:12}}>Academic Year 2026/2027 · Saker Comprehensive College Bawe</p>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
         {cards.map(c => (
@@ -1267,7 +1267,7 @@ function RegistrationPage({ ctx }) {
       <div style="max-width:360px;margin:0 auto;border:2px solid #0D2340;border-radius:10px;overflow:hidden">
         <div style="background:#0D2340;color:#fff;padding:14px;text-align:center">
           <div style="font-size:26px">🎓</div>
-          <h2 style="font-size:14px;font-weight:900;margin:4px 0">SAKER BAPTIST COLLEGE</h2>
+          <h2 style="font-size:14px;font-weight:900;margin:4px 0">SAKER COMPREHENSIVE COLLEGE BAWE</h2>
           <p style="font-size:9px;opacity:.65;margin:0">NGEPTANG · NONI · NW REGION</p>
           <div style="background:#C9962A;display:inline-block;padding:2px 12px;border-radius:10px;font-size:10px;font-weight:800;margin-top:7px">REGISTRATION RECEIPT</div>
           ${receipt.reg_fee===REG_LATE?'<div style="margin-top:4px;background:#fbbf24;color:#78350f;display:inline-block;padding:2px 9px;border-radius:9px;font-size:9px;font-weight:700">LATE REGISTRATION</div>':""}
@@ -1422,7 +1422,7 @@ function RegistrationPage({ ctx }) {
               <div style={{background:C.white,borderRadius:11,overflow:"hidden",border:`2px solid ${C.navy}`,maxWidth:360,margin:"0 auto 13px"}}>
                 <div style={{background:`linear-gradient(135deg,${C.navy},${C.navyMid})`,color:C.white,padding:"14px",textAlign:"center"}}>
                   <div style={{fontSize:26}}>🎓</div>
-                  <h2 style={{margin:"4px 0",fontSize:14,fontWeight:900}}>SAKER BAPTIST COLLEGE</h2>
+                  <h2 style={{margin:"4px 0",fontSize:14,fontWeight:900}}>SAKER COMPREHENSIVE COLLEGE BAWE</h2>
                   <p style={{margin:0,opacity:.6,fontSize:9}}>NGEPTANG · NONI · NW REGION</p>
                   <div style={{marginTop:7,background:C.gold,display:"inline-block",borderRadius:11,padding:"2px 12px",fontSize:10,fontWeight:800}}>REGISTRATION RECEIPT</div>
                 </div>
@@ -2713,7 +2713,7 @@ function ReportsPage({ ctx }) {
 
 <!-- SCHOOL NAME -->
 <div style="background:#1a56a0;color:#fff;text-align:center;padding:5px 4px;margin-bottom:3px">
-  <div style="font-size:15px;font-weight:900;letter-spacing:.5px">SAKER BAPTIST COLLAGE(SBC)-BAWE</div>
+  <div style="font-size:15px;font-weight:900;letter-spacing:.5px">SAKER COMPREHENSIVE COLLEGE BAWE</div>
   <div style="font-size:8px;margin-top:1px;opacity:.85">Motto: Quality, Discipline, and Excellence education</div>
 </div>
 
@@ -2835,7 +2835,7 @@ function ReportsPage({ ctx }) {
 </table>
 
 <div style="text-align:center;font-size:7px;color:#888;margin-top:5px;border-top:1px dashed #ccc;padding-top:3px">
-  Saker Baptist Collage (SBC)-Bawe · ${sel.year} · Printed: ${new Date().toLocaleDateString("en-GB")}
+  Saker Comprehensive College Bawe · ${sel.year} · Printed: ${new Date().toLocaleDateString("en-GB")}
 </div>
 </div></body></html>`;
   }
@@ -2934,7 +2934,7 @@ function ReportsPage({ ctx }) {
 
             {/* School banner */}
             <div style={{background:"#1a56a0",color:"#fff",textAlign:"center",padding:"6px 4px"}}>
-              <div style={{fontSize:13,fontWeight:900,letterSpacing:.5}}>SAKER BAPTIST COLLAGE(SBC)-BAWE</div>
+              <div style={{fontSize:13,fontWeight:900,letterSpacing:.5}}>SAKER COMPREHENSIVE COLLEGE BAWE</div>
               <div style={{fontSize:7.5,marginTop:1,opacity:.85}}>Motto: Quality, Discipline, and Excellence education</div>
             </div>
 
@@ -3259,7 +3259,7 @@ function FeesPage({ ctx }) {
     const html   = `<div style="font-family:Segoe UI,Arial,sans-serif;padding:12px;max-width:780px;margin:0 auto;color:#0D2340">
       <div style="text-align:center;margin-bottom:12px">
         <div style="font-size:22px">🎓</div>
-        <h2 style="font-size:15px;font-weight:900;margin:3px 0">SAKER BAPTIST COLLEGE</h2>
+        <h2 style="font-size:15px;font-weight:900;margin:3px 0">SAKER COMPREHENSIVE COLLEGE BAWE</h2>
         <p style="font-size:9px;color:#6B7280;margin:0">NGEPTANG · NONI · NW REGION</p>
         <div style="margin-top:7px;background:#B91C1C;display:inline-block;padding:3px 16px;border-radius:10px;color:#fff;font-size:11px;font-weight:800">SCHOOL FEES DEFAULTER LIST</div>
         <p style="font-size:9.5px;color:#374151;margin-top:5px">Below <strong>${threshold}%</strong> · Total fee: <strong>${TOTAL_FEE.toLocaleString()} FCFA</strong> · Academic Year 2026/2027 · ${new Date().toLocaleDateString("en-GB")}</p>
@@ -3270,7 +3270,7 @@ function FeesPage({ ctx }) {
         <div style="background:#FFFBEB;border-radius:6px;padding:8px;border-left:3px solid #C9962A"><div style="font-size:17px;font-weight:900;color:#C9962A">${totPd.toLocaleString()} F</div><div style="font-size:9px;color:#6B7280">Partially Paid</div></div>
       </div>
       ${sections}
-      <p style="font-size:8px;color:#9CA3AF;text-align:center;margin-top:10px">Confidential — administrative use only · Saker Baptist College</p>
+      <p style="font-size:8px;color:#9CA3AF;text-align:center;margin-top:10px">Confidential — administrative use only · Saker Comprehensive College Bawe</p>
     </div>`;
     domPrint("sbc-fees", html, "A4 portrait", "7mm");
   }
