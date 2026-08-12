@@ -126,7 +126,7 @@ function domPrint(id, html, size="A4 portrait", margin="8mm") {
 
 // Export an array of row-objects to a downloadable .xlsx file.
 // rows: array of plain objects (keys become column headers)
-// filename: e.g. "SBC-Students-2026-2027.xlsx"
+// filename: e.g. "SCCB-Students-2026-2027.xlsx"
 // sheetName: tab name inside the workbook (max 31 chars, Excel limit)
 function exportToExcel(rows, filename, sheetName="Sheet1") {
   if (!rows || !rows.length) { alert("Nothing to export."); return; }
@@ -888,7 +888,7 @@ function ParentPortal({ onBack }) {
         </div>
         <div style={{background:C.white,borderRadius:14,padding:22,boxShadow:"0 20px 60px rgba(0,0,0,0.35)"}}>
           <Fr label="Student Matricule">
-            <input style={inp} placeholder="e.g. SBC01001" value={matricule} onChange={e=>setMatricule(e.target.value)} disabled={isLocked} onKeyDown={e=>e.key==="Enter"&&lookup()}/>
+            <input style={inp} placeholder="e.g. SCCB01001" value={matricule} onChange={e=>setMatricule(e.target.value)} disabled={isLocked} onKeyDown={e=>e.key==="Enter"&&lookup()}/>
           </Fr>
           <Fr label="4-Digit PIN">
             <input style={{...inp,letterSpacing:4,fontWeight:700,textAlign:"center"}} type="tel" maxLength={4} placeholder="••••" value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,"").slice(0,4))} disabled={isLocked} onKeyDown={e=>e.key==="Enter"&&lookup()}/>
@@ -1223,7 +1223,7 @@ function RegistrationPage({ ctx }) {
     setSaving(true);
     const fNum = form.form.replace("Form ","");
     const n    = students.filter(s=>s.form===form.form).length + 1;
-    const id   = `SBC0${fNum.padStart(2,"0")}${String(n).padStart(3,"0")}`;
+    const id   = `SCCB0${fNum.padStart(2,"0")}${String(n).padStart(3,"0")}`;
     const rec  = `RCP-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
     const pin  = String(Math.floor(1000 + Math.random()*9000)); // 4-digit parent portal PIN
     try {
@@ -1472,7 +1472,7 @@ function BulkImportPanel({ students, saveStudent, auth, onDone }) {
       { "Name":"John Nkeng Tabi", "Form":"Form 1", "Gender":"Male",   "Date of Birth":"2013-04-15", "Parent/Guardian":"Mrs. Tabi", "Phone":"677123456", "Address":"Ngeptang" },
       { "Name":"Grace Fon Achu",  "Form":"Form 2", "Gender":"Female", "Date of Birth":"2012-09-02", "Parent/Guardian":"Mr. Achu",  "Phone":"677987654", "Address":"Noni" },
     ];
-    exportToExcel(sample, "SBC-Bulk-Import-Template.xlsx", "Students");
+    exportToExcel(sample, "SCCB-Bulk-Import-Template.xlsx", "Students");
   }
 
   function normalizeGender(v) {
@@ -1545,7 +1545,7 @@ function BulkImportPanel({ students, saveStudent, auth, onDone }) {
           if (form && !errors.length) {
             formCounts[form] = (formCounts[form]||0) + 1;
             const fNum = form.replace("Form ","");
-            id = `SBC0${fNum.padStart(2,"0")}${String(formCounts[form]).padStart(3,"0")}`;
+            id = `SCCB0${fNum.padStart(2,"0")}${String(formCounts[form]).padStart(3,"0")}`;
           }
 
           return { rowNum:idx+2, name, form, gender, dob, parent, phone, address, id, errors, valid: errors.length===0 };
@@ -1718,14 +1718,14 @@ function StudentsPage({ ctx }) {
     if (filter.form) {
       // A single form is already selected — one sheet is enough
       const rows = filtered.map(studentExportRow);
-      exportToExcel(rows, `SBC-Students-${filter.form.replace(" ","")}-${sel_year_safe()}.xlsx`, filter.form);
+      exportToExcel(rows, `SCCB-Students-${filter.form.replace(" ","")}-${sel_year_safe()}.xlsx`, filter.form);
     } else {
       // No form filter — split into one sheet per class, all in one workbook
       const sheets = FORMS.map(f => ({
         name: f,
         rows: filtered.filter(s=>s.form===f).map(studentExportRow),
       }));
-      exportToExcelMultiSheet(sheets, `SBC-Students-AllForms-${sel_year_safe()}.xlsx`);
+      exportToExcelMultiSheet(sheets, `SCCB-Students-AllForms-${sel_year_safe()}.xlsx`);
     }
   }
   function sel_year_safe(){ return "2026-2027"; }
@@ -1737,7 +1737,7 @@ function StudentsPage({ ctx }) {
       if (modal==="add") {
         const fNum = form.form.replace("Form ","");
         const n    = students.filter(s=>s.form===form.form).length + 1;
-        const id   = `SBC0${fNum.padStart(2,"0")}${String(n).padStart(3,"0")}`;
+        const id   = `SCCB0${fNum.padStart(2,"0")}${String(n).padStart(3,"0")}`;
         await saveStudent({ ...form, id, active:true, reg_status:"pending" });
       } else {
         await saveStudent({ ...form });
@@ -3191,7 +3191,7 @@ function FeesPage({ ctx }) {
       // A single form is already selected — one sheet is enough
       const scope = allActive.filter(s => s.form===filter.form).sort((a,b)=>a.name.localeCompare(b.name));
       if (!scope.length) { alert("No students to export."); return; }
-      exportToExcel(scope.map(feeExportRow), `SBC-Fees-${filter.form.replace(" ","")}-2026-2027.xlsx`, filter.form);
+      exportToExcel(scope.map(feeExportRow), `SCCB-Fees-${filter.form.replace(" ","")}-2026-2027.xlsx`, filter.form);
     } else {
       // No form filter — split into one sheet per class, all in one workbook
       if (!allActive.length) { alert("No students to export."); return; }
@@ -3199,7 +3199,7 @@ function FeesPage({ ctx }) {
         name: f,
         rows: allActive.filter(s=>s.form===f).sort((a,b)=>a.name.localeCompare(b.name)).map(feeExportRow),
       }));
-      exportToExcelMultiSheet(sheets, `SBC-Fees-AllForms-2026-2027.xlsx`);
+      exportToExcelMultiSheet(sheets, `SCCB-Fees-AllForms-2026-2027.xlsx`);
     }
   }
 
