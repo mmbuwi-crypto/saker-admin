@@ -3784,7 +3784,7 @@ function ProfilePage({ ctx }) {
               <input style={inp} type="password" autoComplete="new-password" placeholder="At least 6 characters" value={pass1} onChange={e=>setPass1(e.target.value)} disabled={pwBusy}/>
             </Fr>
             <Fr label="Confirm New Password">
-              <input style={inp} type="password" autoComplete="new-password" placeholder="Re-type password" value={pass2} onChange={e=>setPass2(e.target.value)} onKeyDown={e=>e.key==="Enter"&&changePassword()} disabled={pwBusy}/>
+              <input style={inp} type="password" autoComplete="new-password" placeholder="Re-type password" value={pass2}  onChange={e=>setPass2(e.target.value)} onKeyDown={e=>e.key==="Enter"&&changePassword()} disabled={pwBusy}/>
             </Fr>
             {pwErr && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"8px 12px",color:C.red,fontSize:12,marginBottom:10}}>{pwErr}</div>}
             {pwOk  && <div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:8,padding:"8px 12px",color:C.green,fontSize:12,marginBottom:10}}>{pwOk}</div>}
