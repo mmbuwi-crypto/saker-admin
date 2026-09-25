@@ -2,7 +2,7 @@
 //  SAKER COMPREHENSIVE COLLEGE BAWE — Main App (Supabase backend)
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useRef, useCallback } from "react";
-import { supabase } from "./supabase.js";
+import { supabase, SUPABASE_URL } from "./supabase.js";
 import * as XLSX from "xlsx";
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
@@ -82,6 +82,73 @@ function compressPhoto(base64) {
 }
 async function uploadPhoto(studentId, base64) {
   return await compressPhoto(base64);
+}
+
+// ─── Offline Queue ────────────────────────────────────────────────────────────
+// Registrations and fee payments made with no internet are saved here, in the
+// browser's localStorage, and pushed to Supabase automatically once the
+// connection returns. This survives closing the app entirely — the queue is
+// still there next time it opens, even after a phone restart.
+const OFFLINE_QUEUE_KEY = "sccb_offline_queue_v1";
+
+function generateTempId(form) {
+  // Guaranteed-unique across different phones with no coordination: combines
+  // the exact millisecond timestamp with a random suffix. Two phones would
+  // need to register a student in the same form in the exact same
+  // millisecond AND roll the same random suffix to collide — effectively
+  // impossible. Clearly marked TEMP- so it's obviously not a real matricule
+  // anywhere it's displayed, until sync assigns the true SCC0... ID.
+  const fNum = form.replace("Form ","");
+  const rand = Math.random().toString(36).slice(2,7).toUpperCase();
+  return `TEMP-${fNum}-${Date.now()}-${rand}`;
+}
+
+function loadOfflineQueue() {
+  try {
+    const raw = localStorage.getItem(OFFLINE_QUEUE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch(e) {
+    console.error("Failed to read offline queue:", e);
+    return [];
+  }
+}
+
+function saveOfflineQueue(queue) {
+  try {
+    localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+  } catch(e) {
+    console.error("Failed to save offline queue:", e);
+  }
+}
+
+function addToOfflineQueue(item) {
+  const queue = loadOfflineQueue();
+  queue.push({ ...item, queuedAt: new Date().toISOString(), id: generateTempId("Form 0").replace("TEMP-0","QITEM") });
+  saveOfflineQueue(queue);
+  return queue;
+}
+
+function removeFromOfflineQueue(queueItemId) {
+  const queue = loadOfflineQueue().filter(q => q.id !== queueItemId);
+  saveOfflineQueue(queue);
+  return queue;
+}
+
+// Real connectivity check — navigator.onLine alone is unreliable (it can
+// report "online" while connected to a WiFi network with no actual working
+// internet). This does a tiny, cheap, no-cache fetch to confirm a real
+// response comes back, with a short timeout so it never hangs the UI.
+async function checkRealConnectivity() {
+  if (!navigator.onLine) return false;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    await fetch(`${SUPABASE_URL}/auth/v1/health`, { method:"GET", signal: controller.signal, cache:"no-store" });
+    clearTimeout(timeout);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // Print helper - works on mobile and desktop
@@ -302,6 +369,11 @@ export default function App() {
   const [notices,    setNotices]    = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [dbError,    setDbError]    = useState(null);
+  const [offlineQueue, setOfflineQueue] = useState(() => loadOfflineQueue());
+  const [isOnline,     setIsOnline]     = useState(navigator.onLine);
+  const [syncing,      setSyncing]      = useState(false);
+  const [syncResult,   setSyncResult]   = useState(null); // {success, failed} shown briefly after a sync run
+  const [showQueueDetails, setShowQueueDetails] = useState(false);
 
   // ── Auth ───────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -507,6 +579,103 @@ export default function App() {
     await loadAll();
   }
 
+  // ── Offline sync engine ─────────────────────────────────────────────────────
+  // Processes the queue in the order items were created. For a queued
+  // registration, generates the REAL matricule now (only safe to do with a
+  // genuine connection, since it needs an accurate count of existing students
+  // in that form) and swaps it in everywhere — including on any queued fee
+  // payment for that same offline-registered student, matched by temp ID.
+  async function syncOfflineQueue() {
+    const queue = loadOfflineQueue();
+    if (!queue.length || syncing) return;
+
+    // navigator.onLine can be wrong — it only reflects whether the device has
+    // a network interface active, not whether that network can actually reach
+    // the internet (e.g. connected to WiFi with no working connection). Do a
+    // real check before attempting to push anything, so a false "online"
+    // signal doesn't cause a burst of failed writes.
+    const reallyOnline = await checkRealConnectivity();
+    if (!reallyOnline) {
+      setIsOnline(false);
+      return;
+    }
+
+    setSyncing(true);
+    const success = [];
+    const failed = [];
+    let tempIdMap = {}; // tempId -> real matricule, built as registrations sync
+
+    for (const item of queue) {
+      try {
+        if (item.type === "register") {
+          const fNum = item.data.form.replace("Form ","");
+          const { count } = await supabase
+            .from("students").select("*", { count:"exact", head:true })
+            .eq("form", item.data.form);
+          const realId = `SCC0${fNum.padStart(2,"0")}${String((count||0)+1).padStart(3,"0")}`;
+          tempIdMap[item.tempId] = realId;
+
+          const row = {
+            id: realId, name: item.data.name, form: item.data.form, gender: item.data.gender,
+            dob: item.data.dob||null, parent: item.data.parent, phone: item.data.phone,
+            address: item.data.address||null, photo_url: item.data.photo_url||null,
+            active: true, reg_status:"registered", reg_date: item.data.reg_date,
+            reg_fee: item.data.reg_fee, reg_receipt: item.data.reg_receipt,
+            reg_paid_by: item.data.reg_paid_by, reg_cashier: item.data.reg_cashier,
+            is_late_reg: item.data.is_late_reg||false, graduated:false,
+            parent_pin: item.data.parent_pin,
+          };
+          const { error } = await supabase.from("students").upsert(row, { onConflict:"id" });
+          if (error) throw error;
+          await supabase.from("fees").upsert({ student_id: realId, paid:0, total: TOTAL_FEE }, { onConflict:"student_id", ignoreDuplicates:true });
+          success.push({ ...item, realId });
+
+        } else if (item.type === "payment") {
+          // If this payment was for a student registered offline in the same
+          // batch, resolve their temp ID to the real one just assigned above.
+          const targetId = tempIdMap[item.data.studentId] || item.data.studentId;
+          const { data: existingFee } = await supabase.from("fees").select("paid").eq("student_id", targetId).single();
+          const newPaid = (existingFee?.paid||0) + item.data.amount;
+          const { error } = await supabase.from("fees").upsert(
+            { student_id: targetId, paid: newPaid, total: TOTAL_FEE },
+            { onConflict:"student_id" }
+          );
+          if (error) throw error;
+          success.push(item);
+        }
+        removeFromOfflineQueue(item.id);
+      } catch(e) {
+        console.error("Sync failed for item:", item, e);
+        failed.push({ ...item, error: e.message });
+      }
+    }
+
+    setOfflineQueue(loadOfflineQueue());
+    setSyncResult({ success, failed });
+    if (success.length) await loadAll();
+    setSyncing(false);
+  }
+
+  // Watch for connectivity changes and auto-sync when we come back online
+  useEffect(() => {
+    function handleOnline() { setIsOnline(true); syncOfflineQueue(); }
+    function handleOffline() { setIsOnline(false); }
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    // On mount, navigator.onLine can be wrong (e.g. connected to WiFi with no
+    // real internet) — verify properly, correct isOnline if needed, and sync
+    // any leftover queue from a previous session that ended before syncing.
+    (async () => {
+      const reallyOnline = await checkRealConnectivity();
+      setIsOnline(reallyOnline);
+      if (reallyOnline && loadOfflineQueue().length) syncOfflineQueue();
+    })();
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
   // records: array of { studentId, status } where status is "present"|"absent"|"late"
   async function saveAttendanceBulk(date, records, markedBy) {
     const rows = records.map(r => ({
@@ -574,6 +743,7 @@ export default function App() {
     saveStudent, deleteStudent, saveTeacher, saveMark,
     saveFee, saveNotice, deleteNotice, loadAll, saveAttendanceBulk,
     saveCalendarEvent, deleteCalendarEvent,
+    offlineQueue, isOnline, syncOfflineQueue, setOfflineQueue,
   };
 
   return (
@@ -595,6 +765,48 @@ export default function App() {
           <button onClick={()=>setMenuOpen(o=>!o)} style={{background:"rgba(255,255,255,0.12)",border:"none",borderRadius:8,color:C.white,fontSize:20,width:38,height:38,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>☰</button>
         </div>
       </div>
+
+      {/* ── Offline / pending sync banner — visible on every page ──────────── */}
+      {(!isOnline || offlineQueue.length>0) && (
+        <div style={{background:isOnline?"#fffbeb":"#fef2f2",borderBottom:`1px solid ${isOnline?"#fde68a":"#fca5a5"}`}}>
+          <div onClick={()=>offlineQueue.length>0 && setShowQueueDetails(v=>!v)} style={{padding:"8px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",cursor:offlineQueue.length>0?"pointer":"default"}}>
+            <div style={{fontSize:11.5,color:isOnline?"#92400e":"#991b1b",fontWeight:600}}>
+              {!isOnline
+                ? `📡 No internet — ${offlineQueue.length} item${offlineQueue.length!==1?"s":""} will save on this device and upload automatically once you're back online`
+                : `⏳ ${offlineQueue.length} item${offlineQueue.length!==1?"s":""} waiting to sync ${offlineQueue.length>0?(showQueueDetails?"▲":"▼"):""}`
+              }
+            </div>
+            {isOnline && offlineQueue.length>0 && (
+              <button onClick={(e)=>{e.stopPropagation();syncOfflineQueue();}} disabled={syncing} style={{padding:"5px 12px",background:"#92400e",color:"#fff",border:"none",borderRadius:6,fontSize:11,fontWeight:700,cursor:"pointer",flexShrink:0}}>
+                {syncing?"Syncing…":"Sync Now"}
+              </button>
+            )}
+          </div>
+          {showQueueDetails && offlineQueue.length>0 && (
+            <div style={{padding:"0 14px 10px"}}>
+              {offlineQueue.map(item => (
+                <div key={item.id} style={{background:"rgba(255,255,255,0.6)",borderRadius:6,padding:"6px 10px",marginBottom:5,fontSize:11,color:"#78350f"}}>
+                  {item.type==="register"
+                    ? `📋 Registration: ${item.data.name} (${item.data.form})`
+                    : `💰 Payment: ${item.data.amount.toLocaleString()} FCFA for ${item.data.studentId}`
+                  }
+                  <span style={{opacity:.7,marginLeft:6}}>· queued {fmtDate(item.queuedAt?.slice(0,10))}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {syncResult && (
+        <div style={{background:syncResult.failed.length?"#fef2f2":"#f0fdf4",borderBottom:`1px solid ${syncResult.failed.length?"#fca5a5":"#86efac"}`,padding:"8px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+          <div style={{fontSize:11.5,color:syncResult.failed.length?"#991b1b":"#166534",fontWeight:600}}>
+            ✓ Synced {syncResult.success.length} item{syncResult.success.length!==1?"s":""}
+            {syncResult.failed.length>0 && ` — ✕ ${syncResult.failed.length} failed`}
+          </div>
+          <button onClick={()=>setSyncResult(null)} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",color:syncResult.failed.length?"#991b1b":"#166534"}}>×</button>
+        </div>
+      )}
 
       {/* ── Slide-out nav ───────────────────────────────────────────────────── */}
       {menuOpen && (
@@ -1208,7 +1420,7 @@ function DashboardPage({ ctx, setPage }) {
 
 // ─── Registration ──────────────────────────────────────────────────────────────
 function RegistrationPage({ ctx }) {
-  const { students, saveStudent, auth } = ctx;
+  const { students, saveStudent, auth, isOnline, setOfflineQueue } = ctx;
   const [tab,     setTab]    = useState("register");
   const [receipt, setReceipt]= useState(null);
   const [saving,  setSaving] = useState(false);
@@ -1221,29 +1433,46 @@ function RegistrationPage({ ctx }) {
   async function handleRegister() {
     if (!form.name.trim()||!form.parent.trim()||!form.phone.trim()) return;
     setSaving(true);
-    const fNum = form.form.replace("Form ","");
-    const n    = students.filter(s=>s.form===form.form).length + 1;
-    const id   = `SCC0${fNum.padStart(2,"0")}${String(n).padStart(3,"0")}`;
     const rec  = `RCP-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
-    const pin  = String(Math.floor(1000 + Math.random()*9000)); // 4-digit parent portal PIN
+    const pin  = String(Math.floor(1000 + Math.random()*9000));
+
     try {
-      // Photo was already compressed when selected — use as-is
-      const studentData = {
+      // Compress photo first — needs to happen either way, online or offline
+      let photoUrl = null;
+      if (form.photo_url) {
+        photoUrl = await compressPhoto(form.photo_url);
+      }
+      const baseData = {
         name:form.name, form:form.form, gender:form.gender,
         dob:form.dob||null, parent:form.parent, phone:form.phone,
-        address:form.address||null, photo_url:form.photo_url||null,
-        id, active:true,
-        reg_status:"registered", reg_date:todayStr(),
-        reg_fee:fee, reg_receipt:rec,
+        address:form.address||null, photo_url:photoUrl,
+        reg_date:todayStr(), reg_fee:fee, reg_receipt:rec,
         reg_paid_by:form.paidBy||form.parent,
         reg_cashier:auth.user.name,
         is_late_reg:form.isLate,
         parent_pin: pin,
       };
-      await saveStudent(studentData);
-      setReceipt({ ...studentData });
-      setTab("receipt");
-      setForm(blank);
+
+      if (!isOnline) {
+        // No internet — save with a temporary ID, queue for later sync
+        const tempId = generateTempId(form.form);
+        const queuedItem = { type:"register", data:{ ...baseData, studentId:tempId }, tempId };
+        addToOfflineQueue(queuedItem);
+        setOfflineQueue(loadOfflineQueue());
+        setReceipt({ ...baseData, id:tempId, _offline:true });
+        setTab("receipt");
+        setForm(blank);
+      } else {
+        // Online — register normally, exactly as before
+        const fNum = form.form.replace("Form ","");
+        const n    = students.filter(s=>s.form===form.form).length + 1;
+        const id   = `SCC0${fNum.padStart(2,"0")}${String(n).padStart(3,"0")}`;
+        const studentData = { ...baseData, id, active:true, reg_status:"registered" };
+        await saveStudent(studentData);
+        setReceipt({ ...studentData });
+        setTab("receipt");
+        setForm(blank);
+      }
     } catch(e) { alert("Error saving: "+e.message); }
     setSaving(false);
   }
@@ -1419,6 +1648,12 @@ function RegistrationPage({ ctx }) {
         <div>
           {!receipt ? <Empty text="Register a student first to see their receipt."/> : (
             <div>
+              {receipt._offline && (
+                <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:10,padding:"10px 14px",marginBottom:12,maxWidth:360,marginLeft:"auto",marginRight:"auto"}}>
+                  <div style={{fontWeight:800,color:"#991b1b",fontSize:12,marginBottom:3}}>📡 Saved Offline</div>
+                  <div style={{fontSize:11,color:"#991b1b"}}>This student's real Matricule will be assigned automatically once this device reconnects to the internet and syncs. The ID shown below is temporary.</div>
+                </div>
+              )}
               <div style={{background:C.white,borderRadius:11,overflow:"hidden",border:`2px solid ${C.navy}`,maxWidth:360,margin:"0 auto 13px"}}>
                 <div style={{background:`linear-gradient(135deg,${C.navy},${C.navyMid})`,color:C.white,padding:"14px",textAlign:"center"}}>
                   <div style={{fontSize:26}}>🎓</div>
@@ -3098,7 +3333,7 @@ function ReportsPage({ ctx }) {
 
 // ─── Fees ──────────────────────────────────────────────────────────────────────
 function FeesPage({ ctx }) {
-  const { students, feesMap, saveFee, auth } = ctx;
+  const { students, feesMap, saveFee, auth, isOnline, setOfflineQueue } = ctx;
   const [filter,    setFilter]    = useState({ form:"", search:"", status:"" });
   const [threshold, setThreshold] = useState(50);
   const [modal,     setModal]     = useState(null);
@@ -3384,7 +3619,16 @@ function FeesPage({ ctx }) {
               const pay=Math.min(Number(amount)||0,TOTAL_FEE-(feesMap[modal.id]?.paid||0));
               if(pay<=0) return;
               setSaving(true);
-              try { await saveFee(modal.id,(feesMap[modal.id]?.paid||0)+pay); setModal(null); }
+              try {
+                if (!isOnline) {
+                  addToOfflineQueue({ type:"payment", data:{ studentId:modal.id, amount:pay } });
+                  setOfflineQueue(loadOfflineQueue());
+                  alert(`Payment of ${pay.toLocaleString()} FCFA saved on this device. It will upload automatically once you're back online.`);
+                } else {
+                  await saveFee(modal.id,(feesMap[modal.id]?.paid||0)+pay);
+                }
+                setModal(null);
+              }
               catch(e){ alert("Error: "+e.message); }
               setSaving(false);
             }} disabled={saving}>{saving?"Saving…":"Record Payment"}</Btn>
