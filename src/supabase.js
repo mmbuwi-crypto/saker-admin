@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 
 const SUPABASE_URL      = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
+export { SUPABASE_URL }
 
 // persistSession: false — the login session lives only in memory for this
 // browser tab. Closing the tab, closing the app, or refreshing the page all
