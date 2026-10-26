@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-//  SAKER COMPREHENSIVE COLLEGE BAWE — Main App (Supabase backend)
+//  SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE — Main App (Supabase backend)
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase, SUPABASE_URL } from "./supabase.js";
@@ -30,6 +30,7 @@ const REG_NORMAL  = 500;
 const REG_LATE    = 1000;
 const LATE_CUTOFF = "2026-09-30";
 const MOMO_MERCHANT_NUMBER = "PASTE_YOUR_MOMO_NUMBER_HERE"; // e.g. "677123456" — the school's MTN Mobile Money receiving number
+const SCHOOL_LOGO = "data:image/jpeg;base64,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"; // compressed crest logo, embedded directly so it works offline and on every printed document
 
 const DEFAULT_COEFF = {
   "English language":4,"French/ Français":4,"Mathematics":4,
@@ -97,7 +98,7 @@ function generateTempId(form) {
   // need to register a student in the same form in the exact same
   // millisecond AND roll the same random suffix to collide — effectively
   // impossible. Clearly marked TEMP- so it's obviously not a real matricule
-  // anywhere it's displayed, until sync assigns the true SCC0... ID.
+  // anywhere it's displayed, until sync assigns the true SBCC0... ID.
   const fNum = form.replace("Form ","");
   const rand = Math.random().toString(36).slice(2,7).toUpperCase();
   return `TEMP-${fNum}-${Date.now()}-${rand}`;
@@ -193,7 +194,7 @@ function domPrint(id, html, size="A4 portrait", margin="8mm") {
 
 // Export an array of row-objects to a downloadable .xlsx file.
 // rows: array of plain objects (keys become column headers)
-// filename: e.g. "SCC-Students-2026-2027.xlsx"
+// filename: e.g. "SBCC-Students-2026-2027.xlsx"
 // sheetName: tab name inside the workbook (max 31 chars, Excel limit)
 function exportToExcel(rows, filename, sheetName="Sheet1") {
   if (!rows || !rows.length) { alert("Nothing to export."); return; }
@@ -255,7 +256,7 @@ function printPaymentSlip(sub, student) {
     <div style="max-width:360px;margin:0 auto;border:2px solid #0D2340;border-radius:10px;overflow:hidden">
       <div style="background:#0D2340;color:#fff;padding:14px;text-align:center">
         <div style="font-size:26px">🎓</div>
-        <h2 style="font-size:14px;font-weight:900;margin:4px 0">SAKER COMPREHENSIVE COLLEGE BAWE</h2>
+        <h2 style="font-size:14px;font-weight:900;margin:4px 0">SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE</h2>
         <p style="font-size:9px;opacity:.65;margin:0">NGEPTANG · NONI · NW REGION</p>
         <div style="background:#15803D;display:inline-block;padding:2px 12px;border-radius:10px;font-size:10px;font-weight:800;margin-top:7px">FEE PAYMENT SLIP</div>
       </div>
@@ -355,6 +356,8 @@ export default function App() {
   const [session,    setSession]    = useState(undefined); // undefined=loading
   const [userRole,   setUserRole]   = useState(null);
   const [userProfile,setUserProfile]= useState(null);
+  const [roleLoading, setRoleLoading] = useState(false);
+  const [roleError, setRoleError] = useState("");
   const [page,       setPage]       = useState("dashboard");
   const [menuOpen,   setMenuOpen]   = useState(false);
   const [recoveryMode, setRecoveryMode] = useState(false); // true when user arrived via password-reset email link
@@ -387,13 +390,60 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!session) { setUserRole(null); setUserProfile(null); return; }
+    let cancelled = false;
+    if (!session?.user?.id) {
+      setUserRole(null);
+      setUserProfile(null);
+      setRoleError("");
+      setRoleLoading(false);
+      return () => { cancelled = true; };
+    }
+
+    // The database profile is the source of truth for application permissions.
+    // Never infer a role from Auth metadata or silently default to "teacher".
+    setUserRole(null);
+    setUserProfile(null);
+    setRoleError("");
+    setRoleLoading(true);
+
     (async () => {
-      const { data } = await supabase.from("users").select("*").eq("id", session.user.id).single();
-      setUserRole(data?.role || "teacher");
-      setUserProfile(data);
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", session.user.id)
+          .maybeSingle();
+
+        if (error) throw error;
+        if (!data) throw new Error("No profile was found for this account. Ask an administrator to create or repair your profile.");
+        if (!["admin", "teacher"].includes(data.role)) {
+          throw new Error("This account has an unsupported or missing profile role. Access has been blocked.");
+        }
+        if (!cancelled) {
+          setUserProfile(data);
+          setUserRole(data.role);
+        }
+      } catch (error) {
+        console.error("Unable to load authenticated profile:", error);
+        if (!cancelled) {
+          setUserRole(null);
+          setUserProfile(null);
+          setRoleError(error?.message || "Could not verify your account role. Please try again.");
+        }
+      } finally {
+        if (!cancelled) setRoleLoading(false);
+      }
     })();
-  }, [session]);
+
+    return () => { cancelled = true; };
+  }, [session?.user?.id]);
+
+  // Keep the selected page valid if the profile role changes during a session.
+  useEffect(() => {
+    if (!userRole) return;
+    const selected = navItems.find(n => n.key === page);
+    if (!selected || !selected.roles.includes(userRole)) setPage("dashboard");
+  }, [userRole, page]);
 
   // ── Load all data ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -612,7 +662,7 @@ export default function App() {
           const { count } = await supabase
             .from("students").select("*", { count:"exact", head:true })
             .eq("form", item.data.form);
-          const realId = `SCC0${fNum.padStart(2,"0")}${String((count||0)+1).padStart(3,"0")}`;
+          const realId = `SBCC0${fNum.padStart(2,"0")}${String((count||0)+1).padStart(3,"0")}`;
           tempIdMap[item.tempId] = realId;
 
           const row = {
@@ -729,7 +779,7 @@ export default function App() {
   if (session === undefined) return (
     <div style={{minHeight:"100vh",background:C.navy,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:14}}>
       <div style={{fontSize:48}}>🎓</div>
-      <div style={{color:C.white,fontWeight:800,fontSize:18}}>Saker Comprehensive College Bawe</div>
+      <div style={{color:C.white,fontWeight:800,fontSize:18}}>Saker Baptist Comprehensive College Bawe</div>
       <div style={{color:C.goldLight,fontSize:13}}>Starting up…</div>
     </div>
   );
@@ -737,8 +787,26 @@ export default function App() {
   if (recoveryMode) return <SetNewPasswordScreen onSetPassword={doSetNewPassword} onCancel={doLogout}/>;
   if (!session) return <LoginScreen onLogin={doLogin} onRequestReset={doRequestPasswordReset} onOpenPortal={()=>setPortalMode(true)}/>;
 
+  if (roleLoading) return (
+    <div style={{minHeight:"100vh",background:C.navy,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12,color:C.white}}>
+      <div style={{fontSize:38}}>🎓</div><strong>Verifying account permissions…</strong>
+    </div>
+  );
+  if (roleError || !userRole) return (
+    <div style={{minHeight:"100vh",background:C.grayBg,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+      <div style={{background:C.white,borderRadius:12,padding:24,maxWidth:480,width:"100%",boxShadow:"0 8px 30px rgba(0,0,0,.08)"}}>
+        <h2 style={{marginTop:0,color:C.red}}>Account access could not be verified</h2>
+        <p style={{color:C.gray}}>{roleError || "Your profile role has not loaded. No dashboard access has been granted."}</p>
+        <button onClick={()=>{setSession({...session});}} style={{padding:"9px 14px",background:C.navy,color:C.white,border:0,borderRadius:7,cursor:"pointer",marginRight:8}}>Retry</button>
+        <button onClick={doLogout} style={{padding:"9px 14px",background:"#fff",color:C.navy,border:"1px solid #ccd",borderRadius:7,cursor:"pointer"}}>Sign out</button>
+      </div>
+    </div>
+  );
+
+  const allowedNavItems = navItems.filter(n => n.roles.includes(userRole));
+
   const ctx = {
-    auth: { user: currentUser, role: userRole||"teacher" },
+    auth: { user: currentUser, role: userRole },
     students, teachers, marksMap, feesMap, notices, attendanceMap, calendarEvents,
     saveStudent, deleteStudent, saveTeacher, saveMark,
     saveFee, saveNotice, deleteNotice, loadAll, saveAttendanceBulk,
@@ -753,7 +821,7 @@ export default function App() {
         <div style={{display:"flex",alignItems:"center",gap:9}}>
           <span style={{fontSize:20}}>🎓</span>
           <div>
-            <div style={{color:C.white,fontWeight:800,fontSize:13,lineHeight:1.2}}>Saker Comprehensive College Bawe</div>
+            <div style={{color:C.white,fontWeight:800,fontSize:13,lineHeight:1.2}}>Saker Baptist Comprehensive College Bawe</div>
             <div style={{color:C.goldLight,fontSize:9,letterSpacing:1}}>NGEPTANG · NONI</div>
           </div>
         </div>
@@ -925,7 +993,7 @@ function LoginScreen({ onLogin, onRequestReset, onOpenPortal }) {
           <div style={{textAlign:"center",marginBottom:24}}>
             <div style={{width:70,height:70,borderRadius:"50%",background:C.gold,margin:"0 auto 12px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,boxShadow:"0 0 0 5px rgba(201,150,42,0.25)"}}>🔑</div>
             <h1 style={{color:C.white,fontSize:20,fontWeight:900,margin:0}}>Reset Password</h1>
-            <p style={{color:C.goldLight,fontSize:11,margin:"4px 0 0",letterSpacing:1.5}}>SAKER COMPREHENSIVE COLLEGE BAWE</p>
+            <p style={{color:C.goldLight,fontSize:11,margin:"4px 0 0",letterSpacing:1.5}}>SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE</p>
           </div>
           <div style={{background:C.white,borderRadius:14,padding:22,boxShadow:"0 20px 60px rgba(0,0,0,0.35)"}}>
             <h2 style={{margin:"0 0 10px",fontSize:16,fontWeight:800,color:C.navy}}>Forgot your password?</h2>
@@ -948,7 +1016,7 @@ function LoginScreen({ onLogin, onRequestReset, onOpenPortal }) {
       <div style={{width:"100%",maxWidth:380}}>
         <div style={{textAlign:"center",marginBottom:24}}>
           <div style={{width:70,height:70,borderRadius:"50%",background:C.gold,margin:"0 auto 12px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,boxShadow:"0 0 0 5px rgba(201,150,42,0.25)"}}>🎓</div>
-          <h1 style={{color:C.white,fontSize:20,fontWeight:900,margin:0}}>Saker Comprehensive College Bawe</h1>
+          <h1 style={{color:C.white,fontSize:20,fontWeight:900,margin:0}}>Saker Baptist Comprehensive College Bawe</h1>
           <p style={{color:C.goldLight,fontSize:11,margin:"4px 0 0",letterSpacing:1.5}}>NGEPTANG · NONI</p>
           <p style={{color:"rgba(255,255,255,0.45)",fontSize:10,margin:"5px 0 0"}}>School Administrative Portal · 2026/2027</p>
         </div>
@@ -1016,7 +1084,7 @@ function SetNewPasswordScreen({ onSetPassword, onCancel }) {
         <div style={{textAlign:"center",marginBottom:24}}>
           <div style={{width:70,height:70,borderRadius:"50%",background:C.gold,margin:"0 auto 12px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,boxShadow:"0 0 0 5px rgba(201,150,42,0.25)"}}>🔑</div>
           <h1 style={{color:C.white,fontSize:20,fontWeight:900,margin:0}}>Set New Password</h1>
-          <p style={{color:C.goldLight,fontSize:11,margin:"4px 0 0",letterSpacing:1.5}}>SAKER COMPREHENSIVE COLLEGE BAWE</p>
+          <p style={{color:C.goldLight,fontSize:11,margin:"4px 0 0",letterSpacing:1.5}}>SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE</p>
         </div>
         <div style={{background:C.white,borderRadius:14,padding:22,boxShadow:"0 20px 60px rgba(0,0,0,0.35)"}}>
           <Fr label="New Password">
@@ -1095,12 +1163,12 @@ function ParentPortal({ onBack }) {
         <div style={{textAlign:"center",marginBottom:24}}>
           <div style={{width:70,height:70,borderRadius:"50%",background:C.gold,margin:"0 auto 12px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,boxShadow:"0 0 0 5px rgba(201,150,42,0.25)"}}>👨‍👩‍👧</div>
           <h1 style={{color:C.white,fontSize:20,fontWeight:900,margin:0}}>Parent Portal</h1>
-          <p style={{color:C.goldLight,fontSize:11,margin:"4px 0 0",letterSpacing:1.5}}>SAKER COMPREHENSIVE COLLEGE BAWE</p>
+          <p style={{color:C.goldLight,fontSize:11,margin:"4px 0 0",letterSpacing:1.5}}>SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE</p>
           <p style={{color:"rgba(255,255,255,0.45)",fontSize:10,margin:"5px 0 0"}}>View your child's marks, attendance & fees</p>
         </div>
         <div style={{background:C.white,borderRadius:14,padding:22,boxShadow:"0 20px 60px rgba(0,0,0,0.35)"}}>
           <Fr label="Student Matricule">
-            <input style={inp} placeholder="e.g. SCC01001" value={matricule} onChange={e=>setMatricule(e.target.value)} disabled={isLocked} onKeyDown={e=>e.key==="Enter"&&lookup()}/>
+            <input style={inp} placeholder="e.g. SBCC01001" value={matricule} onChange={e=>setMatricule(e.target.value)} disabled={isLocked} onKeyDown={e=>e.key==="Enter"&&lookup()}/>
           </Fr>
           <Fr label="4-Digit PIN">
             <input style={{...inp,letterSpacing:4,fontWeight:700,textAlign:"center"}} type="tel" maxLength={4} placeholder="••••" value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,"").slice(0,4))} disabled={isLocked} onKeyDown={e=>e.key==="Enter"&&lookup()}/>
@@ -1324,7 +1392,7 @@ function PayFeesPanel({ matricule, pin, balance, onSubmitted }) {
           </div>
           <ol style={{fontSize:12,color:C.gray,paddingLeft:18,marginBottom:14,lineHeight:1.8}}>
             <li>Dial the code above on the phone paying via MTN Mobile Money</li>
-            <li>Confirm the payment of <strong>{Number(amount).toLocaleString()} FCFA</strong> to Saker Comprehensive College Bawe</li>
+            <li>Confirm the payment of <strong>{Number(amount).toLocaleString()} FCFA</strong> to Saker Baptist Comprehensive College Bawe</li>
             <li>Take a screenshot of the confirmation message</li>
             <li>Come back here and upload it</li>
           </ol>
@@ -1375,7 +1443,7 @@ function DashboardPage({ ctx, setPage }) {
     <div>
       <div style={{background:`linear-gradient(135deg,${C.navy},${C.navyMid})`,borderRadius:12,padding:"18px",marginBottom:16,color:C.white}}>
         <h2 style={{margin:0,fontSize:17,fontWeight:800}}>Welcome, {auth.user.name.split(" ")[0]}! 👋</h2>
-        <p style={{margin:"4px 0 0",color:"rgba(255,255,255,0.6)",fontSize:12}}>Academic Year 2026/2027 · Saker Comprehensive College Bawe</p>
+        <p style={{margin:"4px 0 0",color:"rgba(255,255,255,0.6)",fontSize:12}}>Academic Year 2026/2027 · Saker Baptist Comprehensive College Bawe</p>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
         {cards.map(c => (
@@ -1466,7 +1534,7 @@ function RegistrationPage({ ctx }) {
         // Online — register normally, exactly as before
         const fNum = form.form.replace("Form ","");
         const n    = students.filter(s=>s.form===form.form).length + 1;
-        const id   = `SCC0${fNum.padStart(2,"0")}${String(n).padStart(3,"0")}`;
+        const id   = `SBCC0${fNum.padStart(2,"0")}${String(n).padStart(3,"0")}`;
         const studentData = { ...baseData, id, active:true, reg_status:"registered" };
         await saveStudent(studentData);
         setReceipt({ ...studentData });
@@ -1496,7 +1564,7 @@ function RegistrationPage({ ctx }) {
       <div style="max-width:360px;margin:0 auto;border:2px solid #0D2340;border-radius:10px;overflow:hidden">
         <div style="background:#0D2340;color:#fff;padding:14px;text-align:center">
           <div style="font-size:26px">🎓</div>
-          <h2 style="font-size:14px;font-weight:900;margin:4px 0">SAKER COMPREHENSIVE COLLEGE BAWE</h2>
+          <h2 style="font-size:14px;font-weight:900;margin:4px 0">SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE</h2>
           <p style="font-size:9px;opacity:.65;margin:0">NGEPTANG · NONI · NW REGION</p>
           <div style="background:#C9962A;display:inline-block;padding:2px 12px;border-radius:10px;font-size:10px;font-weight:800;margin-top:7px">REGISTRATION RECEIPT</div>
           ${receipt.reg_fee===REG_LATE?'<div style="margin-top:4px;background:#fbbf24;color:#78350f;display:inline-block;padding:2px 9px;border-radius:9px;font-size:9px;font-weight:700">LATE REGISTRATION</div>':""}
@@ -1657,7 +1725,7 @@ function RegistrationPage({ ctx }) {
               <div style={{background:C.white,borderRadius:11,overflow:"hidden",border:`2px solid ${C.navy}`,maxWidth:360,margin:"0 auto 13px"}}>
                 <div style={{background:`linear-gradient(135deg,${C.navy},${C.navyMid})`,color:C.white,padding:"14px",textAlign:"center"}}>
                   <div style={{fontSize:26}}>🎓</div>
-                  <h2 style={{margin:"4px 0",fontSize:14,fontWeight:900}}>SAKER COMPREHENSIVE COLLEGE BAWE</h2>
+                  <h2 style={{margin:"4px 0",fontSize:14,fontWeight:900}}>SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE</h2>
                   <p style={{margin:0,opacity:.6,fontSize:9}}>NGEPTANG · NONI · NW REGION</p>
                   <div style={{marginTop:7,background:C.gold,display:"inline-block",borderRadius:11,padding:"2px 12px",fontSize:10,fontWeight:800}}>REGISTRATION RECEIPT</div>
                 </div>
@@ -1707,7 +1775,7 @@ function BulkImportPanel({ students, saveStudent, auth, onDone }) {
       { "Name":"John Nkeng Tabi", "Form":"Form 1", "Gender":"Male",   "Date of Birth":"2013-04-15", "Parent/Guardian":"Mrs. Tabi", "Phone":"677123456", "Address":"Ngeptang" },
       { "Name":"Grace Fon Achu",  "Form":"Form 2", "Gender":"Female", "Date of Birth":"2012-09-02", "Parent/Guardian":"Mr. Achu",  "Phone":"677987654", "Address":"Noni" },
     ];
-    exportToExcel(sample, "SCC-Bulk-Import-Template.xlsx", "Students");
+    exportToExcel(sample, "SBCC-Bulk-Import-Template.xlsx", "Students");
   }
 
   function normalizeGender(v) {
@@ -1780,7 +1848,7 @@ function BulkImportPanel({ students, saveStudent, auth, onDone }) {
           if (form && !errors.length) {
             formCounts[form] = (formCounts[form]||0) + 1;
             const fNum = form.replace("Form ","");
-            id = `SCC0${fNum.padStart(2,"0")}${String(formCounts[form]).padStart(3,"0")}`;
+            id = `SBCC0${fNum.padStart(2,"0")}${String(formCounts[form]).padStart(3,"0")}`;
           }
 
           return { rowNum:idx+2, name, form, gender, dob, parent, phone, address, id, errors, valid: errors.length===0 };
@@ -1953,14 +2021,14 @@ function StudentsPage({ ctx }) {
     if (filter.form) {
       // A single form is already selected — one sheet is enough
       const rows = filtered.map(studentExportRow);
-      exportToExcel(rows, `SCC-Students-${filter.form.replace(" ","")}-${sel_year_safe()}.xlsx`, filter.form);
+      exportToExcel(rows, `SBCC-Students-${filter.form.replace(" ","")}-${sel_year_safe()}.xlsx`, filter.form);
     } else {
       // No form filter — split into one sheet per class, all in one workbook
       const sheets = FORMS.map(f => ({
         name: f,
         rows: filtered.filter(s=>s.form===f).map(studentExportRow),
       }));
-      exportToExcelMultiSheet(sheets, `SCC-Students-AllForms-${sel_year_safe()}.xlsx`);
+      exportToExcelMultiSheet(sheets, `SBCC-Students-AllForms-${sel_year_safe()}.xlsx`);
     }
   }
   function sel_year_safe(){ return "2026-2027"; }
@@ -1972,7 +2040,7 @@ function StudentsPage({ ctx }) {
       if (modal==="add") {
         const fNum = form.form.replace("Form ","");
         const n    = students.filter(s=>s.form===form.form).length + 1;
-        const id   = `SCC0${fNum.padStart(2,"0")}${String(n).padStart(3,"0")}`;
+        const id   = `SBCC0${fNum.padStart(2,"0")}${String(n).padStart(3,"0")}`;
         await saveStudent({ ...form, id, active:true, reg_status:"pending" });
       } else {
         await saveStudent({ ...form });
@@ -2948,7 +3016,7 @@ function ReportsPage({ ctx }) {
 
 <!-- SCHOOL NAME -->
 <div style="background:#1a56a0;color:#fff;text-align:center;padding:5px 4px;margin-bottom:3px">
-  <div style="font-size:15px;font-weight:900;letter-spacing:.5px">SAKER COMPREHENSIVE COLLEGE BAWE</div>
+  <div style="font-size:15px;font-weight:900;letter-spacing:.5px">SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE</div>
   <div style="font-size:8px;margin-top:1px;opacity:.85">Motto: Quality, Discipline, and Excellence education</div>
 </div>
 
@@ -3070,7 +3138,7 @@ function ReportsPage({ ctx }) {
 </table>
 
 <div style="text-align:center;font-size:7px;color:#888;margin-top:5px;border-top:1px dashed #ccc;padding-top:3px">
-  Saker Comprehensive College Bawe · ${sel.year} · Printed: ${new Date().toLocaleDateString("en-GB")}
+  Saker Baptist Comprehensive College Bawe · ${sel.year} · Printed: ${new Date().toLocaleDateString("en-GB")}
 </div>
 </div></body></html>`;
   }
@@ -3169,7 +3237,7 @@ function ReportsPage({ ctx }) {
 
             {/* School banner */}
             <div style={{background:"#1a56a0",color:"#fff",textAlign:"center",padding:"6px 4px"}}>
-              <div style={{fontSize:13,fontWeight:900,letterSpacing:.5}}>SAKER COMPREHENSIVE COLLEGE BAWE</div>
+              <div style={{fontSize:13,fontWeight:900,letterSpacing:.5}}>SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE</div>
               <div style={{fontSize:7.5,marginTop:1,opacity:.85}}>Motto: Quality, Discipline, and Excellence education</div>
             </div>
 
@@ -3426,7 +3494,7 @@ function FeesPage({ ctx }) {
       // A single form is already selected — one sheet is enough
       const scope = allActive.filter(s => s.form===filter.form).sort((a,b)=>a.name.localeCompare(b.name));
       if (!scope.length) { alert("No students to export."); return; }
-      exportToExcel(scope.map(feeExportRow), `SCC-Fees-${filter.form.replace(" ","")}-2026-2027.xlsx`, filter.form);
+      exportToExcel(scope.map(feeExportRow), `SBCC-Fees-${filter.form.replace(" ","")}-2026-2027.xlsx`, filter.form);
     } else {
       // No form filter — split into one sheet per class, all in one workbook
       if (!allActive.length) { alert("No students to export."); return; }
@@ -3434,7 +3502,7 @@ function FeesPage({ ctx }) {
         name: f,
         rows: allActive.filter(s=>s.form===f).sort((a,b)=>a.name.localeCompare(b.name)).map(feeExportRow),
       }));
-      exportToExcelMultiSheet(sheets, `SCC-Fees-AllForms-2026-2027.xlsx`);
+      exportToExcelMultiSheet(sheets, `SBCC-Fees-AllForms-2026-2027.xlsx`);
     }
   }
 
@@ -3494,7 +3562,7 @@ function FeesPage({ ctx }) {
     const html   = `<div style="font-family:Segoe UI,Arial,sans-serif;padding:12px;max-width:780px;margin:0 auto;color:#0D2340">
       <div style="text-align:center;margin-bottom:12px">
         <div style="font-size:22px">🎓</div>
-        <h2 style="font-size:15px;font-weight:900;margin:3px 0">SAKER COMPREHENSIVE COLLEGE BAWE</h2>
+        <h2 style="font-size:15px;font-weight:900;margin:3px 0">SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE</h2>
         <p style="font-size:9px;color:#6B7280;margin:0">NGEPTANG · NONI · NW REGION</p>
         <div style="margin-top:7px;background:#B91C1C;display:inline-block;padding:3px 16px;border-radius:10px;color:#fff;font-size:11px;font-weight:800">SCHOOL FEES DEFAULTER LIST</div>
         <p style="font-size:9.5px;color:#374151;margin-top:5px">Below <strong>${threshold}%</strong> · Total fee: <strong>${TOTAL_FEE.toLocaleString()} FCFA</strong> · Academic Year 2026/2027 · ${new Date().toLocaleDateString("en-GB")}</p>
@@ -3505,7 +3573,7 @@ function FeesPage({ ctx }) {
         <div style="background:#FFFBEB;border-radius:6px;padding:8px;border-left:3px solid #C9962A"><div style="font-size:17px;font-weight:900;color:#C9962A">${totPd.toLocaleString()} F</div><div style="font-size:9px;color:#6B7280">Partially Paid</div></div>
       </div>
       ${sections}
-      <p style="font-size:8px;color:#9CA3AF;text-align:center;margin-top:10px">Confidential — administrative use only · Saker Comprehensive College Bawe</p>
+      <p style="font-size:8px;color:#9CA3AF;text-align:center;margin-top:10px">Confidential — administrative use only · Saker Baptist Comprehensive College Bawe</p>
     </div>`;
     domPrint("sbc-fees", html, "A4 portrait", "7mm");
   }
