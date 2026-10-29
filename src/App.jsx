@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE — Main App (Supabase backend)
 // ─────────────────────────────────────────────────────────────────────────────
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { supabase, SUPABASE_URL } from "./supabase.js";
 import * as XLSX from "xlsx";
 import { SCHOOL_LOGO } from "./schoolLogo.js";
@@ -294,6 +294,8 @@ const navItems = [
   { key:"marks",        label:"Enter Marks",  icon:"✏️", roles:["admin","teacher"] },
   { key:"attendance",   label:"Attendance",   icon:"🗓️", roles:["admin","teacher"] },
   { key:"reports",      label:"Report Cards", icon:"📄", roles:["admin","teacher"] },
+  { key:"performance",  label:"Performance",  icon:"📈", roles:["admin","teacher"] },
+  { key:"council",      label:"Class Council",icon:"🏛️", roles:["admin","teacher"] },
   { key:"fees",         label:"School Fees",  icon:"💰", roles:["admin"] },
   { key:"notices",      label:"Notices",      icon:"📢", roles:["admin","teacher"] },
   { key:"calendar",     label:"Calendar",     icon:"📅", roles:["admin","teacher"] },
@@ -369,6 +371,9 @@ export default function App() {
   const [feesMap,    setFeesMap]    = useState({}); // studentId → {paid,total}
   const [attendanceMap, setAttendanceMap] = useState({}); // "studentId-date" → {status}
   const [calendarEvents, setCalendarEvents] = useState([]);
+  const [councilMeetings,  setCouncilMeetings]  = useState([]); // class council meetings
+  const [councilDecisions, setCouncilDecisions] = useState([]); // decisions taken at those meetings
+  const [councilReady,     setCouncilReady]     = useState(true); // false until the council tables exist in Supabase
   const [notices,    setNotices]    = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [dbError,    setDbError]    = useState(null);
@@ -456,7 +461,8 @@ export default function App() {
     try {
       const [
         { data: st }, { data: tc }, { data: mk },
-        { data: fe }, { data: nt }, { data: at }, { data: cal }
+        { data: fe }, { data: nt }, { data: at }, { data: cal },
+        { data: cm, error: cmErr }, { data: cd, error: cdErr }
       ] = await Promise.all([
         supabase.from("students").select("*").order("form").order("name"),
         supabase.from("teachers").select("*").order("name"),
@@ -465,6 +471,8 @@ export default function App() {
         supabase.from("notices").select("*").order("posted_date", { ascending: false }),
         supabase.from("attendance").select("*"),
         supabase.from("calendar_events").select("*").order("event_date"),
+        supabase.from("council_meetings").select("*").order("meeting_date", { ascending: false }),
+        supabase.from("council_decisions").select("*"),
       ]);
       setStudents(st || []);
       setTeachers(tc || []);
@@ -482,6 +490,9 @@ export default function App() {
       setAttendanceMap(am);
       setNotices(nt || []);
       setCalendarEvents(cal || []);
+      setCouncilMeetings(cm || []);
+      setCouncilDecisions(cd || []);
+      setCouncilReady(!cmErr && !cdErr);
       setDbError(null);
     } catch(e) {
       setDbError(e.message);
@@ -764,6 +775,56 @@ export default function App() {
     await loadAll();
   }
 
+  // ── Class Council ──────────────────────────────────────────────────────────
+  // Saves one meeting and keeps its decisions in sync (update kept ones, add new ones, remove deleted ones)
+  async function saveCouncilMeeting(m, decisions) {
+    const row = {
+      form: m.form, acad_year: m.acad_year, term: m.term, meeting_date: m.meeting_date,
+      attendees: m.attendees || [], discussion: m.discussion || null, snapshot: m.snapshot || null,
+    };
+    let meetingId = m.id;
+    if (meetingId) {
+      const { error } = await supabase.from("council_meetings").update(row).eq("id", meetingId);
+      if (error) throw error;
+    } else {
+      const { data, error } = await supabase.from("council_meetings").insert({ ...row, created_by: currentUser.name }).select().single();
+      if (error) throw error;
+      meetingId = data.id;
+    }
+    const keepIds = decisions.filter(d => d.id).map(d => d.id);
+    const { data: existing } = await supabase.from("council_decisions").select("id").eq("meeting_id", meetingId);
+    const removeIds = (existing || []).map(e => e.id).filter(id => !keepIds.includes(id));
+    if (removeIds.length) {
+      const { error } = await supabase.from("council_decisions").delete().in("id", removeIds);
+      if (error) throw error;
+    }
+    for (const d of decisions) {
+      const drow = {
+        meeting_id: meetingId, decision: d.decision, responsible: d.responsible || null,
+        deadline: d.deadline || null, status: d.status || "pending",
+        completed_on: d.status === "completed" ? (d.completed_on || todayStr()) : null,
+      };
+      const { error } = d.id
+        ? await supabase.from("council_decisions").update(drow).eq("id", d.id)
+        : await supabase.from("council_decisions").insert(drow);
+      if (error) throw error;
+    }
+    await loadAll();
+  }
+
+  async function deleteCouncilMeeting(id) {
+    const { error } = await supabase.from("council_meetings").delete().eq("id", id); // its decisions are removed automatically
+    if (error) throw error;
+    await loadAll();
+  }
+
+  async function updateDecisionStatus(id, status) {
+    const { error } = await supabase.from("council_decisions")
+      .update({ status, completed_on: status === "completed" ? todayStr() : null }).eq("id", id);
+    if (error) throw error;
+    await loadAll();
+  }
+
   // ── Current user info ───────────────────────────────────────────────────────
   const currentTeacher = teachers.find(t => t.email === session?.user?.email);
   const currentUser = {
@@ -811,6 +872,8 @@ export default function App() {
     saveStudent, deleteStudent, saveTeacher, saveMark,
     saveFee, saveNotice, deleteNotice, loadAll, saveAttendanceBulk,
     saveCalendarEvent, deleteCalendarEvent,
+    councilMeetings, councilDecisions, councilReady,
+    saveCouncilMeeting, deleteCouncilMeeting, updateDecisionStatus,
     offlineQueue, isOnline, syncOfflineQueue, setOfflineQueue,
   };
 
@@ -921,6 +984,8 @@ export default function App() {
           {page==="marks"        && <MarksPage        ctx={ctx}/>}
           {page==="attendance"   && <AttendancePage   ctx={ctx}/>}
           {page==="reports"      && <ReportsPage      ctx={ctx}/>}
+          {page==="performance"  && <PerformancePage  ctx={ctx}/>}
+          {page==="council"      && <ClassCouncilPage ctx={ctx}/>}
           {page==="fees"         && ctx.auth.role==="admin" && <FeesPage        ctx={ctx}/>}
           {page==="notices"      && <NoticesPage      ctx={ctx}/>}
           {page==="calendar"     && <CalendarPage     ctx={ctx}/>}
@@ -3400,6 +3465,669 @@ function ReportsPage({ ctx }) {
       <small>{err.stack}</small>
     </div>;
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  ACADEMIC ANALYTICS — shared by the Performance dashboard and Class Council
+//  Scores are out of 20. Averages are weighted by subject coefficient, exactly
+//  like the report cards. A student with no marks in the chosen term is left out.
+// ─────────────────────────────────────────────────────────────────────────────
+const PASS_MARK = 10; // pass mark out of 20 (same as report cards)
+const AT_RISK_FAILS = 3; // a student is "at risk" if average < pass mark OR fails this many subjects
+const fmt1 = v => (v===null||v===undefined||isNaN(v)) ? "—" : Number(v).toFixed(1);
+const fmt2 = v => (v===null||v===undefined||isNaN(v)) ? "—" : Number(v).toFixed(2);
+const escHtml = s => String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+const prevTermOf = term => TERMS[TERMS.indexOf(term)-1] || null;
+
+const DECISION_STATUS = {
+  pending:     { label:"Pending",     color:C.red  },
+  in_progress: { label:"In Progress", color:C.gold },
+  completed:   { label:"Completed",   color:C.green },
+};
+const isOverdue = d => d.deadline && d.status!=="completed" && d.deadline < todayStr();
+
+// One student's result for one term: weighted average + per-subject averages
+function studentTermResult(student, marksMap, year, term) {
+  const subs = SUBJECTS_BY_FORM[student.form] || [];
+  const seqs = TERM_SEQS[term] || [];
+  const rows = [];
+  let tw = 0, tc = 0;
+  subs.forEach(sub => {
+    const vals = seqs
+      .map(sq => marksMap[`${student.id}-${sub}-${sq}-${year}`]?.score)
+      .filter(v => v !== null && v !== undefined)
+      .map(Number);
+    if (!vals.length) return;
+    const avg = vals.reduce((a,b)=>a+b,0) / vals.length;
+    const coeff = getCoeff(sub);
+    rows.push({ sub, avg, coeff });
+    tw += avg*coeff; tc += coeff;
+  });
+  const sorted = [...rows].sort((a,b) => b.avg - a.avg);
+  const n = rows.length >= 2 ? Math.min(3, Math.floor(rows.length/2)) : rows.length;
+  return {
+    student,
+    avg: tc ? tw/tc : null,
+    rows,
+    failed: rows.filter(r => r.avg < PASS_MARK).length,
+    strengths:  sorted.slice(0, n),
+    weaknesses: rows.length >= 2 ? sorted.slice(-n).reverse() : [],
+  };
+}
+
+// Whole-class (or several classes) statistics for one term
+function classTermStats(students, marksMap, forms, year, term) {
+  const pool = students.filter(s => s.active && s.reg_status==="registered" && forms.includes(s.form));
+  const all = pool.map(s => studentTermResult(s, marksMap, year, term));
+  const assessed = all.filter(r => r.avg !== null);
+  const byForm = {};
+  assessed.forEach(r => { (byForm[r.student.form] = byForm[r.student.form] || []).push(r); });
+  Object.values(byForm).forEach(list => {
+    list.sort((a,b) => b.avg - a.avg);
+    list.forEach((r,i) => { r.pos = i+1; r.of = list.length; });
+  });
+  assessed.sort((a,b) => b.avg - a.avg);
+
+  const n = assessed.length;
+  const classAvg = n ? assessed.reduce((a,r)=>a+r.avg,0)/n : null;
+  const passRate = n ? assessed.filter(r=>r.avg>=PASS_MARK).length / n * 100 : null;
+
+  const atRisk = assessed
+    .filter(r => r.avg < PASS_MARK || r.failed >= AT_RISK_FAILS)
+    .map(r => ({ ...r, reason: r.avg < PASS_MARK ? `Average below ${PASS_MARK}` : `Failing ${r.failed} subjects` }))
+    .sort((a,b) => a.avg - b.avg);
+
+  const subMap = {};
+  assessed.forEach(r => r.rows.forEach(x => {
+    const m = subMap[x.sub] = subMap[x.sub] || { sub:x.sub, total:0, count:0, pass:0 };
+    m.total += x.avg; m.count++; if (x.avg >= PASS_MARK) m.pass++;
+  }));
+  const subjects = Object.values(subMap)
+    .map(m => ({ sub:m.sub, avg:m.total/m.count, passRate:m.pass/m.count*100, count:m.count }))
+    .sort((a,b) => b.avg - a.avg);
+
+  const formStats = forms.map(f => {
+    const l = byForm[f] || [];
+    return { form:f, n:l.length,
+      avg: l.length ? l.reduce((a,r)=>a+r.avg,0)/l.length : null,
+      passRate: l.length ? l.filter(r=>r.avg>=PASS_MARK).length/l.length*100 : null };
+  });
+
+  return { assessed, n, noMarks: all.length - n, classAvg, passRate, atRisk, subjects, formStats, byForm };
+}
+
+// Top 3 / bottom 3 of one class (never overlap in very small classes)
+function councilRanking(stats, form) {
+  const list = stats.byForm[form] || [];
+  const top = list.slice(0, Math.min(3, list.length));
+  const bottom = list.slice(top.length).slice(-3).reverse();
+  return { list, top, bottom };
+}
+
+// Frozen copy of the figures, stored with the meeting so the archive never changes
+function buildCouncilSnapshot(stats, form) {
+  const { top, bottom } = councilRanking(stats, form);
+  const pack = r => ({
+    name:r.student.name, id:r.student.id, avg:r.avg, pos:r.pos, of:r.of,
+    strengths:r.strengths.map(x=>({sub:x.sub,avg:x.avg})),
+    weaknesses:r.weaknesses.map(x=>({sub:x.sub,avg:x.avg})),
+  });
+  const list = stats.byForm[form] || [];
+  return {
+    classAvg: list.length ? list.reduce((a,r)=>a+r.avg,0)/list.length : null,
+    passRate: list.length ? list.filter(r=>r.avg>=PASS_MARK).length/list.length*100 : null,
+    assessed: list.length,
+    atRisk: list.filter(r => r.avg < PASS_MARK || r.failed >= AT_RISK_FAILS).length,
+    top: top.map(pack), bottom: bottom.map(pack),
+    savedOn: todayStr(),
+  };
+}
+
+// Small horizontal bar used on both pages
+const ScoreBar = ({ label, value, max=20, color, note, labelWidth=108 }) => (
+  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+    <div style={{width:labelWidth,fontSize:11,color:C.navy,flexShrink:0,lineHeight:1.2}}>{label}</div>
+    <div style={{flex:1,background:C.grayBg,borderRadius:4,height:16,overflow:"hidden"}}>
+      <div style={{width:`${Math.max(0,Math.min(100,(value/max)*100))}%`,background:color,height:"100%",borderRadius:4,transition:"width .4s"}}/>
+    </div>
+    <div style={{width:58,fontSize:11,fontWeight:700,color,textAlign:"right",flexShrink:0}}>{note ?? fmt1(value)}</div>
+  </div>
+);
+const avgColor = v => v>=PASS_MARK+4 ? C.green : v>=PASS_MARK ? C.gold : C.red;
+
+// ─── Academic Performance Dashboard ────────────────────────────────────────────
+function PerformancePage({ ctx }) {
+  const { students, marksMap, teachers, auth } = ctx;
+  const isTeacher  = auth.role==="teacher";
+  const teacher    = teachers.find(t=>t.email===auth.user.email);
+  const availForms = isTeacher ? (teacher?.forms||[]) : FORMS;
+
+  const [f, setF] = useState({ cls: availForms.length===1 ? availForms[0] : "all", year:"2026/2027", term:"First Term" });
+  const [showAllRisk, setShowAllRisk] = useState(false);
+
+  const forms = f.cls==="all" ? availForms : [f.cls];
+  const stats = useMemo(() => classTermStats(students, marksMap, forms, f.year, f.term), [students, marksMap, f.cls, f.year, f.term, availForms.join("|")]);
+  const termData = useMemo(() => TERMS.map(t => ({ term:t, ...classTermStats(students, marksMap, forms, f.year, t) })), [students, marksMap, f.cls, f.year, availForms.join("|")]);
+
+  if (!availForms.length) return <Empty text="No classes are assigned to your account yet."/>;
+
+  const best  = stats.subjects.slice(0,3);
+  const weak  = [...stats.subjects].reverse().slice(0,3).filter(s => !best.find(b=>b.sub===s.sub));
+  const prev  = prevTermOf(f.term);
+  const prevStats = prev ? termData.find(t=>t.term===prev) : null;
+  const moves = prevStats && prevStats.n
+    ? stats.subjects.map(s => { const p = prevStats.subjects.find(x=>x.sub===s.sub); return p ? { sub:s.sub, delta:s.avg-p.avg } : null; })
+        .filter(Boolean).sort((a,b)=>b.delta-a.delta)
+    : [];
+  const gains = moves.filter(m=>m.delta>0.05).slice(0,3);
+  const drops = [...moves].reverse().filter(m=>m.delta<-0.05).slice(0,3);
+  const risk  = showAllRisk ? stats.atRisk : stats.atRisk.slice(0,10);
+
+  return (
+    <div>
+      <h2 style={{margin:"0 0 12px",fontSize:18,fontWeight:800,color:C.navy}}>📈 Academic Performance</h2>
+
+      <Card style={{marginBottom:11}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:9}}>
+          <div><label style={lbl}>Class</label>
+            <select style={inp} value={f.cls} onChange={e=>setF(x=>({...x,cls:e.target.value}))}>
+              {availForms.length>1 && <option value="all">All classes</option>}
+              {availForms.map(x=><option key={x} value={x}>{x}</option>)}
+            </select></div>
+          <div><label style={lbl}>Academic Year</label>
+            <select style={inp} value={f.year} onChange={e=>setF(x=>({...x,year:e.target.value}))}>
+              {ACAD_YEARS.map(y=><option key={y}>{y}</option>)}
+            </select></div>
+        </div>
+        <label style={lbl}>Term</label>
+        <div style={{display:"flex",gap:6}}>
+          {TERMS.map(t=>(
+            <button key={t} onClick={()=>setF(x=>({...x,term:t}))} style={{flex:1,padding:"8px 2px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",border:`1px solid ${f.term===t?C.navy:C.border}`,background:f.term===t?C.navy:C.white,color:f.term===t?C.white:C.gray}}>{t.replace(" Term","")}</button>
+          ))}
+        </div>
+      </Card>
+
+      {!stats.n ? <Card><Empty text={`No marks entered for ${f.cls==="all"?"these classes":f.cls} in ${f.term}, ${f.year}.`}/></Card> : (<>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:11}}>
+          {[
+            { label:"Class average",     value:`${fmt2(stats.classAvg)}/20`, sub:`${fmt1(stats.classAvg*5)}%`, color:avgColor(stats.classAvg) },
+            { label:"Pass rate",         value:`${fmt1(stats.passRate)}%`,   sub:`average ≥ ${PASS_MARK}/20`, color:stats.passRate>=50?C.green:C.red },
+            { label:"Students assessed", value:stats.n,                      sub:stats.noMarks?`${stats.noMarks} without marks`:"all have marks", color:C.navy },
+            { label:"Students at risk",  value:stats.atRisk.length,          sub:`avg < ${PASS_MARK} or ${AT_RISK_FAILS}+ fails`, color:stats.atRisk.length?C.red:C.green },
+          ].map(c=>(
+            <div key={c.label} style={{background:C.white,borderRadius:11,padding:13,borderLeft:`4px solid ${c.color}`,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+              <div style={{fontSize:11,color:C.gray}}>{c.label}</div>
+              <div style={{fontSize:22,fontWeight:900,color:c.color,margin:"2px 0"}}>{c.value}</div>
+              <div style={{fontSize:10,color:C.gray}}>{c.sub}</div>
+            </div>
+          ))}
+        </div>
+
+        {f.cls==="all" && (
+          <Card title="Class averages" style={{marginBottom:11}}>
+            {stats.formStats.map(x => x.n
+              ? <ScoreBar key={x.form} label={`${x.form} (${x.n})`} value={x.avg} color={avgColor(x.avg)} note={`${fmt1(x.avg)} · ${fmt1(x.passRate)}%`} labelWidth={80}/>
+              : <div key={x.form} style={{fontSize:11,color:C.gray,marginBottom:6}}>{x.form}: no marks yet</div>)}
+            <div style={{fontSize:10,color:C.gray,marginTop:4}}>Bar shows average out of 20 · then pass rate</div>
+          </Card>
+        )}
+
+        <div style={{display:"grid",gridTemplateColumns:"1fr",gap:11,marginBottom:11}}>
+          <Card title="🏆 Best-performing subjects">
+            {best.map((s,i)=>(
+              <div key={s.sub} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:i<best.length-1?`1px solid ${C.grayBg}`:"none"}}>
+                <div><div style={{fontSize:12.5,fontWeight:700,color:C.navy}}>{i+1}. {s.sub}</div><div style={{fontSize:10.5,color:C.gray}}>{fmt1(s.passRate)}% pass · {s.count} students</div></div>
+                <Pill color={C.green}>{fmt2(s.avg)}/20</Pill>
+              </div>
+            ))}
+          </Card>
+          <Card title="⚠️ Weakest subjects">
+            {weak.length ? weak.map((s,i)=>(
+              <div key={s.sub} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:i<weak.length-1?`1px solid ${C.grayBg}`:"none"}}>
+                <div><div style={{fontSize:12.5,fontWeight:700,color:C.navy}}>{s.sub}</div><div style={{fontSize:10.5,color:C.gray}}>{fmt1(s.passRate)}% pass · {s.count} students</div></div>
+                <Pill color={avgColor(s.avg)}>{fmt2(s.avg)}/20</Pill>
+              </div>
+            )) : <div style={{fontSize:12,color:C.gray}}>Not enough subjects with marks yet.</div>}
+          </Card>
+        </div>
+
+        <Card title="All subject averages" style={{marginBottom:11}}>
+          {stats.subjects.map(s => <ScoreBar key={s.sub} label={s.sub} value={s.avg} color={avgColor(s.avg)} labelWidth={118}/>)}
+          <div style={{fontSize:10,color:C.gray,marginTop:4}}>Out of 20 · green = strong, gold = pass, red = below {PASS_MARK}</div>
+        </Card>
+
+        <Card title={`Students at risk (${stats.atRisk.length})`} style={{marginBottom:11}}>
+          {!stats.atRisk.length && <div style={{fontSize:12,color:C.green}}>✓ No student is currently at risk.</div>}
+          {risk.map(r=>(
+            <div key={r.student.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"7px 0",borderBottom:`1px solid ${C.grayBg}`}}>
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:12.5,fontWeight:700,color:C.navy}}>{r.student.name}</div>
+                <div style={{fontSize:10.5,color:C.gray}}>{r.student.form} · {r.student.id} · {r.reason}</div>
+                {r.weaknesses.length>0 && <div style={{fontSize:10.5,color:C.red,marginTop:1}}>Weak: {r.weaknesses.map(w=>w.sub).join(", ")}</div>}
+              </div>
+              <div style={{textAlign:"right",flexShrink:0}}>
+                <div style={{fontSize:14,fontWeight:900,color:C.red}}>{fmt2(r.avg)}</div>
+                <div style={{fontSize:10,color:C.gray}}>{r.failed} failed</div>
+              </div>
+            </div>
+          ))}
+          {stats.atRisk.length>10 && <div style={{marginTop:8}}><SmBtn color={C.navyMid} onClick={()=>setShowAllRisk(v=>!v)}>{showAllRisk?"Show fewer":`Show all ${stats.atRisk.length}`}</SmBtn></div>}
+        </Card>
+
+        <Card title="Term comparison">
+          {termData.map((t,i)=>{
+            const p = i>0 ? termData[i-1] : null;
+            const dAvg = p && p.n && t.n ? t.classAvg - p.classAvg : null;
+            return t.n ? (
+              <div key={t.term} style={{padding:"7px 0",borderBottom:i<2?`1px solid ${C.grayBg}`:"none",background:t.term===f.term?"#f8fafc":"transparent"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                  <div style={{fontSize:12.5,fontWeight:700,color:C.navy}}>{t.term}{t.term===f.term?" (selected)":""}</div>
+                  <div style={{fontSize:10.5,color:C.gray}}>{t.n} students</div>
+                </div>
+                <ScoreBar label="Average /20" value={t.classAvg} color={avgColor(t.classAvg)} note={fmt2(t.classAvg)+(dAvg!==null?` ${dAvg>=0?"▲":"▼"}${Math.abs(dAvg).toFixed(2)}`:"")} labelWidth={78}/>
+                <ScoreBar label="Pass rate" value={t.passRate} max={100} color={t.passRate>=50?C.green:C.red} note={`${fmt1(t.passRate)}%`} labelWidth={78}/>
+              </div>
+            ) : (
+              <div key={t.term} style={{padding:"7px 0",borderBottom:i<2?`1px solid ${C.grayBg}`:"none",fontSize:12,color:C.gray}}>{t.term}: no marks yet</div>
+            );
+          })}
+          {prev && (gains.length>0 || drops.length>0) && (
+            <div style={{marginTop:10,paddingTop:9,borderTop:`1px dashed ${C.border}`}}>
+              <div style={{fontSize:11,fontWeight:700,color:C.navy,marginBottom:5}}>Subject movement vs {prev}</div>
+              {gains.map(m=><div key={m.sub} style={{fontSize:11.5,color:C.green,marginBottom:2}}>▲ {m.sub} +{m.delta.toFixed(2)}</div>)}
+              {drops.map(m=><div key={m.sub} style={{fontSize:11.5,color:C.red,marginBottom:2}}>▼ {m.sub} {m.delta.toFixed(2)}</div>)}
+            </div>
+          )}
+        </Card>
+      </>)}
+    </div>
+  );
+}
+
+// ─── Class Council ─────────────────────────────────────────────────────────────
+const RESPONSIBLE_SUGGESTIONS = ["Principal","Vice Principal","Class Master","Discipline Master","Guidance Counsellor","Bursar"];
+
+// Printable council report for the school archive
+function printCouncilReport(meeting, decisions, snap, teacherNames=[]) {
+  const stuRow = r => `<tr>
+    <td style="text-align:center;font-weight:700">${r.pos}/${r.of}</td>
+    <td><strong>${escHtml(r.name)}</strong><br><span style="color:#6B7280;font-size:9px">${escHtml(r.id)}</span></td>
+    <td style="text-align:center;font-weight:700">${fmt2(r.avg)}</td>
+    <td style="color:#15803D">${r.strengths.length ? r.strengths.map(x=>`${escHtml(x.sub)} (${fmt1(x.avg)})`).join(", ") : "—"}</td>
+    <td style="color:#B91C1C">${r.weaknesses.length ? r.weaknesses.map(x=>`${escHtml(x.sub)} (${fmt1(x.avg)})`).join(", ") : "—"}</td>
+  </tr>`;
+  const stuTable = (title, list, color) => `
+    <div style="margin:12px 0 4px;font-weight:800;font-size:12px;color:${color}">${title}</div>
+    <table class="grid"><thead><tr><th style="width:44px">Position</th><th>Student</th><th style="width:52px">Average /20</th><th>Strengths</th><th>Weaknesses</th></tr></thead>
+    <tbody>${list.length ? list.map(stuRow).join("") : `<tr><td colspan="5" style="text-align:center;color:#6B7280">No ranked students</td></tr>`}</tbody></table>`;
+
+  const statusTxt = s => (DECISION_STATUS[s]||DECISION_STATUS.pending).label;
+  const statusCol = s => (DECISION_STATUS[s]||DECISION_STATUS.pending).color;
+  const decRows = decisions.map((d,i)=>`<tr>
+    <td style="text-align:center">${i+1}</td>
+    <td>${escHtml(d.decision)}</td>
+    <td>${escHtml(d.responsible||"—")}</td>
+    <td style="text-align:center">${d.deadline?fmtDate(d.deadline):"—"}</td>
+    <td style="text-align:center;font-weight:700;color:${statusCol(d.status)}">${statusTxt(d.status)}${d.status==="completed"&&d.completed_on?`<br><span style="font-weight:400;font-size:9px">${fmtDate(d.completed_on)}</span>`:""}</td>
+  </tr>`).join("");
+
+  const html = `<style>
+    .rep{font-family:'Segoe UI',Arial,sans-serif;color:#0D2340;font-size:11px;line-height:1.4}
+    .rep table.grid{width:100%;border-collapse:collapse}
+    .rep table.grid th{background:#0D2340;color:#fff;font-size:9.5px;padding:4px 5px;text-align:left;border:1px solid #0D2340}
+    .rep table.grid td{border:1px solid #cbd5e1;padding:4px 5px;vertical-align:top;font-size:10px}
+    .rep h3{font-size:12px;margin:14px 0 5px;padding-bottom:3px;border-bottom:2px solid #C9962A}
+    .box{display:inline-block;border:1px solid #cbd5e1;border-radius:6px;padding:5px 12px;margin:0 6px 6px 0;text-align:center}
+  </style>
+  <div class="rep">
+    <div style="text-align:center;border-bottom:3px double #0D2340;padding-bottom:8px">
+      <img src="${SCHOOL_LOGO}" alt="SBCC" style="width:70px;height:70px;object-fit:contain">
+      <div style="font-size:16px;font-weight:900;margin-top:3px">SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE</div>
+      <div style="font-size:9px;color:#6B7280">NGEPTANG · NONI · NW REGION</div>
+      <div style="display:inline-block;margin-top:7px;background:#0D2340;color:#fff;padding:3px 18px;border-radius:12px;font-weight:800;font-size:11px;letter-spacing:.5px">CLASS COUNCIL REPORT</div>
+    </div>
+
+    <table style="width:100%;margin-top:9px;font-size:11px"><tr>
+      <td><strong>Class:</strong> ${escHtml(meeting.form)}</td>
+      <td><strong>Term:</strong> ${escHtml(meeting.term)}</td>
+      <td><strong>Academic Year:</strong> ${escHtml(meeting.acad_year)}</td>
+      <td style="text-align:right"><strong>Meeting date:</strong> ${fmtDate(meeting.meeting_date)}</td>
+    </tr></table>
+
+    <h3>1. Class performance summary</h3>
+    <div>
+      <div class="box"><div style="font-size:9px;color:#6B7280">Class average</div><div style="font-size:15px;font-weight:900">${fmt2(snap.classAvg)}/20</div></div>
+      <div class="box"><div style="font-size:9px;color:#6B7280">Pass rate</div><div style="font-size:15px;font-weight:900">${fmt1(snap.passRate)}%</div></div>
+      <div class="box"><div style="font-size:9px;color:#6B7280">Students ranked</div><div style="font-size:15px;font-weight:900">${snap.assessed}</div></div>
+      <div class="box"><div style="font-size:9px;color:#6B7280">Students at risk</div><div style="font-size:15px;font-weight:900;color:#B91C1C">${snap.atRisk}</div></div>
+    </div>
+
+    <h3>2. Top and bottom students</h3>
+    ${stuTable("🏆 Top three students", snap.top, "#15803D")}
+    ${stuTable("⚠ Bottom three students", snap.bottom, "#B91C1C")}
+
+    <h3>3. Meeting record</h3>
+    <div style="margin-bottom:5px"><strong>Attendees (${(meeting.attendees||[]).length}):</strong> ${(meeting.attendees||[]).length ? (meeting.attendees||[]).map(escHtml).join(", ") : "—"}</div>
+    <div><strong>Discussion:</strong></div>
+    <div style="border:1px solid #cbd5e1;border-radius:5px;padding:7px;min-height:50px;white-space:pre-wrap">${escHtml(meeting.discussion||"—")}</div>
+
+    <h3>4. Decisions and follow-up</h3>
+    ${decisions.length ? `<table class="grid"><thead><tr><th style="width:24px">#</th><th>Decision</th><th style="width:100px">Responsible</th><th style="width:62px">Deadline</th><th style="width:70px">Status</th></tr></thead><tbody>${decRows}</tbody></table>` : `<div style="color:#6B7280">No decisions recorded.</div>`}
+
+    <table style="width:100%;margin-top:34px;font-size:10px"><tr>
+      <td style="width:50%;text-align:center"><div style="border-top:1px solid #0D2340;width:80%;margin:0 auto;padding-top:3px">Class Master / Council Secretary</div></td>
+      <td style="width:50%;text-align:center"><div style="border-top:1px solid #0D2340;width:80%;margin:0 auto;padding-top:3px">Principal</div></td>
+    </tr></table>
+    <div style="margin-top:12px;font-size:8.5px;color:#9ca3af;text-align:center">
+      Ranking figures recorded on ${fmtDate(snap.savedOn||todayStr())} · Decision statuses printed on ${fmtDate(todayStr())} · Archive copy
+    </div>
+  </div>`;
+  domPrint("sbc-council-report", html, "A4 portrait", "10mm");
+}
+
+const blankDecision = () => ({ key:Math.random().toString(36).slice(2), id:null, decision:"", responsible:"", deadline:"", status:"pending", completed_on:null });
+
+function ClassCouncilPage({ ctx }) {
+  const { students, marksMap, teachers, auth, councilMeetings, councilDecisions, councilReady,
+          saveCouncilMeeting, deleteCouncilMeeting, updateDecisionStatus } = ctx;
+  const isTeacher  = auth.role==="teacher";
+  const teacher    = teachers.find(t=>t.email===auth.user.email);
+  const availForms = isTeacher ? (teacher?.forms||[]) : FORMS;
+
+  const [sel, setSel]       = useState({ form:availForms[0]||"Form 1", year:"2026/2027", term:"First Term" });
+  const [tab, setTab]       = useState("rank"); // rank | meetings | actions
+  const [showFull, setShowFull] = useState(false);
+  const [openId, setOpenId] = useState(null);
+  const [modal, setModal]   = useState(null);   // null | meeting draft
+  const [saving, setSaving] = useState(false);
+  const [err, setErr]       = useState("");
+  const [actFilter, setActFilter] = useState("open"); // open | all | completed
+
+  const stats   = useMemo(() => classTermStats(students, marksMap, [sel.form], sel.year, sel.term), [students, marksMap, sel.form, sel.year, sel.term]);
+  const ranking = councilRanking(stats, sel.form);
+  const activeTeachers = teachers.filter(t=>t.active).map(t=>t.name).filter(Boolean);
+
+  const meetingsFor = councilMeetings.filter(m => m.form===sel.form && m.acad_year===sel.year && m.term===sel.term)
+                                      .sort((a,b)=> (b.meeting_date||"").localeCompare(a.meeting_date||""));
+  const decisionsOf = id => councilDecisions.filter(d => d.meeting_id===id);
+  const classMeetings = councilMeetings.filter(m => m.form===sel.form && m.acad_year===sel.year);
+  const classDecisions = councilDecisions
+    .filter(d => classMeetings.some(m=>m.id===d.meeting_id))
+    .map(d => ({ ...d, meeting: classMeetings.find(m=>m.id===d.meeting_id) }))
+    .sort((a,b)=> (a.deadline||"9999").localeCompare(b.deadline||"9999"));
+  const shownDecisions = classDecisions.filter(d => actFilter==="all" ? true : actFilter==="completed" ? d.status==="completed" : d.status!=="completed");
+  const counts = { pending:classDecisions.filter(d=>d.status==="pending").length,
+                   in_progress:classDecisions.filter(d=>d.status==="in_progress").length,
+                   completed:classDecisions.filter(d=>d.status==="completed").length,
+                   overdue:classDecisions.filter(isOverdue).length };
+
+  if (!availForms.length) return <Empty text="No classes are assigned to your account yet."/>;
+
+  function openNew() {
+    setErr("");
+    setModal({ id:null, meeting_date:todayStr(), attendees:[], other:"", discussion:"", decisions:[blankDecision()], snapshot:null });
+  }
+  function openEdit(m) {
+    setErr("");
+    const att = m.attendees||[];
+    setModal({
+      id:m.id, meeting_date:m.meeting_date, discussion:m.discussion||"", snapshot:m.snapshot||null,
+      attendees: att.filter(a=>activeTeachers.includes(a)),
+      other: att.filter(a=>!activeTeachers.includes(a)).join(", "),
+      decisions: decisionsOf(m.id).map(d=>({ key:String(d.id), id:d.id, decision:d.decision, responsible:d.responsible||"", deadline:d.deadline||"", status:d.status, completed_on:d.completed_on||null })),
+    });
+  }
+  const setM = patch => setModal(m => ({ ...m, ...patch }));
+  const setD = (key, patch) => setModal(m => ({ ...m, decisions:m.decisions.map(d=>d.key===key?{...d,...patch}:d) }));
+  const toggleAtt = name => setModal(m => ({ ...m, attendees: m.attendees.includes(name) ? m.attendees.filter(a=>a!==name) : [...m.attendees, name] }));
+
+  async function submit() {
+    if (!modal.meeting_date) { setErr("Please choose the meeting date."); return; }
+    const decisions = modal.decisions.filter(d=>d.decision.trim());
+    if (!modal.discussion.trim() && !decisions.length) { setErr("Add the discussion or at least one decision."); return; }
+    const attendees = [...modal.attendees, ...modal.other.split(",").map(s=>s.trim()).filter(Boolean)];
+    setSaving(true); setErr("");
+    try {
+      await saveCouncilMeeting({
+        id:modal.id, form:sel.form, acad_year:sel.year, term:sel.term,
+        meeting_date:modal.meeting_date, attendees, discussion:modal.discussion.trim(),
+        snapshot: modal.snapshot || (stats.byForm[sel.form] ? buildCouncilSnapshot(stats, sel.form) : null),
+      }, decisions.map(d=>({ ...d, decision:d.decision.trim() })));
+      setModal(null);
+    } catch(e) { setErr(e.message || "Could not save. Please try again."); }
+    setSaving(false);
+  }
+
+  async function setStatus(d, status) {
+    try { await updateDecisionStatus(d.id, status); } catch(e) { alert(e.message || "Could not update status."); }
+  }
+  async function removeMeeting(m) {
+    if (!window.confirm(`Delete the council meeting of ${fmtDate(m.meeting_date)} and all its decisions?`)) return;
+    try { await deleteCouncilMeeting(m.id); } catch(e) { alert(e.message || "Could not delete."); }
+  }
+  function printMeeting(m) {
+    const snap = m.snapshot || buildCouncilSnapshot(stats, sel.form);
+    printCouncilReport(m, decisionsOf(m.id), snap);
+  }
+
+  const StatusButtons = ({ d }) => (
+    <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:5}}>
+      {Object.entries(DECISION_STATUS).map(([k,v])=>(
+        <button key={k} onClick={()=>d.status!==k && setStatus(d,k)} style={{padding:"4px 9px",borderRadius:12,fontSize:11,fontWeight:700,cursor:"pointer",border:`1px solid ${v.color}`,background:d.status===k?v.color:C.white,color:d.status===k?C.white:v.color}}>{v.label}</button>
+      ))}
+    </div>
+  );
+
+  const StudentCard = ({ r, accent }) => (
+    <div style={{border:`1px solid ${C.grayLight}`,borderLeft:`4px solid ${accent}`,borderRadius:9,padding:"9px 11px",marginBottom:8}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:9,minWidth:0}}>
+          <div style={{width:34,height:34,borderRadius:"50%",background:accent+"20",color:accent,fontWeight:900,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{r.pos}</div>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:800,color:C.navy}}>{r.student.name}</div>
+            <div style={{fontSize:10.5,color:C.gray}}>{r.student.id} · Position {r.pos}/{r.of}</div>
+          </div>
+        </div>
+        <div style={{textAlign:"right",flexShrink:0}}>
+          <div style={{fontSize:17,fontWeight:900,color:avgColor(r.avg)}}>{fmt2(r.avg)}</div>
+          <div style={{fontSize:9.5,color:C.gray}}>average /20</div>
+        </div>
+      </div>
+      <div style={{marginTop:7,fontSize:11}}>
+        <div style={{color:C.green,marginBottom:2}}><strong>Strengths:</strong> {r.strengths.length ? r.strengths.map(x=>`${x.sub} (${fmt1(x.avg)})`).join(", ") : "—"}</div>
+        <div style={{color:C.red}}><strong>Weaknesses:</strong> {r.weaknesses.length ? r.weaknesses.map(x=>`${x.sub} (${fmt1(x.avg)})`).join(", ") : "—"}</div>
+      </div>
+    </div>
+  );
+
+  const tabBtn = (k,label) => (
+    <button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"9px 2px",fontSize:12.5,fontWeight:800,cursor:"pointer",border:"none",borderBottom:`3px solid ${tab===k?C.gold:"transparent"}`,background:"transparent",color:tab===k?C.navy:C.gray}}>{label}</button>
+  );
+
+  return (
+    <div>
+      <h2 style={{margin:"0 0 12px",fontSize:18,fontWeight:800,color:C.navy}}>🏛️ Class Council</h2>
+
+      {!councilReady && (
+        <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:10,padding:12,marginBottom:11,fontSize:12,color:"#78350f"}}>
+          <strong>One-time setup needed.</strong> The council tables are not in your database yet, so meetings cannot be saved. Run the <code>council_setup.sql</code> script in Supabase (SQL Editor), then reload this page. Rankings below still work.
+        </div>
+      )}
+
+      <Card style={{marginBottom:11}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:9}}>
+          <div><label style={lbl}>Class</label>
+            <select style={inp} value={sel.form} onChange={e=>setSel(x=>({...x,form:e.target.value}))}>{availForms.map(x=><option key={x}>{x}</option>)}</select></div>
+          <div><label style={lbl}>Academic Year</label>
+            <select style={inp} value={sel.year} onChange={e=>setSel(x=>({...x,year:e.target.value}))}>{ACAD_YEARS.map(y=><option key={y}>{y}</option>)}</select></div>
+        </div>
+        <label style={lbl}>Term</label>
+        <div style={{display:"flex",gap:6}}>
+          {TERMS.map(t=>(
+            <button key={t} onClick={()=>setSel(x=>({...x,term:t}))} style={{flex:1,padding:"8px 2px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",border:`1px solid ${sel.term===t?C.navy:C.border}`,background:sel.term===t?C.navy:C.white,color:sel.term===t?C.white:C.gray}}>{t.replace(" Term","")}</button>
+          ))}
+        </div>
+      </Card>
+
+      <div style={{display:"flex",background:C.white,borderRadius:"11px 11px 0 0",borderBottom:`1px solid ${C.grayLight}`}}>
+        {tabBtn("rank","Rankings")}
+        {tabBtn("meetings",`Meetings (${meetingsFor.length})`)}
+        {tabBtn("actions",`Actions (${counts.pending+counts.in_progress})`)}
+      </div>
+      <div style={{background:C.white,borderRadius:"0 0 11px 11px",padding:13,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+
+        {/* ── Rankings ── */}
+        {tab==="rank" && (!stats.n ? <Empty text={`No marks for ${sel.form} in ${sel.term}, ${sel.year}.`}/> : (<>
+          <div style={{display:"flex",gap:8,marginBottom:12}}>
+            {[["Class average",`${fmt2(stats.classAvg)}/20`,avgColor(stats.classAvg)],["Pass rate",`${fmt1(stats.passRate)}%`,stats.passRate>=50?C.green:C.red],["Ranked",stats.n,C.navy]].map(([l,v,c])=>(
+              <div key={l} style={{flex:1,background:C.grayBg,borderRadius:9,padding:"8px 6px",textAlign:"center"}}>
+                <div style={{fontSize:9.5,color:C.gray}}>{l}</div><div style={{fontSize:15,fontWeight:900,color:c}}>{v}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{fontSize:12.5,fontWeight:800,color:C.green,margin:"4px 0 7px"}}>🏆 Top three</div>
+          {ranking.top.map(r=><StudentCard key={r.student.id} r={r} accent={C.green}/>)}
+          <div style={{fontSize:12.5,fontWeight:800,color:C.red,margin:"12px 0 7px"}}>⚠️ Bottom three</div>
+          {ranking.bottom.length ? ranking.bottom.map(r=><StudentCard key={r.student.id} r={r} accent={C.red}/>) : <div style={{fontSize:12,color:C.gray}}>Class too small for a separate bottom three.</div>}
+          {stats.noMarks>0 && <div style={{fontSize:10.5,color:C.gray,marginTop:6}}>{stats.noMarks} student(s) with no marks this term are not ranked.</div>}
+          <div style={{marginTop:10}}><SmBtn color={C.navyMid} onClick={()=>setShowFull(v=>!v)}>{showFull?"Hide full class list":"Show full class list"}</SmBtn></div>
+          {showFull && (
+            <div style={{marginTop:9}}>
+              {ranking.list.map(r=>(
+                <div key={r.student.id} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:`1px solid ${C.grayBg}`,fontSize:12}}>
+                  <span style={{color:C.navy}}><strong style={{display:"inline-block",width:30}}>{r.pos}.</strong>{r.student.name}</span>
+                  <span style={{fontWeight:700,color:avgColor(r.avg)}}>{fmt2(r.avg)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </>))}
+
+        {/* ── Meetings ── */}
+        {tab==="meetings" && (<>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <div style={{fontSize:12,color:C.gray}}>{sel.form} · {sel.term} · {sel.year}</div>
+            <Btn onClick={openNew} disabled={!councilReady}>+ New meeting</Btn>
+          </div>
+          {!meetingsFor.length && <Empty text="No council meeting recorded for this class and term yet."/>}
+          {meetingsFor.map(m=>{
+            const ds = decisionsOf(m.id);
+            const done = ds.filter(d=>d.status==="completed").length;
+            const open = openId===m.id;
+            return (
+              <div key={m.id} style={{border:`1px solid ${C.grayLight}`,borderRadius:10,marginBottom:9,overflow:"hidden"}}>
+                <div onClick={()=>setOpenId(open?null:m.id)} style={{padding:"10px 12px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,background:open?"#f8fafc":C.white}}>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:800,color:C.navy}}>{fmtDate(m.meeting_date)}</div>
+                    <div style={{fontSize:10.5,color:C.gray}}>{(m.attendees||[]).length} attendees · {ds.length} decisions{ds.length?` (${done} done)`:""}</div>
+                  </div>
+                  <span style={{color:C.gray,fontSize:12}}>{open?"▲":"▼"}</span>
+                </div>
+                {open && (
+                  <div style={{padding:"4px 12px 12px"}}>
+                    <div style={{fontSize:11,color:C.gray,marginTop:6}}>Attendees</div>
+                    <div style={{fontSize:12,color:C.navy,marginBottom:7}}>{(m.attendees||[]).join(", ")||"—"}</div>
+                    <div style={{fontSize:11,color:C.gray}}>Discussion</div>
+                    <div style={{fontSize:12,color:C.navy,whiteSpace:"pre-wrap",marginBottom:8}}>{m.discussion||"—"}</div>
+                    <div style={{fontSize:11,color:C.gray,marginBottom:4}}>Decisions</div>
+                    {!ds.length && <div style={{fontSize:12,color:C.gray}}>None recorded.</div>}
+                    {ds.map(d=>(
+                      <div key={d.id} style={{background:C.grayBg,borderRadius:8,padding:"8px 10px",marginBottom:6}}>
+                        <div style={{fontSize:12.5,fontWeight:600,color:C.navy}}>{d.decision}</div>
+                        <div style={{fontSize:10.5,color:isOverdue(d)?C.red:C.gray,marginTop:2}}>👤 {d.responsible||"Unassigned"} · ⏰ {d.deadline?fmtDate(d.deadline):"No deadline"}{isOverdue(d)?" · OVERDUE":""}</div>
+                        <StatusButtons d={d}/>
+                      </div>
+                    ))}
+                    <div style={{display:"flex",gap:7,marginTop:8,flexWrap:"wrap"}}>
+                      <SmBtn color={C.navyMid} onClick={()=>openEdit(m)}>✏️ Edit</SmBtn>
+                      <SmBtn color={C.green} onClick={()=>printMeeting(m)}>🖨️ Print report</SmBtn>
+                      {!isTeacher && <SmBtn color={C.red} onClick={()=>removeMeeting(m)}>🗑 Delete</SmBtn>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </>)}
+
+        {/* ── Actions tracker ── */}
+        {tab==="actions" && (<>
+          <div style={{display:"flex",gap:7,marginBottom:10}}>
+            {[["Pending",counts.pending,C.red],["In progress",counts.in_progress,C.gold],["Done",counts.completed,C.green]].map(([l,v,c])=>(
+              <div key={l} style={{flex:1,background:c+"15",borderRadius:9,padding:"7px 4px",textAlign:"center"}}>
+                <div style={{fontSize:17,fontWeight:900,color:c}}>{v}</div><div style={{fontSize:9.5,color:C.gray}}>{l}</div>
+              </div>
+            ))}
+          </div>
+          {counts.overdue>0 && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"6px 10px",fontSize:11.5,color:C.red,marginBottom:9}}>⏰ {counts.overdue} decision(s) past deadline</div>}
+          <div style={{display:"flex",gap:6,marginBottom:10}}>
+            {[["open","Open"],["completed","Completed"],["all","All"]].map(([k,l])=>(
+              <button key={k} onClick={()=>setActFilter(k)} style={{padding:"5px 12px",borderRadius:14,fontSize:11.5,fontWeight:700,cursor:"pointer",border:`1px solid ${actFilter===k?C.navy:C.border}`,background:actFilter===k?C.navy:C.white,color:actFilter===k?C.white:C.gray}}>{l}</button>
+            ))}
+          </div>
+          <div style={{fontSize:10.5,color:C.gray,marginBottom:8}}>All terms of {sel.year} for {sel.form}</div>
+          {!shownDecisions.length && <Empty text="No decisions to show."/>}
+          {shownDecisions.map(d=>(
+            <div key={d.id} style={{border:`1px solid ${isOverdue(d)?"#fca5a5":C.grayLight}`,borderLeft:`4px solid ${DECISION_STATUS[d.status]?.color||C.gray}`,borderRadius:9,padding:"9px 11px",marginBottom:8}}>
+              <div style={{fontSize:12.5,fontWeight:600,color:C.navy}}>{d.decision}</div>
+              <div style={{fontSize:10.5,color:isOverdue(d)?C.red:C.gray,marginTop:2}}>👤 {d.responsible||"Unassigned"} · ⏰ {d.deadline?fmtDate(d.deadline):"No deadline"}{isOverdue(d)?" · OVERDUE":""}</div>
+              <div style={{fontSize:10,color:C.gray}}>From {d.meeting.term} meeting, {fmtDate(d.meeting.meeting_date)}{d.status==="completed"&&d.completed_on?` · done ${fmtDate(d.completed_on)}`:""}</div>
+              <StatusButtons d={d}/>
+            </div>
+          ))}
+        </>)}
+      </div>
+
+      {/* ── Meeting form ── */}
+      {modal && (
+        <Modal title={modal.id ? "Edit council meeting" : "New council meeting"} onClose={()=>!saving&&setModal(null)}>
+          <div style={{fontSize:11.5,color:C.gray,marginBottom:10}}>{sel.form} · {sel.term} · {sel.year}</div>
+          <Fr label="Meeting date"><input style={inp} type="date" value={modal.meeting_date} onChange={e=>setM({meeting_date:e.target.value})}/></Fr>
+
+          <Fr label="Attendees (tap to select)">
+            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:7}}>
+              {activeTeachers.map(n=>{ const on=modal.attendees.includes(n); return (
+                <button key={n} type="button" onClick={()=>toggleAtt(n)} style={{padding:"5px 10px",borderRadius:14,fontSize:11.5,fontWeight:600,cursor:"pointer",border:`1px solid ${on?C.navy:C.border}`,background:on?C.navy:C.white,color:on?C.white:C.gray}}>{on?"✓ ":""}{n}</button>
+              );})}
+              {!activeTeachers.length && <span style={{fontSize:11.5,color:C.gray}}>No teachers on file — type names below.</span>}
+            </div>
+            <input style={inp} placeholder="Others (Principal, parent delegate…) separated by commas" value={modal.other} onChange={e=>setM({other:e.target.value})}/>
+          </Fr>
+
+          <Fr label="Discussion">
+            <textarea style={{...inp,minHeight:90,resize:"vertical"}} placeholder="Summary of what was discussed…" value={modal.discussion} onChange={e=>setM({discussion:e.target.value})}/>
+          </Fr>
+
+          <div style={{fontSize:12,fontWeight:800,color:C.navy,margin:"12px 0 6px"}}>Decisions</div>
+          <datalist id="council-people">{[...RESPONSIBLE_SUGGESTIONS,...activeTeachers].map(n=><option key={n} value={n}/>)}</datalist>
+          {modal.decisions.map((d,i)=>(
+            <div key={d.key} style={{border:`1px solid ${C.grayLight}`,borderRadius:9,padding:10,marginBottom:9,background:"#fafafa"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                <span style={{fontSize:11.5,fontWeight:800,color:C.navyMid}}>Decision {i+1}</span>
+                <button type="button" onClick={()=>setM({decisions:modal.decisions.filter(x=>x.key!==d.key)})} style={{background:"none",border:"none",color:C.red,fontSize:12,fontWeight:700,cursor:"pointer"}}>Remove</button>
+              </div>
+              <textarea style={{...inp,minHeight:56,resize:"vertical",marginBottom:7}} placeholder="What was decided?" value={d.decision} onChange={e=>setD(d.key,{decision:e.target.value})}/>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,marginBottom:7}}>
+                <div><label style={lbl}>Responsible person</label><input style={inp} list="council-people" placeholder="Name or role" value={d.responsible} onChange={e=>setD(d.key,{responsible:e.target.value})}/></div>
+                <div><label style={lbl}>Deadline</label><input style={inp} type="date" value={d.deadline} onChange={e=>setD(d.key,{deadline:e.target.value})}/></div>
+              </div>
+              <label style={lbl}>Status</label>
+              <select style={inp} value={d.status} onChange={e=>setD(d.key,{status:e.target.value, completed_on:e.target.value==="completed"?(d.completed_on||todayStr()):null})}>
+                {Object.entries(DECISION_STATUS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+              </select>
+            </div>
+          ))}
+          <SmBtn color={C.navyMid} onClick={()=>setM({decisions:[...modal.decisions, blankDecision()]})}>+ Add decision</SmBtn>
+
+          {err && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"8px 12px",color:C.red,fontSize:12,margin:"12px 0 0"}}>{err}</div>}
+          <div style={{display:"flex",gap:8,marginTop:14}}>
+            <Btn onClick={submit} disabled={saving}>{saving?"Saving…":"Save meeting"}</Btn>
+            <Btn outline onClick={()=>setModal(null)} disabled={saving}>Cancel</Btn>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
 }
 
 // ─── Fees ──────────────────────────────────────────────────────────────────────
