@@ -2416,12 +2416,15 @@ function PromoteStudentsModal({ students, saveStudent, saveFee, onClose }) {
 }
 
 // ─── Teachers ──────────────────────────────────────────────────────────────────
+// Name of the Supabase Edge Function that creates / resets / deletes teacher logins
+const TEACHER_FUNCTION = "manage-teacher-v2";
+
 // Turns a failed call to the manage-teacher function into a message an admin can act on
 async function functionErrorMessage(error) {
   try { const body = await error.context.json(); if (body?.error) return body.error; } catch { /* not JSON */ }
   const status = error?.context?.status;
   if (status === 404 || /failed to send|failed to fetch/i.test(error?.message || ""))
-    return "The teacher-account service (manage-teacher) could not be reached. It may not be deployed in Supabase yet.";
+    return `The teacher-account service (${TEACHER_FUNCTION}) could not be reached. It may not be deployed in Supabase yet.`;
   return error?.message || "Unknown error";
 }
 
@@ -2452,7 +2455,7 @@ function TeachersPage({ ctx }) {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) { setErr("DIAGNOSTIC: no active session — log out and back in first."); return; }
 
-      const url = `https://xapbkapxpdvdvelcbpyo.supabase.co/functions/v1/manage-teacher`;
+      const url = `https://xapbkapxpdvdvelcbpyo.supabase.co/functions/v1/${TEACHER_FUNCTION}`;
       const res = await fetch(url, {
         method: "POST",
         headers: {
@@ -2474,7 +2477,7 @@ function TeachersPage({ ctx }) {
     if (form.password.length < 6) { setErr("The password must be at least 6 characters."); return; }
     setErr(""); setSaving(true);
     try {
-      const { data, error } = await supabase.functions.invoke("manage-teacher", {
+      const { data, error } = await supabase.functions.invoke(TEACHER_FUNCTION, {
         body: { action:"create", name:form.name.trim(), email:form.email.trim().toLowerCase(), password:form.password, subjects:form.subjects, forms:form.forms },
       });
       if (error) throw new Error(await functionErrorMessage(error));
@@ -2488,7 +2491,7 @@ function TeachersPage({ ctx }) {
     if (!reset.password || reset.password.length < 6) { setErr("The password must be at least 6 characters."); return; }
     setErr(""); setSaving(true);
     try {
-      const { data, error } = await supabase.functions.invoke("manage-teacher", {
+      const { data, error } = await supabase.functions.invoke(TEACHER_FUNCTION, {
         body: { action:"reset_password", teacherId:reset.t.id, userId:reset.t.user_id, newPassword:reset.password },
       });
       if (error) throw new Error(await functionErrorMessage(error));
@@ -2514,7 +2517,7 @@ function TeachersPage({ ctx }) {
   async function deleteTeacherFully(t) {
     if (!window.confirm(`Permanently delete ${t.name}'s account? They will no longer be able to log in. This cannot be undone.`)) return;
     try {
-      const { data, error } = await supabase.functions.invoke("manage-teacher", {
+      const { data, error } = await supabase.functions.invoke(TEACHER_FUNCTION, {
         body: { action:"delete", teacherId:t.id, userId:t.user_id },
       });
       if (error) throw new Error(await functionErrorMessage(error));
