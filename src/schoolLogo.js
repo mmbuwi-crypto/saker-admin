@@ -1,41 +1,21 @@
-// SBCC Bawe crest, embedded so it works offline and on printed documents.
-// Transparent 256x256 WebP. Line breaks inside the template string are ignored on purpose.
-const DATA = `
-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
+// School crest. The image file (school-logo.webp) sits next to this file.
+// It starts as a full web address (so it also works inside the print window),
+// then is swapped for an embedded copy once loaded so it keeps working offline.
+import logoUrl from "./school-logo.webp";
+
+const absolute = typeof window !== "undefined"
+  ? new URL(logoUrl, window.location.origin).href
+  : logoUrl;
+
+export let SCHOOL_LOGO = absolute;
+
+if (typeof window !== "undefined" && typeof fetch === "function") {
+  fetch(logoUrl)
+    .then(r => r.blob())
+    .then(b => {
+      const fr = new FileReader();
+      fr.onload = () => { SCHOOL_LOGO = fr.result; };
+      fr.readAsDataURL(b);
+    })
+    .catch(() => {});
+}
