@@ -2416,12 +2416,22 @@ function PromoteStudentsModal({ students, saveStudent, saveFee, onClose }) {
 }
 
 // ─── Teachers ──────────────────────────────────────────────────────────────────
+// Turns a failed call to the manage-teacher function into a message an admin can act on
+async function functionErrorMessage(error) {
+  try { const body = await error.context.json(); if (body?.error) return body.error; } catch { /* not JSON */ }
+  const status = error?.context?.status;
+  if (status === 404 || /failed to send|failed to fetch/i.test(error?.message || ""))
+    return "The teacher-account service (manage-teacher) could not be reached. It may not be deployed in Supabase yet.";
+  return error?.message || "Unknown error";
+}
+
 function TeachersPage({ ctx }) {
   const { teachers, saveTeacher } = ctx;
   const [modal,  setModal]  = useState(null);
   const [form,   setForm]   = useState({ name:"", email:"", password:"", subjects:[], forms:[], active:true });
   const [saving, setSaving] = useState(false);
   const [err,    setErr]    = useState("");
+  const [reset,  setReset]  = useState(null); // { t, password, done }
 
   const toggle = (k,v) => setForm(f => ({ ...f, [k]: f[k].includes(v) ? f[k].filter(x=>x!==v) : [...f[k],v] }));
 
@@ -2460,28 +2470,37 @@ function TeachersPage({ ctx }) {
   }
 
   async function createTeacher() {
-    if (!form.name?.trim()||!form.email?.trim()||!form.password) return;
+    if (!form.name?.trim()||!form.email?.trim()||!form.password) { setErr("Please fill in the name, email and password."); return; }
+    if (form.password.length < 6) { setErr("The password must be at least 6 characters."); return; }
     setErr(""); setSaving(true);
     try {
       const { data, error } = await supabase.functions.invoke("manage-teacher", {
-        body: { action:"create", name:form.name.trim(), email:form.email.trim(), password:form.password, subjects:form.subjects, forms:form.forms },
+        body: { action:"create", name:form.name.trim(), email:form.email.trim().toLowerCase(), password:form.password, subjects:form.subjects, forms:form.forms },
       });
-      if (error) {
-        // The Supabase client's error.message is a generic wrapper on non-2xx
-        // responses ("Edge Function returned a non-2xx status code"). The
-        // actual JSON body our function sent is on error.context, which is
-        // the raw fetch Response — read it directly to get the real message.
-        let realMessage = error.message;
-        try {
-          const body = await error.context.json();
-          if (body?.error) realMessage = body.error;
-        } catch { /* context wasn't readable JSON — fall back to error.message */ }
-        throw new Error(realMessage);
-      }
+      if (error) throw new Error(await functionErrorMessage(error));
       if (data?.error) throw new Error(data.error);
-      setModal({ justCreated:true, name:form.name, email:form.email, password:form.password });
+      setModal({ justCreated:true, name:form.name, email:form.email.trim().toLowerCase(), password:form.password });
     } catch(e) { setErr("Could not create teacher: " + e.message); }
     setSaving(false);
+  }
+
+  async function resetPassword() {
+    if (!reset.password || reset.password.length < 6) { setErr("The password must be at least 6 characters."); return; }
+    setErr(""); setSaving(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("manage-teacher", {
+        body: { action:"reset_password", teacherId:reset.t.id, userId:reset.t.user_id, newPassword:reset.password },
+      });
+      if (error) throw new Error(await functionErrorMessage(error));
+      if (data?.error) throw new Error(data.error);
+      setReset(r => ({ ...r, done:true }));
+    } catch(e) { setErr("Could not reset the password: " + e.message); }
+    setSaving(false);
+  }
+
+  function copyLogin(email, password) {
+    const text = `SBCC Bawe school portal\nEmail: ${email}\nPassword: ${password}\n${window.location.origin}`;
+    navigator.clipboard?.writeText(text).then(() => alert("Login details copied.")).catch(() => alert("Could not copy. Please write them down."));
   }
 
   async function editTeacher() {
@@ -2498,14 +2517,7 @@ function TeachersPage({ ctx }) {
       const { data, error } = await supabase.functions.invoke("manage-teacher", {
         body: { action:"delete", teacherId:t.id, userId:t.user_id },
       });
-      if (error) {
-        let realMessage = error.message;
-        try {
-          const body = await error.context.json();
-          if (body?.error) realMessage = body.error;
-        } catch { /* fall back to error.message */ }
-        throw new Error(realMessage);
-      }
+      if (error) throw new Error(await functionErrorMessage(error));
       if (data?.error) throw new Error(data.error);
       alert(`${t.name}'s account has been removed.`);
     } catch(e) { alert("Could not delete: " + e.message); }
@@ -2532,6 +2544,7 @@ function TeachersPage({ ctx }) {
           <div style={{marginTop:5,display:"flex",flexWrap:"wrap",gap:4}}>{(t.forms||[]).map(f=><Pill key={f} color={C.gold}>{f}</Pill>)}</div>
           <div style={{display:"flex",gap:7,marginTop:8,flexWrap:"wrap"}}>
             <SmBtn onClick={()=>{setForm({...t,password:""});setErr("");setModal(t);}} color={C.green}>Edit</SmBtn>
+            <SmBtn onClick={()=>{setErr("");setReset({t,password:randomPassword(),done:false});}} color={C.navyMid}>Reset Password</SmBtn>
             <SmBtn onClick={()=>saveTeacher({...t,active:!t.active})} color={t.active?C.red:C.green}>{t.active?"Deactivate":"Activate"}</SmBtn>
             <SmBtn onClick={()=>deleteTeacherFully(t)} color={C.red}>Delete Account</SmBtn>
           </div>
@@ -2553,7 +2566,32 @@ function TeachersPage({ ctx }) {
             ))}
           </div>
           <div style={{fontSize:11,color:C.gray,marginBottom:12}}>⚠️ Write this down or share it now — the password won't be shown again. The teacher can change it themselves later from their Profile page.</div>
-          <Btn onClick={()=>setModal(null)}>Done</Btn>
+          <div style={{display:"flex",gap:8}}><Btn outline onClick={()=>copyLogin(modal.email,modal.password)}>Copy login details</Btn><Btn onClick={()=>setModal(null)}>Done</Btn></div>
+        </Modal>
+      )}
+
+      {reset && (
+        <Modal title={reset.done ? "Password reset" : `Reset password · ${reset.t.name}`} onClose={()=>!saving&&setReset(null)}>
+          {reset.done ? (<>
+            <div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:10,padding:12,marginBottom:12,fontSize:13,color:C.green,fontWeight:700}}>New password saved for {reset.t.name}.</div>
+            <div style={{background:C.grayBg,borderRadius:8,padding:"10px 12px",marginBottom:12,fontSize:13}}>
+              <div>Email: <strong>{reset.t.email}</strong></div>
+              <div>Password: <strong style={{fontFamily:"monospace"}}>{reset.password}</strong></div>
+            </div>
+            <div style={{display:"flex",gap:8}}><Btn outline onClick={()=>copyLogin(reset.t.email,reset.password)}>Copy login details</Btn><Btn onClick={()=>setReset(null)}>Done</Btn></div>
+          </>) : (<>
+            <Fr label="New password">
+              <div style={{display:"flex",gap:6}}>
+                <input style={{...inp,flex:1,fontFamily:"monospace"}} value={reset.password} onChange={e=>setReset(r=>({...r,password:e.target.value}))}/>
+                <SmBtn onClick={()=>setReset(r=>({...r,password:randomPassword()}))} color={C.navyMid}>New</SmBtn>
+              </div>
+            </Fr>
+            {err && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"8px 12px",color:C.red,fontSize:12,marginTop:10}}>{err}</div>}
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:13}}>
+              <Btn outline onClick={()=>setReset(null)} disabled={saving}>Cancel</Btn>
+              <Btn onClick={resetPassword} disabled={saving}>{saving?"Saving…":"Save new password"}</Btn>
+            </div>
+          </>)}
         </Modal>
       )}
 
