@@ -43,6 +43,10 @@ const DEFAULT_COEFF = {
 };
 const getCoeff = sub => DEFAULT_COEFF[sub] || 2;
 
+// Match a logged-in user to their teacher profile (ignores capital letters and stray spaces in the email)
+const normEmail = e => String(e || "").trim().toLowerCase();
+const findTeacher = (teachers, email) => teachers.find(t => normEmail(t.email) === normEmail(email));
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const todayStr = () => new Date().toISOString().slice(0,10);
 const fmtDate  = d => { if(!d) return "—"; const [y,m,day]=d.split("-"); return `${day}/${m}/${y}`; };
@@ -826,7 +830,7 @@ export default function App() {
   }
 
   // ── Current user info ───────────────────────────────────────────────────────
-  const currentTeacher = teachers.find(t => t.email === session?.user?.email);
+  const currentTeacher = findTeacher(teachers, session?.user?.email);
   const currentUser = {
     id:    session?.user?.id || "ADMIN",
     name:  currentTeacher?.name || userProfile?.name || session?.user?.email || "Admin",
@@ -2592,14 +2596,28 @@ function TeachersPage({ ctx }) {
   );
 }
 
+// Shown to a teacher whose account is not linked to a profile or has no classes/subjects assigned yet
+function TeacherSetupNotice({ teacher, email, needSubjects }) {
+  let msg = "";
+  if (!teacher) msg = `Your login (${email}) is not linked to a teacher profile. Ask the administrator to open Teachers and check that your email matches.`;
+  else if (!(teacher.forms||[]).length) msg = "No classes are assigned to your profile yet. Ask the administrator to open Teachers, edit your profile and tick your classes.";
+  else if (needSubjects && !(teacher.subjects||[]).length) msg = "No subjects are assigned to your profile yet. Ask the administrator to open Teachers, edit your profile and tick your subjects.";
+  if (!msg) return null;
+  return <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:10,padding:12,marginBottom:11,fontSize:12.5,color:"#78350f"}}><strong>⚠️ Setup needed.</strong> {msg}</div>;
+}
+
 // ─── Marks Entry ───────────────────────────────────────────────────────────────
 function MarksPage({ ctx }) {
   const { students, marksMap, saveMark, auth, teachers, loadAll } = ctx;
   const isTeacher  = auth.role==="teacher";
-  const teacher    = teachers.find(t=>t.email===auth.user.email);
+  const teacher    = findTeacher(teachers, auth.user.email);
   const availForms = isTeacher ? (teacher?.forms||[]) : FORMS;
 
-  const [filter, setFilter] = useState({ form:availForms[0]||"Form 1", seq:"SEQ 1", year:"2026/2027", subject:"" });
+  const [filter, setFilter] = useState({ form:availForms[0]||(isTeacher?"":"Form 1"), seq:"SEQ 1", year:"2026/2027", subject:"" });
+  // If the teacher profile loads after this page opened, or the chosen class is not theirs, jump to their first class
+  useEffect(() => {
+    if (isTeacher && availForms.length && !availForms.includes(filter.form)) setFilter(f => ({ ...f, form:availForms[0], subject:"" }));
+  }, [availForms.join("|")]);
   const availSubs  = isTeacher
     ? (teacher?.subjects||[]).filter(s=>SUBJECTS_BY_FORM[filter.form]?.includes(s))
     : (SUBJECTS_BY_FORM[filter.form]||[]);
@@ -2646,6 +2664,7 @@ function MarksPage({ ctx }) {
 
   return (
     <div>
+      {isTeacher && <TeacherSetupNotice teacher={teacher} email={auth.user.email} needSubjects/>}
       <div style={{background:C.white,borderRadius:10,padding:12,marginBottom:11,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
           <div><label style={lbl}>Form</label><select style={inp} value={filter.form} onChange={e=>setFilter(f=>({...f,form:e.target.value,subject:""}))}>{availForms.map(f=><option key={f}>{f}</option>)}</select></div>
@@ -2719,11 +2738,12 @@ const ATT_ICONS  = { present:"✓", absent:"✕", late:"⏰" };
 function AttendancePage({ ctx }) {
   const { students, attendanceMap, auth, teachers, saveAttendanceBulk } = ctx;
   const isTeacher  = auth.role==="teacher";
-  const teacher    = teachers.find(t=>t.email===auth.user.email);
+  const teacher    = findTeacher(teachers, auth.user.email);
   const availForms = isTeacher ? (teacher?.forms||[]) : FORMS;
 
   const [tab,   setTab]   = useState("mark"); // "mark" | "summary"
-  const [form,  setForm]  = useState(availForms[0]||"Form 1");
+  const [form,  setForm]  = useState(availForms[0]||(isTeacher?"":"Form 1"));
+  useEffect(() => { if (isTeacher && availForms.length && !availForms.includes(form)) setForm(availForms[0]); }, [availForms.join("|")]);
   const [date,  setDate]  = useState(todayStr());
   const [local, setLocal] = useState({}); // studentId → status
   const [saving,setSaving]= useState(false);
@@ -2775,6 +2795,7 @@ function AttendancePage({ ctx }) {
 
   return (
     <div>
+      {isTeacher && <TeacherSetupNotice teacher={teacher} email={auth.user.email}/>}
       <div style={{display:"flex",background:C.white,borderRadius:10,padding:3,marginBottom:13,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
         {[["mark","📝 Mark Today"],["summary","📊 Term Summary"]].map(([k,l]) => (
           <button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"9px 4px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:tab===k?C.navy:"transparent",color:tab===k?C.white:C.gray}}>{l}</button>
@@ -3599,17 +3620,18 @@ const avgColor = v => v>=PASS_MARK+4 ? C.green : v>=PASS_MARK ? C.gold : C.red;
 function PerformancePage({ ctx }) {
   const { students, marksMap, teachers, auth } = ctx;
   const isTeacher  = auth.role==="teacher";
-  const teacher    = teachers.find(t=>t.email===auth.user.email);
+  const teacher    = findTeacher(teachers, auth.user.email);
   const availForms = isTeacher ? (teacher?.forms||[]) : FORMS;
 
   const [f, setF] = useState({ cls: availForms.length===1 ? availForms[0] : "all", year:"2026/2027", term:"First Term" });
   const [showAllRisk, setShowAllRisk] = useState(false);
+  useEffect(() => { if (f.cls!=="all" && !availForms.includes(f.cls)) setF(x => ({ ...x, cls: availForms.length===1 ? availForms[0] : "all" })); }, [availForms.join("|")]);
 
   const forms = f.cls==="all" ? availForms : [f.cls];
   const stats = useMemo(() => classTermStats(students, marksMap, forms, f.year, f.term), [students, marksMap, f.cls, f.year, f.term, availForms.join("|")]);
   const termData = useMemo(() => TERMS.map(t => ({ term:t, ...classTermStats(students, marksMap, forms, f.year, t) })), [students, marksMap, f.cls, f.year, availForms.join("|")]);
 
-  if (!availForms.length) return <Empty text="No classes are assigned to your account yet."/>;
+  if (!availForms.length) return <TeacherSetupNotice teacher={teacher} email={auth.user.email}/>;
 
   const best  = stats.subjects.slice(0,3);
   const weak  = [...stats.subjects].reverse().slice(0,3).filter(s => !best.find(b=>b.sub===s.sub));
@@ -3831,10 +3853,11 @@ function ClassCouncilPage({ ctx }) {
   const { students, marksMap, teachers, auth, councilMeetings, councilDecisions, councilReady,
           saveCouncilMeeting, deleteCouncilMeeting, updateDecisionStatus } = ctx;
   const isTeacher  = auth.role==="teacher";
-  const teacher    = teachers.find(t=>t.email===auth.user.email);
+  const teacher    = findTeacher(teachers, auth.user.email);
   const availForms = isTeacher ? (teacher?.forms||[]) : FORMS;
 
   const [sel, setSel]       = useState({ form:availForms[0]||"Form 1", year:"2026/2027", term:"First Term" });
+  useEffect(() => { if (availForms.length && !availForms.includes(sel.form)) setSel(x => ({ ...x, form:availForms[0] })); }, [availForms.join("|")]);
   const [tab, setTab]       = useState("rank"); // rank | meetings | actions
   const [showFull, setShowFull] = useState(false);
   const [openId, setOpenId] = useState(null);
@@ -3861,7 +3884,7 @@ function ClassCouncilPage({ ctx }) {
                    completed:classDecisions.filter(d=>d.status==="completed").length,
                    overdue:classDecisions.filter(isOverdue).length };
 
-  if (!availForms.length) return <Empty text="No classes are assigned to your account yet."/>;
+  if (!availForms.length) return <TeacherSetupNotice teacher={teacher} email={auth.user.email}/>;
 
   function openNew() {
     setErr("");
@@ -4765,7 +4788,7 @@ function CalendarPage({ ctx }) {
 function ProfilePage({ ctx }) {
   const { auth, teachers } = ctx;
   const u = auth.user;
-  const t = teachers.find(x=>x.email===u.email);
+  const t = findTeacher(teachers, u.email);
 
   const [showPwForm, setShowPwForm] = useState(false);
   const [pass1, setPass1] = useState("");
