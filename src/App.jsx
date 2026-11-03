@@ -1,26 +1,26 @@
-// ─────────────────────────────────────────────────────────────────────────────
-//  SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE — Main App (Supabase backend)
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+//  SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE â€” Main App (Supabase backend)
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { supabase, SUPABASE_URL } from "./supabase.js";
 import * as XLSX from "xlsx";
 import { SCHOOL_LOGO } from "./schoolLogo.js";
 
-// ─── Palette ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Palette â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const C = {
   navy:"#0D2340", navyMid:"#163558", gold:"#C9962A", goldLight:"#F0C050",
   white:"#FFFFFF", red:"#B91C1C", green:"#15803D",
   gray:"#6B7280", grayLight:"#E5E7EB", grayBg:"#F3F4F6", border:"#D1D5DB",
 };
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const FORMS = ["Form 1","Form 2","Form 3","Form 4","Form 5"];
 const SUBJECTS_BY_FORM = {
-  "Form 1":["English language","French/ Français","Mathematics","Health science","Home management","Citizenship","Food and Nutrition","Chemistry","History","Economics","Geography","Biology","Human Biology","Physics","Computer Studies","Religious Studies","Hygiene","Sport/Physical education","Manual Labour"],
-  "Form 2":["English language","French/ Français","Mathematics","Health science","Home management","Citizenship","Food and Nutrition","Chemistry","History","Economics","Geography","Biology","Human Biology","Physics","Computer Studies","Religious Studies","Hygiene","Sport/Physical education","Manual Labour"],
-  "Form 3":["English language","French/ Français","Mathematics","Health science","Home management","Citizenship","Food and Nutrition","Chemistry","History","Economics","Geography","Biology","Human Biology","Physics","Computer Studies","Religious Studies","Hygiene","Sport/Physical education","Manual Labour"],
-  "Form 4":["English language","French/ Français","Mathematics","Chemistry","History","Economics","Geography","Biology","Physics","Literature in English","Computer Studies","Religious Studies","Commerce","Accounts","Hygiene","Sport/Physical education"],
-  "Form 5":["English language","French/ Français","Mathematics","Chemistry","History","Economics","Geography","Biology","Physics","Literature in English","Computer Studies","Religious Studies","Commerce","Accounts","Hygiene","Sport/Physical education"],
+  "Form 1":["English language","French/ FranÃ§ais","Mathematics","Health science","Home management","Citizenship","Food and Nutrition","Chemistry","History","Economics","Geography","Biology","Human Biology","Physics","Computer Studies","Religious Studies","Hygiene","Sport/Physical education","Manual Labour"],
+  "Form 2":["English language","French/ FranÃ§ais","Mathematics","Health science","Home management","Citizenship","Food and Nutrition","Chemistry","History","Economics","Geography","Biology","Human Biology","Physics","Computer Studies","Religious Studies","Hygiene","Sport/Physical education","Manual Labour"],
+  "Form 3":["English language","French/ FranÃ§ais","Mathematics","Health science","Home management","Citizenship","Food and Nutrition","Chemistry","History","Economics","Geography","Biology","Human Biology","Physics","Computer Studies","Religious Studies","Hygiene","Sport/Physical education","Manual Labour"],
+  "Form 4":["English language","French/ FranÃ§ais","Mathematics","Chemistry","History","Economics","Geography","Biology","Physics","Literature in English","Computer Studies","Religious Studies","Commerce","Accounts","Hygiene","Sport/Physical education"],
+  "Form 5":["English language","French/ FranÃ§ais","Mathematics","Chemistry","History","Economics","Geography","Biology","Physics","Literature in English","Computer Studies","Religious Studies","Commerce","Accounts","Hygiene","Sport/Physical education"],
 };
 const SEQ_LABELS  = ["SEQ 1","SEQ 2","SEQ 3","SEQ 4","SEQ 5","SEQ 6"];
 const TERM_SEQS   = {"First Term":["SEQ 1","SEQ 2"],"Second Term":["SEQ 3","SEQ 4"],"Third Term":["SEQ 5","SEQ 6"]};
@@ -30,10 +30,10 @@ const TOTAL_FEE   = 35000;
 const REG_NORMAL  = 500;
 const REG_LATE    = 1000;
 const LATE_CUTOFF = "2026-09-30";
-const MOMO_MERCHANT_NUMBER = "PASTE_YOUR_MOMO_NUMBER_HERE"; // e.g. "677123456" — the school's MTN Mobile Money receiving number
+const MOMO_MERCHANT_NUMBER = "PASTE_YOUR_MOMO_NUMBER_HERE"; // e.g. "677123456" â€” the school's MTN Mobile Money receiving number
 
 const DEFAULT_COEFF = {
-  "English language":4,"French/ Français":4,"Mathematics":4,
+  "English language":4,"French/ FranÃ§ais":4,"Mathematics":4,
   "Biology":3,"Human Biology":3,"Chemistry":3,"Physics":3,
   "History":2,"Geography":2,"Computer Studies":2,
   "Religious Studies":1,"Sport/Physical education":1,"Hygiene":1,
@@ -47,13 +47,13 @@ const getCoeff = sub => DEFAULT_COEFF[sub] || 2;
 const normEmail = e => String(e || "").trim().toLowerCase();
 const findTeacher = (teachers, email) => teachers.find(t => normEmail(t.email) === normEmail(email));
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const todayStr = () => new Date().toISOString().slice(0,10);
-const fmtDate  = d => { if(!d) return "—"; const [y,m,day]=d.split("-"); return `${day}/${m}/${y}`; };
+const fmtDate  = d => { if(!d) return "â€”"; const [y,m,day]=d.split("-"); return `${day}/${m}/${y}`; };
 const isLate   = d => d && d > LATE_CUTOFF;
 
 function scoreToGrade(v) {
-  if (v===null||v===undefined||v==="") return { grade:"—", remark:"—" };
+  if (v===null||v===undefined||v==="") return { grade:"â€”", remark:"â€”" };
   const pct = Number(v)*5;
   if (pct>=85) return { grade:"A",  remark:"Excellent"   };
   if (pct>=75) return { grade:"B+", remark:"Very Good"   };
@@ -64,7 +64,7 @@ function scoreToGrade(v) {
   return              { grade:"F",  remark:"Fail"        };
 }
 const gradeCol = g =>
-  ["A","B+","B"].includes(g) ? C.green : g==="F" ? C.red : g==="—" ? C.gray : C.gold;
+  ["A","B+","B"].includes(g) ? C.green : g==="F" ? C.red : g==="â€”" ? C.gray : C.gold;
 
 // Compress photo using canvas before storing in DB
 function compressPhoto(base64) {
@@ -89,10 +89,10 @@ async function uploadPhoto(studentId, base64) {
   return await compressPhoto(base64);
 }
 
-// ─── Offline Queue ────────────────────────────────────────────────────────────
+// â”€â”€â”€ Offline Queue â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Registrations and fee payments made with no internet are saved here, in the
 // browser's localStorage, and pushed to Supabase automatically once the
-// connection returns. This survives closing the app entirely — the queue is
+// connection returns. This survives closing the app entirely â€” the queue is
 // still there next time it opens, even after a phone restart.
 const OFFLINE_QUEUE_KEY = "sccb_offline_queue_v1";
 
@@ -100,7 +100,7 @@ function generateTempId(form) {
   // Guaranteed-unique across different phones with no coordination: combines
   // the exact millisecond timestamp with a random suffix. Two phones would
   // need to register a student in the same form in the exact same
-  // millisecond AND roll the same random suffix to collide — effectively
+  // millisecond AND roll the same random suffix to collide â€” effectively
   // impossible. Clearly marked TEMP- so it's obviously not a real matricule
   // anywhere it's displayed, until sync assigns the true SBCC0... ID.
   const fNum = form.replace("Form ","");
@@ -139,7 +139,7 @@ function removeFromOfflineQueue(queueItemId) {
   return queue;
 }
 
-// Real connectivity check — navigator.onLine alone is unreliable (it can
+// Real connectivity check â€” navigator.onLine alone is unreliable (it can
 // report "online" while connected to a WiFi network with no actual working
 // internet). This does a tiny, cheap, no-cache fetch to confirm a real
 // response comes back, with a short timeout so it never hangs the UI.
@@ -158,7 +158,8 @@ async function checkRealConnectivity() {
 
 // Print helper - works on mobile and desktop
 function domPrint(id, html, size="A4 portrait", margin="8mm") {
-  const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8">
+  const isFull = /^\s*<!DOCTYPE/i.test(html); // a finished page (e.g. the report card) is used exactly as given
+  const fullHtml = isFull ? html : `<!DOCTYPE html><html><head><meta charset="utf-8">
     <style>
       *{box-sizing:border-box;margin:0;padding:0}
       @page{size:${size};margin:${margin}}
@@ -183,12 +184,19 @@ function domPrint(id, html, size="A4 portrait", margin="8mm") {
   // Method 2: DOM inject fallback
   document.getElementById(id)?.remove();
   document.getElementById(id+"-s")?.remove();
+  let inner = html, extraCss = "";
+  if (isFull) {
+    const d = new DOMParser().parseFromString(html, "text/html");
+    inner = d.body.innerHTML;
+    extraCss = [...d.querySelectorAll("style")].map(s=>s.textContent).join("\n");
+  }
   const st = document.createElement("style");
   st.id = id+"-s";
   st.textContent = `@media print{body>*:not(#${id}){display:none!important}#${id}{display:block!important;position:fixed;inset:0;background:#fff;z-index:99999}@page{size:${size};margin:${margin}}}#${id}{display:none}`;
+  if (extraCss) st.textContent += "\n@media print{" + extraCss + "}";
   document.head.appendChild(st);
   const div = document.createElement("div");
-  div.id = id; div.innerHTML = html;
+  div.id = id; div.innerHTML = inner;
   document.body.appendChild(div);
   setTimeout(()=>{
     window.print();
@@ -219,7 +227,7 @@ function exportToExcel(rows, filename, sheetName="Sheet1") {
   }
 }
 
-// Export one workbook with multiple sheets — one sheet per group.
+// Export one workbook with multiple sheets â€” one sheet per group.
 // sheets: array of { name: string, rows: array of row-objects }
 // Sheet names are Excel-sanitized and de-duplicated (Excel forbids
 // \ / ? * [ ] and caps names at 31 characters).
@@ -261,7 +269,7 @@ function printPaymentSlip(sub, student) {
       <div style="background:#0D2340;color:#fff;padding:14px;text-align:center">
         <img src="${SCHOOL_LOGO}" alt="SBCC" style="width:54px;height:54px;object-fit:contain">
         <h2 style="font-size:14px;font-weight:900;margin:4px 0">SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE</h2>
-        <p style="font-size:9px;opacity:.65;margin:0">NGEPTANG · NONI · NW REGION</p>
+        <p style="font-size:9px;opacity:.65;margin:0">NGEPTANG Â· NONI Â· NW REGION</p>
         <div style="background:#15803D;display:inline-block;padding:2px 12px;border-radius:10px;font-size:10px;font-weight:800;margin-top:7px">FEE PAYMENT SLIP</div>
       </div>
       <div style="padding:14px">
@@ -272,15 +280,15 @@ function printPaymentSlip(sub, student) {
           ["Form", student.form],
           ["Amount Paid", `${sub.amount.toLocaleString()} FCFA`],
           ["Payment Method", "MTN Mobile Money"],
-          ["Phone Used", sub.momo_number||"—"],
+          ["Phone Used", sub.momo_number||"â€”"],
           ["Submitted", fmtDate(sub.submitted_at?.slice(0,10))],
           ["Confirmed By", sub.reviewed_by||"School Office"],
           ["Confirmed On", fmtDate(sub.reviewed_at?.slice(0,10))],
-        ].map(([l,v])=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f0f0;font-size:11.5px"><span style="color:#6B7280">${l}</span><span style="font-weight:600">${v||"—"}</span></div>`).join("")}
+        ].map(([l,v])=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f0f0;font-size:11.5px"><span style="color:#6B7280">${l}</span><span style="font-weight:600">${v||"â€”"}</span></div>`).join("")}
         <div style="background:#f0fdf4;border-radius:8px;padding:12px;margin-top:11px;text-align:center">
           <div style="font-size:10px;color:#6b7280;margin-bottom:2px">AMOUNT CONFIRMED</div>
           <div style="font-size:26px;font-weight:900;color:#15803D">${sub.amount.toLocaleString()} FCFA</div>
-          <div style="font-size:10px;color:#6b7280;margin-top:2px">✓ Approved Payment</div>
+          <div style="font-size:10px;color:#6b7280;margin-top:2px">âœ“ Approved Payment</div>
         </div>
       </div>
       <div style="text-align:center;font-size:9px;color:#9ca3af;border-top:1px dashed #e5e7eb;padding:8px 14px">This slip confirms a payment toward school fees for Academic Year 2026/2027.<br>Keep for your records.</div>
@@ -289,24 +297,24 @@ function printPaymentSlip(sub, student) {
   domPrint("sbc-payment-slip", html, "A5 portrait", "7mm");
 }
 
-// ─── Nav ──────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Nav â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const navItems = [
-  { key:"dashboard",    label:"Dashboard",    icon:"📊", roles:["admin","teacher"] },
-  { key:"registration", label:"Registration", icon:"📋", roles:["admin"] },
-  { key:"students",     label:"Students",     icon:"🎒", roles:["admin","teacher"] },
-  { key:"teachers",     label:"Teachers",     icon:"👩‍🏫", roles:["admin"] },
-  { key:"marks",        label:"Enter Marks",  icon:"✏️", roles:["admin","teacher"] },
-  { key:"attendance",   label:"Attendance",   icon:"🗓️", roles:["admin","teacher"] },
-  { key:"reports",      label:"Report Cards", icon:"📄", roles:["admin","teacher"] },
-  { key:"performance",  label:"Performance",  icon:"📈", roles:["admin","teacher"] },
-  { key:"council",      label:"Class Council",icon:"🏛️", roles:["admin","teacher"] },
-  { key:"fees",         label:"School Fees",  icon:"💰", roles:["admin"] },
-  { key:"notices",      label:"Notices",      icon:"📢", roles:["admin","teacher"] },
-  { key:"calendar",     label:"Calendar",     icon:"📅", roles:["admin","teacher"] },
-  { key:"profile",      label:"My Profile",   icon:"👤", roles:["admin","teacher"] },
+  { key:"dashboard",    label:"Dashboard",    icon:"ðŸ“Š", roles:["admin","teacher"] },
+  { key:"registration", label:"Registration", icon:"ðŸ“‹", roles:["admin"] },
+  { key:"students",     label:"Students",     icon:"ðŸŽ’", roles:["admin","teacher"] },
+  { key:"teachers",     label:"Teachers",     icon:"ðŸ‘©â€ðŸ«", roles:["admin"] },
+  { key:"marks",        label:"Enter Marks",  icon:"âœï¸", roles:["admin","teacher"] },
+  { key:"attendance",   label:"Attendance",   icon:"ðŸ—“ï¸", roles:["admin","teacher"] },
+  { key:"reports",      label:"Report Cards", icon:"ðŸ“„", roles:["admin","teacher"] },
+  { key:"performance",  label:"Performance",  icon:"ðŸ“ˆ", roles:["admin","teacher"] },
+  { key:"council",      label:"Class Council",icon:"ðŸ›ï¸", roles:["admin","teacher"] },
+  { key:"fees",         label:"School Fees",  icon:"ðŸ’°", roles:["admin"] },
+  { key:"notices",      label:"Notices",      icon:"ðŸ“¢", roles:["admin","teacher"] },
+  { key:"calendar",     label:"Calendar",     icon:"ðŸ“…", roles:["admin","teacher"] },
+  { key:"profile",      label:"My Profile",   icon:"ðŸ‘¤", roles:["admin","teacher"] },
 ];
 
-// ─── Shared UI ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Shared UI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const lbl = { display:"block", fontSize:11, fontWeight:600, color:C.gray, marginBottom:3 };
 const inp = { width:"100%", padding:"9px 11px", border:`1px solid ${C.border}`, borderRadius:7, fontSize:13, color:C.navy, background:C.white, boxSizing:"border-box", outline:"none", fontFamily:"inherit" };
 
@@ -315,7 +323,7 @@ const Modal = ({ title, onClose, children }) => (
     <div style={{background:C.white,borderRadius:"14px 14px 0 0",width:"100%",maxWidth:520,maxHeight:"90vh",overflow:"auto",boxShadow:"0 -8px 32px rgba(0,0,0,0.25)"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"13px 16px",borderBottom:`1px solid ${C.grayLight}`,position:"sticky",top:0,background:C.white,zIndex:1}}>
         <h3 style={{margin:0,fontSize:14,fontWeight:800,color:C.navy}}>{title}</h3>
-        <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",fontSize:22,color:C.gray}}>×</button>
+        <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",fontSize:22,color:C.gray}}>Ã—</button>
       </div>
       <div style={{padding:16}}>{children}</div>
     </div>
@@ -335,7 +343,7 @@ const SmBtn = ({ children, onClick, color, style }) => (
 );
 const Pill  = ({ children, color }) => <span style={{padding:"2px 8px",background:color+"20",color,borderRadius:10,fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{children}</span>;
 const Info  = ({ label, value }) => (
-  <div><div style={{fontSize:9.5,color:C.gray}}>{label}</div><div style={{fontSize:11.5,fontWeight:600,color:C.navy}}>{value||"—"}</div></div>
+  <div><div style={{fontSize:9.5,color:C.gray}}>{label}</div><div style={{fontSize:11.5,fontWeight:600,color:C.navy}}>{value||"â€”"}</div></div>
 );
 const Fr    = ({ label, children }) => (
   <div style={{marginBottom:9}}><label style={lbl}>{label}</label>{children}</div>
@@ -343,20 +351,20 @@ const Fr    = ({ label, children }) => (
 const Empty = ({ text }) => <div style={{textAlign:"center",padding:"36px 0",color:C.gray,fontSize:13}}>{text}</div>;
 const Spin  = ({ text }) => (
   <div style={{textAlign:"center",padding:"48px 0",color:C.gray}}>
-    <div style={{fontSize:32,marginBottom:10}}>⏳</div>
-    <div style={{fontSize:14}}>{text||"Loading…"}</div>
+    <div style={{fontSize:32,marginBottom:10}}>â³</div>
+    <div style={{fontSize:14}}>{text||"Loadingâ€¦"}</div>
   </div>
 );
 const PhotoBox = ({ photo, size=[64,78] }) => photo
   ? <img src={photo} alt="passport" style={{width:size[0],height:size[1],objectFit:"cover",border:`2px solid ${C.navy}`,borderRadius:3,display:"block"}}/>
   : <div style={{width:size[0],height:size[1],border:`2px dashed ${C.border}`,borderRadius:3,background:C.grayBg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",color:C.gray}}>
-      <span style={{fontSize:size[0]*0.3}}>👤</span>
+      <span style={{fontSize:size[0]*0.3}}>ðŸ‘¤</span>
       <span style={{fontSize:7,marginTop:2,textAlign:"center",lineHeight:1.3}}>PHOTO<br/>PASSEPORT</span>
     </div>;
 
-// ══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  MAIN APP
-// ══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 export default function App() {
   const [portalMode, setPortalMode] = useState(false); // true = showing the public Parent Portal instead of staff login
   const [session,    setSession]    = useState(undefined); // undefined=loading
@@ -371,9 +379,9 @@ export default function App() {
   // Data state
   const [students,   setStudents]   = useState([]);
   const [teachers,   setTeachers]   = useState([]);
-  const [marksMap,   setMarksMap]   = useState({}); // key → mark record
-  const [feesMap,    setFeesMap]    = useState({}); // studentId → {paid,total}
-  const [attendanceMap, setAttendanceMap] = useState({}); // "studentId-date" → {status}
+  const [marksMap,   setMarksMap]   = useState({}); // key â†’ mark record
+  const [feesMap,    setFeesMap]    = useState({}); // studentId â†’ {paid,total}
+  const [attendanceMap, setAttendanceMap] = useState({}); // "studentId-date" â†’ {status}
   const [calendarEvents, setCalendarEvents] = useState([]);
   const [councilMeetings,  setCouncilMeetings]  = useState([]); // class council meetings
   const [councilDecisions, setCouncilDecisions] = useState([]); // decisions taken at those meetings
@@ -387,7 +395,7 @@ export default function App() {
   const [syncResult,   setSyncResult]   = useState(null); // {success, failed} shown briefly after a sync run
   const [showQueueDetails, setShowQueueDetails] = useState(false);
 
-  // ── Auth ───────────────────────────────────────────────────────────────────
+  // â”€â”€ Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -454,7 +462,7 @@ export default function App() {
     if (!selected || !selected.roles.includes(userRole)) setPage("dashboard");
   }, [userRole, page]);
 
-  // ── Load all data ──────────────────────────────────────────────────────────
+  // â”€â”€ Load all data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (!session) return;
     loadAll();
@@ -480,15 +488,15 @@ export default function App() {
       ]);
       setStudents(st || []);
       setTeachers(tc || []);
-      // Build marks map: "studentId-subject-seq-year" → record
+      // Build marks map: "studentId-subject-seq-year" â†’ record
       const mm = {};
       (mk||[]).forEach(m => { mm[`${m.student_id}-${m.subject}-${m.seq}-${m.acad_year}`] = m; });
       setMarksMap(mm);
-      // Build fees map: studentId → {paid, total}
+      // Build fees map: studentId â†’ {paid, total}
       const fm = {};
       (fe||[]).forEach(f => { fm[f.student_id] = { paid: f.paid||0, total: f.total||TOTAL_FEE }; });
       setFeesMap(fm);
-      // Build attendance map: "studentId-date" → record {status: present|absent|late}
+      // Build attendance map: "studentId-date" â†’ record {status: present|absent|late}
       const am = {};
       (at||[]).forEach(a => { am[`${a.student_id}-${a.date}`] = a; });
       setAttendanceMap(am);
@@ -504,7 +512,7 @@ export default function App() {
     setLoading(false);
   }
 
-  // ── Real-time subscriptions ─────────────────────────────────────────────────
+  // â”€â”€ Real-time subscriptions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (!session) return;
     const sub = supabase.channel("db-changes")
@@ -519,7 +527,7 @@ export default function App() {
     return () => supabase.removeChannel(sub);
   }, [session]);
 
-  // ── Auth actions ───────────────────────────────────────────────────────────
+  // â”€â”€ Auth actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function doLogin(email, password) {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
@@ -540,7 +548,7 @@ export default function App() {
     setRecoveryMode(false);
   }
 
-  // ── Auto-logout after inactivity — protects unattended/shared devices ──
+  // â”€â”€ Auto-logout after inactivity â€” protects unattended/shared devices â”€â”€
   // Two layers: (1) this timer catches an open tab left unattended,
   // (2) persistSession:false in supabase.js catches the tab/app being
   // closed entirely, so nothing lingers logged in for the next person
@@ -559,7 +567,7 @@ export default function App() {
     const events = ["mousedown","keydown","touchstart","scroll"];
     events.forEach(ev => window.addEventListener(ev, reset));
     // Also reset when the tab becomes visible again (e.g. switching back
-    // from another app) — and immediately check if we've already been
+    // from another app) â€” and immediately check if we've already been
     // away long enough that we should log out right now rather than wait.
     let hiddenAt = null;
     const onVisibility = () => {
@@ -581,9 +589,9 @@ export default function App() {
     };
   }, [session]);
 
-  // ── DB write helpers (passed via ctx) ──────────────────────────────────────
+  // â”€â”€ DB write helpers (passed via ctx) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function saveStudent(s) {
-    // photo_url is already compressed base64 or null — save directly
+    // photo_url is already compressed base64 or null â€” save directly
     let photoUrl = s.photo_url || null;
     // Auto-generate a PIN for students who don't have one yet (e.g. registered before this feature existed)
     const existing = students.find(x=>x.id===s.id);
@@ -601,7 +609,7 @@ export default function App() {
     const { error } = await supabase.from("students").upsert(row, { onConflict:"id" });
     if (error) {
       console.error("saveStudent error:", error);
-      alert("Save error: " + error.message + (error.details?(" — "+error.details):"") );
+      alert("Save error: " + error.message + (error.details?(" â€” "+error.details):"") );
       throw error;
     }
     // Auto-create fee record if not exists
@@ -644,17 +652,17 @@ export default function App() {
     await loadAll();
   }
 
-  // ── Offline sync engine ─────────────────────────────────────────────────────
+  // â”€â”€ Offline sync engine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Processes the queue in the order items were created. For a queued
   // registration, generates the REAL matricule now (only safe to do with a
   // genuine connection, since it needs an accurate count of existing students
-  // in that form) and swaps it in everywhere — including on any queued fee
+  // in that form) and swaps it in everywhere â€” including on any queued fee
   // payment for that same offline-registered student, matched by temp ID.
   async function syncOfflineQueue() {
     const queue = loadOfflineQueue();
     if (!queue.length || syncing) return;
 
-    // navigator.onLine can be wrong — it only reflects whether the device has
+    // navigator.onLine can be wrong â€” it only reflects whether the device has
     // a network interface active, not whether that network can actually reach
     // the internet (e.g. connected to WiFi with no working connection). Do a
     // real check before attempting to push anything, so a false "online"
@@ -728,7 +736,7 @@ export default function App() {
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
     // On mount, navigator.onLine can be wrong (e.g. connected to WiFi with no
-    // real internet) — verify properly, correct isOnline if needed, and sync
+    // real internet) â€” verify properly, correct isOnline if needed, and sync
     // any leftover queue from a previous session that ended before syncing.
     (async () => {
       const reallyOnline = await checkRealConnectivity();
@@ -779,7 +787,7 @@ export default function App() {
     await loadAll();
   }
 
-  // ── Class Council ──────────────────────────────────────────────────────────
+  // â”€â”€ Class Council â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Saves one meeting and keeps its decisions in sync (update kept ones, add new ones, remove deleted ones)
   async function saveCouncilMeeting(m, decisions) {
     const row = {
@@ -829,7 +837,7 @@ export default function App() {
     await loadAll();
   }
 
-  // ── Current user info ───────────────────────────────────────────────────────
+  // â”€â”€ Current user info â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const currentTeacher = findTeacher(teachers, session?.user?.email);
   const currentUser = {
     id:    session?.user?.id || "ADMIN",
@@ -837,24 +845,24 @@ export default function App() {
     email: session?.user?.email || "",
   };
 
-  // ── Loading / not-logged-in screens ────────────────────────────────────────
-  // Parent Portal doesn't need staff auth at all — short-circuit everything else
+  // â”€â”€ Loading / not-logged-in screens â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Parent Portal doesn't need staff auth at all â€” short-circuit everything else
   if (portalMode) return <ParentPortal onBack={()=>setPortalMode(false)}/>;
 
   if (session === undefined) return (
     <div style={{minHeight:"100vh",background:C.navy,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:14}}>
       <img src={SCHOOL_LOGO} alt="SBCC Bawe" style={{width:96,height:96,objectFit:"contain"}}/>
       <div style={{color:C.white,fontWeight:800,fontSize:18}}>Saker Baptist Comprehensive College Bawe</div>
-      <div style={{color:C.goldLight,fontSize:13}}>Starting up…</div>
+      <div style={{color:C.goldLight,fontSize:13}}>Starting upâ€¦</div>
     </div>
   );
-  // Password recovery gives a temporary session — intercept it before normal routing
+  // Password recovery gives a temporary session â€” intercept it before normal routing
   if (recoveryMode) return <SetNewPasswordScreen onSetPassword={doSetNewPassword} onCancel={doLogout}/>;
   if (!session) return <LoginScreen onLogin={doLogin} onRequestReset={doRequestPasswordReset} onOpenPortal={()=>setPortalMode(true)}/>;
 
   if (roleLoading) return (
     <div style={{minHeight:"100vh",background:C.navy,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12,color:C.white}}>
-      <img src={SCHOOL_LOGO} alt="SBCC Bawe" style={{width:80,height:80,objectFit:"contain"}}/><strong>Verifying account permissions…</strong>
+      <img src={SCHOOL_LOGO} alt="SBCC Bawe" style={{width:80,height:80,objectFit:"contain"}}/><strong>Verifying account permissionsâ€¦</strong>
     </div>
   );
   if (roleError || !userRole) return (
@@ -883,13 +891,13 @@ export default function App() {
 
   return (
     <div style={{fontFamily:"'Segoe UI',system-ui,sans-serif",background:C.grayBg,minHeight:"100vh"}}>
-      {/* ── Top bar ─────────────────────────────────────────────────────────── */}
+      {/* â”€â”€ Top bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:C.navy,padding:"11px 14px",position:"sticky",top:0,zIndex:200}}>
         <div style={{display:"flex",alignItems:"center",gap:9}}>
           <img src={SCHOOL_LOGO} alt="SBCC Bawe" style={{width:34,height:34,objectFit:"contain",flexShrink:0}}/>
           <div>
             <div style={{color:C.white,fontWeight:800,fontSize:13,lineHeight:1.2}}>Saker Baptist Comprehensive College Bawe</div>
-            <div style={{color:C.goldLight,fontSize:9,letterSpacing:1}}>NGEPTANG · NONI</div>
+            <div style={{color:C.goldLight,fontSize:9,letterSpacing:1}}>NGEPTANG Â· NONI</div>
           </div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -897,23 +905,23 @@ export default function App() {
             <div style={{color:C.white,fontWeight:600}}>{currentUser.name.split(" ").slice(-1)[0]}</div>
             <div style={{textTransform:"capitalize",fontSize:10}}>{ctx.auth.role}</div>
           </div>
-          <button onClick={()=>setMenuOpen(o=>!o)} style={{background:"rgba(255,255,255,0.12)",border:"none",borderRadius:8,color:C.white,fontSize:20,width:38,height:38,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>☰</button>
+          <button onClick={()=>setMenuOpen(o=>!o)} style={{background:"rgba(255,255,255,0.12)",border:"none",borderRadius:8,color:C.white,fontSize:20,width:38,height:38,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>â˜°</button>
         </div>
       </div>
 
-      {/* ── Offline / pending sync banner — visible on every page ──────────── */}
+      {/* â”€â”€ Offline / pending sync banner â€” visible on every page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {(!isOnline || offlineQueue.length>0) && (
         <div style={{background:isOnline?"#fffbeb":"#fef2f2",borderBottom:`1px solid ${isOnline?"#fde68a":"#fca5a5"}`}}>
           <div onClick={()=>offlineQueue.length>0 && setShowQueueDetails(v=>!v)} style={{padding:"8px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",cursor:offlineQueue.length>0?"pointer":"default"}}>
             <div style={{fontSize:11.5,color:isOnline?"#92400e":"#991b1b",fontWeight:600}}>
               {!isOnline
-                ? `📡 No internet — ${offlineQueue.length} item${offlineQueue.length!==1?"s":""} will save on this device and upload automatically once you're back online`
-                : `⏳ ${offlineQueue.length} item${offlineQueue.length!==1?"s":""} waiting to sync ${offlineQueue.length>0?(showQueueDetails?"▲":"▼"):""}`
+                ? `ðŸ“¡ No internet â€” ${offlineQueue.length} item${offlineQueue.length!==1?"s":""} will save on this device and upload automatically once you're back online`
+                : `â³ ${offlineQueue.length} item${offlineQueue.length!==1?"s":""} waiting to sync ${offlineQueue.length>0?(showQueueDetails?"â–²":"â–¼"):""}`
               }
             </div>
             {isOnline && offlineQueue.length>0 && (
               <button onClick={(e)=>{e.stopPropagation();syncOfflineQueue();}} disabled={syncing} style={{padding:"5px 12px",background:"#92400e",color:"#fff",border:"none",borderRadius:6,fontSize:11,fontWeight:700,cursor:"pointer",flexShrink:0}}>
-                {syncing?"Syncing…":"Sync Now"}
+                {syncing?"Syncingâ€¦":"Sync Now"}
               </button>
             )}
           </div>
@@ -922,10 +930,10 @@ export default function App() {
               {offlineQueue.map(item => (
                 <div key={item.id} style={{background:"rgba(255,255,255,0.6)",borderRadius:6,padding:"6px 10px",marginBottom:5,fontSize:11,color:"#78350f"}}>
                   {item.type==="register"
-                    ? `📋 Registration: ${item.data.name} (${item.data.form})`
-                    : `💰 Payment: ${item.data.amount.toLocaleString()} FCFA for ${item.data.studentId}`
+                    ? `ðŸ“‹ Registration: ${item.data.name} (${item.data.form})`
+                    : `ðŸ’° Payment: ${item.data.amount.toLocaleString()} FCFA for ${item.data.studentId}`
                   }
-                  <span style={{opacity:.7,marginLeft:6}}>· queued {fmtDate(item.queuedAt?.slice(0,10))}</span>
+                  <span style={{opacity:.7,marginLeft:6}}>Â· queued {fmtDate(item.queuedAt?.slice(0,10))}</span>
                 </div>
               ))}
             </div>
@@ -936,14 +944,14 @@ export default function App() {
       {syncResult && (
         <div style={{background:syncResult.failed.length?"#fef2f2":"#f0fdf4",borderBottom:`1px solid ${syncResult.failed.length?"#fca5a5":"#86efac"}`,padding:"8px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
           <div style={{fontSize:11.5,color:syncResult.failed.length?"#991b1b":"#166534",fontWeight:600}}>
-            ✓ Synced {syncResult.success.length} item{syncResult.success.length!==1?"s":""}
-            {syncResult.failed.length>0 && ` — ✕ ${syncResult.failed.length} failed`}
+            âœ“ Synced {syncResult.success.length} item{syncResult.success.length!==1?"s":""}
+            {syncResult.failed.length>0 && ` â€” âœ• ${syncResult.failed.length} failed`}
           </div>
-          <button onClick={()=>setSyncResult(null)} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",color:syncResult.failed.length?"#991b1b":"#166534"}}>×</button>
+          <button onClick={()=>setSyncResult(null)} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",color:syncResult.failed.length?"#991b1b":"#166534"}}>Ã—</button>
         </div>
       )}
 
-      {/* ── Slide-out nav ───────────────────────────────────────────────────── */}
+      {/* â”€â”€ Slide-out nav â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {menuOpen && (
         <div style={{position:"fixed",inset:0,zIndex:300,display:"flex"}}>
           <div style={{background:C.navy,width:230,height:"100%",display:"flex",flexDirection:"column",overflowY:"auto"}}>
@@ -967,7 +975,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ── Page content ────────────────────────────────────────────────────── */}
+      {/* â”€â”€ Page content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div style={{padding:"14px 12px",maxWidth:900,margin:"0 auto"}}>
         <div style={{marginBottom:13}}>
           <h1 style={{margin:0,fontSize:17,fontWeight:800,color:C.navy}}>{navItems.find(n=>n.key===page)?.label||""}</h1>
@@ -980,7 +988,7 @@ export default function App() {
           </div>
         )}
 
-        {loading ? <Spin text="Loading from Supabase…" /> : <>
+        {loading ? <Spin text="Loading from Supabaseâ€¦" /> : <>
           {page==="dashboard"    && <DashboardPage    ctx={ctx} setPage={setPage}/>}
           {page==="registration" && ctx.auth.role==="admin" && <RegistrationPage ctx={ctx}/>}
           {page==="students"     && <StudentsPage     ctx={ctx}/>}
@@ -1000,7 +1008,7 @@ export default function App() {
   );
 }
 
-// ─── Login Screen ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Login Screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function LoginScreen({ onLogin, onRequestReset, onOpenPortal }) {
   const [mode,  setMode]  = useState("login"); // "login" | "forgot"
   const [email, setEmail] = useState("");
@@ -1033,7 +1041,7 @@ function LoginScreen({ onLogin, onRequestReset, onOpenPortal }) {
       const next = attempts+1;
       setAttempts(next);
       if (next>=5) {
-        // Lock out for 60 seconds after 5 failed attempts — slows down brute-force guessing
+        // Lock out for 60 seconds after 5 failed attempts â€” slows down brute-force guessing
         setLockedUntil(Date.now()+60000);
         setErr("Too many failed attempts. Try again in 60 seconds.");
       } else {
@@ -1048,7 +1056,7 @@ function LoginScreen({ onLogin, onRequestReset, onOpenPortal }) {
     setErr(""); setInfo(""); setBusy(true);
     try {
       await onRequestReset(email.trim());
-      setInfo("Check your email — we sent a link to reset your password. It may take a minute to arrive.");
+      setInfo("Check your email â€” we sent a link to reset your password. It may take a minute to arrive.");
     } catch(e) {
       setErr("Could not send reset email: " + e.message);
     }
@@ -1060,7 +1068,7 @@ function LoginScreen({ onLogin, onRequestReset, onOpenPortal }) {
       <div style={{minHeight:"100vh",background:`linear-gradient(160deg,${C.navy},${C.navyMid} 55%,#1a4a6e)`,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
         <div style={{width:"100%",maxWidth:380}}>
           <div style={{textAlign:"center",marginBottom:24}}>
-            <div style={{width:70,height:70,borderRadius:"50%",background:C.gold,margin:"0 auto 12px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,boxShadow:"0 0 0 5px rgba(201,150,42,0.25)"}}>🔑</div>
+            <div style={{width:70,height:70,borderRadius:"50%",background:C.gold,margin:"0 auto 12px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,boxShadow:"0 0 0 5px rgba(201,150,42,0.25)"}}>ðŸ”‘</div>
             <h1 style={{color:C.white,fontSize:20,fontWeight:900,margin:0}}>Reset Password</h1>
             <p style={{color:C.goldLight,fontSize:11,margin:"4px 0 0",letterSpacing:1.5}}>SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE</p>
           </div>
@@ -1072,8 +1080,8 @@ function LoginScreen({ onLogin, onRequestReset, onOpenPortal }) {
             </Fr>
             {err  && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"8px 12px",color:C.red,fontSize:12,marginBottom:12}}>{err}</div>}
             {info && <div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:8,padding:"8px 12px",color:C.green,fontSize:12,marginBottom:12}}>{info}</div>}
-            <Btn onClick={handleReset} disabled={busy}>{busy?"Sending…":"Send Reset Link →"}</Btn>
-            <button onClick={()=>{setMode("login");setErr("");setInfo("");}} style={{width:"100%",marginTop:10,padding:"9px",background:"transparent",border:"none",color:C.navyMid,fontSize:12,fontWeight:700,cursor:"pointer"}}>← Back to Sign In</button>
+            <Btn onClick={handleReset} disabled={busy}>{busy?"Sendingâ€¦":"Send Reset Link â†’"}</Btn>
+            <button onClick={()=>{setMode("login");setErr("");setInfo("");}} style={{width:"100%",marginTop:10,padding:"9px",background:"transparent",border:"none",color:C.navyMid,fontSize:12,fontWeight:700,cursor:"pointer"}}>â† Back to Sign In</button>
           </div>
         </div>
       </div>
@@ -1086,8 +1094,8 @@ function LoginScreen({ onLogin, onRequestReset, onOpenPortal }) {
         <div style={{textAlign:"center",marginBottom:24}}>
           <img src={SCHOOL_LOGO} alt="SBCC Bawe crest" style={{width:110,height:110,objectFit:"contain",display:"block",margin:"0 auto 10px",filter:"drop-shadow(0 3px 10px rgba(0,0,0,0.4))"}}/>
           <h1 style={{color:C.white,fontSize:20,fontWeight:900,margin:0}}>Saker Baptist Comprehensive College Bawe</h1>
-          <p style={{color:C.goldLight,fontSize:11,margin:"4px 0 0",letterSpacing:1.5}}>NGEPTANG · NONI</p>
-          <p style={{color:"rgba(255,255,255,0.45)",fontSize:10,margin:"5px 0 0"}}>School Administrative Portal · 2026/2027</p>
+          <p style={{color:C.goldLight,fontSize:11,margin:"4px 0 0",letterSpacing:1.5}}>NGEPTANG Â· NONI</p>
+          <p style={{color:"rgba(255,255,255,0.45)",fontSize:10,margin:"5px 0 0"}}>School Administrative Portal Â· 2026/2027</p>
         </div>
         <div style={{background:C.white,borderRadius:14,padding:22,boxShadow:"0 20px 60px rgba(0,0,0,0.35)"}}>
           <h2 style={{margin:"0 0 16px",fontSize:16,fontWeight:800,color:C.navy}}>Sign In</h2>
@@ -1095,26 +1103,26 @@ function LoginScreen({ onLogin, onRequestReset, onOpenPortal }) {
             <input style={inp} type="email" autoComplete="username" placeholder="your@email.com" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handle()} disabled={isLocked}/>
           </Fr>
           <Fr label="Password">
-            <input style={inp} type="password" autoComplete="current-password" placeholder="••••••••" value={pass} onChange={e=>setPass(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handle()} disabled={isLocked}/>
+            <input style={inp} type="password" autoComplete="current-password" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" value={pass} onChange={e=>setPass(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handle()} disabled={isLocked}/>
           </Fr>
           {err && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"8px 12px",color:C.red,fontSize:12,marginBottom:12}}>{err}</div>}
           {isLocked
-            ? <div style={{width:"100%",padding:"10px",background:C.grayBg,color:C.gray,borderRadius:8,fontWeight:700,fontSize:13,textAlign:"center"}}>🔒 Locked — try again in {secondsLeft}s</div>
-            : <Btn onClick={handle} disabled={busy}>{busy?"Signing in…":"Sign In →"}</Btn>
+            ? <div style={{width:"100%",padding:"10px",background:C.grayBg,color:C.gray,borderRadius:8,fontWeight:700,fontSize:13,textAlign:"center"}}>ðŸ”’ Locked â€” try again in {secondsLeft}s</div>
+            : <Btn onClick={handle} disabled={busy}>{busy?"Signing inâ€¦":"Sign In â†’"}</Btn>
           }
           <button onClick={()=>{setMode("forgot");setErr("");setInfo("");}} style={{width:"100%",marginTop:12,padding:"6px",background:"transparent",border:"none",color:C.navyMid,fontSize:12,fontWeight:700,cursor:"pointer",textDecoration:"underline"}}>Forgot your password?</button>
           <p style={{textAlign:"center",fontSize:10,color:C.gray,marginTop:10,marginBottom:0}}>Contact your administrator if you need a new account.</p>
-          <p style={{textAlign:"center",fontSize:9.5,color:C.gray,marginTop:6,marginBottom:0}}>🔒 For security, you'll need to sign in again each time you open this site — this keeps your account safe on shared devices.</p>
+          <p style={{textAlign:"center",fontSize:9.5,color:C.gray,marginTop:6,marginBottom:0}}>ðŸ”’ For security, you'll need to sign in again each time you open this site â€” this keeps your account safe on shared devices.</p>
         </div>
         <button onClick={onOpenPortal} style={{width:"100%",marginTop:14,padding:"11px",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:10,color:C.white,fontSize:13,fontWeight:700,cursor:"pointer"}}>
-          👨‍👩‍👧 Parent? Check Your Child's Records →
+          ðŸ‘¨â€ðŸ‘©â€ðŸ‘§ Parent? Check Your Child's Records â†’
         </button>
       </div>
     </div>
   );
 }
 
-// ─── Set New Password Screen (reached via email reset link) ────────────────────
+// â”€â”€â”€ Set New Password Screen (reached via email reset link) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function SetNewPasswordScreen({ onSetPassword, onCancel }) {
   const [pass1, setPass1] = useState("");
   const [pass2, setPass2] = useState("");
@@ -1138,10 +1146,10 @@ function SetNewPasswordScreen({ onSetPassword, onCancel }) {
     return (
       <div style={{minHeight:"100vh",background:`linear-gradient(160deg,${C.navy},${C.navyMid} 55%,#1a4a6e)`,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
         <div style={{width:"100%",maxWidth:380,background:C.white,borderRadius:14,padding:26,boxShadow:"0 20px 60px rgba(0,0,0,0.35)",textAlign:"center"}}>
-          <div style={{fontSize:40,marginBottom:10}}>✅</div>
+          <div style={{fontSize:40,marginBottom:10}}>âœ…</div>
           <h2 style={{margin:"0 0 8px",fontSize:16,fontWeight:800,color:C.navy}}>Password Updated</h2>
           <p style={{fontSize:12,color:C.gray,marginBottom:16}}>You're signed in with your new password.</p>
-          <Btn onClick={onCancel}>Continue →</Btn>
+          <Btn onClick={onCancel}>Continue â†’</Btn>
         </div>
       </div>
     );
@@ -1151,7 +1159,7 @@ function SetNewPasswordScreen({ onSetPassword, onCancel }) {
     <div style={{minHeight:"100vh",background:`linear-gradient(160deg,${C.navy},${C.navyMid} 55%,#1a4a6e)`,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
       <div style={{width:"100%",maxWidth:380}}>
         <div style={{textAlign:"center",marginBottom:24}}>
-          <div style={{width:70,height:70,borderRadius:"50%",background:C.gold,margin:"0 auto 12px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,boxShadow:"0 0 0 5px rgba(201,150,42,0.25)"}}>🔑</div>
+          <div style={{width:70,height:70,borderRadius:"50%",background:C.gold,margin:"0 auto 12px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,boxShadow:"0 0 0 5px rgba(201,150,42,0.25)"}}>ðŸ”‘</div>
           <h1 style={{color:C.white,fontSize:20,fontWeight:900,margin:0}}>Set New Password</h1>
           <p style={{color:C.goldLight,fontSize:11,margin:"4px 0 0",letterSpacing:1.5}}>SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE</p>
         </div>
@@ -1163,7 +1171,7 @@ function SetNewPasswordScreen({ onSetPassword, onCancel }) {
             <input style={inp} type="password" autoComplete="new-password" placeholder="Re-type password" value={pass2} onChange={e=>setPass2(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handle()} disabled={busy}/>
           </Fr>
           {err && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"8px 12px",color:C.red,fontSize:12,marginBottom:12}}>{err}</div>}
-          <Btn onClick={handle} disabled={busy}>{busy?"Updating…":"Update Password →"}</Btn>
+          <Btn onClick={handle} disabled={busy}>{busy?"Updatingâ€¦":"Update Password â†’"}</Btn>
           <button onClick={onCancel} style={{width:"100%",marginTop:10,padding:"9px",background:"transparent",border:"none",color:C.gray,fontSize:12,cursor:"pointer"}}>Cancel</button>
         </div>
       </div>
@@ -1171,8 +1179,8 @@ function SetNewPasswordScreen({ onSetPassword, onCancel }) {
   );
 }
 
-// ─── Parent Portal ───────────────────────────────────────────────────────────
-// Public, read-only lookup. No staff login required — parents authenticate with
+// â”€â”€â”€ Parent Portal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Public, read-only lookup. No staff login required â€” parents authenticate with
 // Matricule + 4-digit PIN, verified server-side by the `parent_portal_lookup`
 // Postgres function (see PARENT_PORTAL.sql). The raw tables stay protected by
 // RLS; only this narrow, rate-limitable function is reachable with the PIN.
@@ -1230,7 +1238,7 @@ function ParentPortal({ onBack }) {
     <div style={{minHeight:"100vh",background:`linear-gradient(160deg,${C.navy},${C.navyMid} 55%,#1a4a6e)`,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
       <div style={{width:"100%",maxWidth:380}}>
         <div style={{textAlign:"center",marginBottom:24}}>
-          <div style={{width:70,height:70,borderRadius:"50%",background:C.gold,margin:"0 auto 12px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,boxShadow:"0 0 0 5px rgba(201,150,42,0.25)"}}>👨‍👩‍👧</div>
+          <div style={{width:70,height:70,borderRadius:"50%",background:C.gold,margin:"0 auto 12px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,boxShadow:"0 0 0 5px rgba(201,150,42,0.25)"}}>ðŸ‘¨â€ðŸ‘©â€ðŸ‘§</div>
           <h1 style={{color:C.white,fontSize:20,fontWeight:900,margin:0}}>Parent Portal</h1>
           <p style={{color:C.goldLight,fontSize:11,margin:"4px 0 0",letterSpacing:1.5}}>SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE</p>
           <p style={{color:"rgba(255,255,255,0.45)",fontSize:10,margin:"5px 0 0"}}>View your child's marks, attendance & fees</p>
@@ -1240,16 +1248,16 @@ function ParentPortal({ onBack }) {
             <input style={inp} placeholder="e.g. SBCC01001" value={matricule} onChange={e=>setMatricule(e.target.value)} disabled={isLocked} onKeyDown={e=>e.key==="Enter"&&lookup()}/>
           </Fr>
           <Fr label="4-Digit PIN">
-            <input style={{...inp,letterSpacing:4,fontWeight:700,textAlign:"center"}} type="tel" maxLength={4} placeholder="••••" value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,"").slice(0,4))} disabled={isLocked} onKeyDown={e=>e.key==="Enter"&&lookup()}/>
+            <input style={{...inp,letterSpacing:4,fontWeight:700,textAlign:"center"}} type="tel" maxLength={4} placeholder="â€¢â€¢â€¢â€¢" value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,"").slice(0,4))} disabled={isLocked} onKeyDown={e=>e.key==="Enter"&&lookup()}/>
           </Fr>
           {err && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"8px 12px",color:C.red,fontSize:12,marginBottom:12}}>{err}</div>}
           {isLocked
-            ? <div style={{width:"100%",padding:"10px",background:C.grayBg,color:C.gray,borderRadius:8,fontWeight:700,fontSize:13,textAlign:"center"}}>🔒 Locked — try again in {secondsLeft}s</div>
-            : <Btn onClick={lookup} disabled={busy}>{busy?"Looking up…":"View Records →"}</Btn>
+            ? <div style={{width:"100%",padding:"10px",background:C.grayBg,color:C.gray,borderRadius:8,fontWeight:700,fontSize:13,textAlign:"center"}}>ðŸ”’ Locked â€” try again in {secondsLeft}s</div>
+            : <Btn onClick={lookup} disabled={busy}>{busy?"Looking upâ€¦":"View Records â†’"}</Btn>
           }
           <p style={{textAlign:"center",fontSize:10,color:C.gray,marginTop:14,marginBottom:0}}>The Matricule and PIN were printed on your child's registration receipt. Contact the school office if you've lost them.</p>
         </div>
-        <button onClick={onBack} style={{width:"100%",marginTop:14,padding:"9px",background:"transparent",border:"none",color:"rgba(255,255,255,0.6)",fontSize:12,cursor:"pointer"}}>← Staff Sign In</button>
+        <button onClick={onBack} style={{width:"100%",marginTop:14,padding:"9px",background:"transparent",border:"none",color:"rgba(255,255,255,0.6)",fontSize:12,cursor:"pointer"}}>â† Staff Sign In</button>
       </div>
     </div>
   );
@@ -1279,7 +1287,7 @@ function ParentPortalResults({ data, matricule, pin, onBack, onExit }) {
     try {
       const { data: result } = await supabase.rpc("parent_portal_lookup", { p_matricule: matricule, p_pin: pin });
       if (result?.student) setRefreshedData(result);
-    } catch(e) { /* silent — refresh is best-effort */ }
+    } catch(e) { /* silent â€” refresh is best-effort */ }
   }
 
   return (
@@ -1289,15 +1297,15 @@ function ParentPortalResults({ data, matricule, pin, onBack, onExit }) {
           <PhotoBox photo={student.photo_url} size={[36,44]}/>
           <div>
             <div style={{color:C.white,fontWeight:800,fontSize:14}}>{student.name}</div>
-            <div style={{color:C.goldLight,fontSize:10}}>{student.id} · {student.form}</div>
+            <div style={{color:C.goldLight,fontSize:10}}>{student.id} Â· {student.form}</div>
           </div>
         </div>
-        <button onClick={onBack} style={{background:"rgba(255,255,255,0.12)",border:"none",borderRadius:8,color:C.white,fontSize:12,padding:"7px 12px",cursor:"pointer",fontWeight:700}}>← Back</button>
+        <button onClick={onBack} style={{background:"rgba(255,255,255,0.12)",border:"none",borderRadius:8,color:C.white,fontSize:12,padding:"7px 12px",cursor:"pointer",fontWeight:700}}>â† Back</button>
       </div>
 
       <div style={{padding:"14px 12px",maxWidth:600,margin:"0 auto"}}>
         <div style={{display:"flex",background:C.white,borderRadius:10,padding:3,marginBottom:13,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
-          {[["marks","📝 Marks"],["attendance","🗓️ Attendance"],["fees","💰 Fees"]].map(([k,l]) => (
+          {[["marks","ðŸ“ Marks"],["attendance","ðŸ—“ï¸ Attendance"],["fees","ðŸ’° Fees"]].map(([k,l]) => (
             <button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"9px 4px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:tab===k?C.navy:"transparent",color:tab===k?C.white:C.gray}}>{l}</button>
           ))}
         </div>
@@ -1356,10 +1364,10 @@ function ParentPortalResults({ data, matricule, pin, onBack, onExit }) {
             {balance>0 && (
               pendingSubmission
                 ? <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:14,textAlign:"center"}}>
-                    <div style={{fontSize:24,marginBottom:6}}>⏳</div>
+                    <div style={{fontSize:24,marginBottom:6}}>â³</div>
                     <div style={{fontWeight:800,color:"#92400e",fontSize:13,marginBottom:2}}>Payment Under Review</div>
                     <div style={{fontSize:11,color:"#92400e"}}>{pendingSubmission.amount.toLocaleString()} FCFA submitted on {fmtDate(pendingSubmission.submitted_at?.slice(0,10))}. The school office will confirm it shortly.</div>
-                    <button onClick={refresh} style={{marginTop:10,padding:"6px 14px",background:"transparent",border:"1px solid #fde68a",borderRadius:6,color:"#92400e",fontSize:11,fontWeight:700,cursor:"pointer"}}>🔄 Check Status</button>
+                    <button onClick={refresh} style={{marginTop:10,padding:"6px 14px",background:"transparent",border:"1px solid #fde68a",borderRadius:6,color:"#92400e",fontSize:11,fontWeight:700,cursor:"pointer"}}>ðŸ”„ Check Status</button>
                   </div>
                 : <PayFeesPanel matricule={matricule} pin={pin} balance={balance} onSubmitted={refresh}/>
             )}
@@ -1374,8 +1382,8 @@ function ParentPortalResults({ data, matricule, pin, onBack, onExit }) {
                       <div style={{fontSize:10,color:C.gray}}>{fmtDate(s.submitted_at?.slice(0,10))}</div>
                     </div>
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <Pill color={s.status==="approved"?C.green:C.red}>{s.status==="approved"?"✓ Approved":"✕ Rejected"}</Pill>
-                      {s.status==="approved" && <SmBtn onClick={()=>printPaymentSlip(s, student)} color={C.navyMid}>📄 Slip</SmBtn>}
+                      <Pill color={s.status==="approved"?C.green:C.red}>{s.status==="approved"?"âœ“ Approved":"âœ• Rejected"}</Pill>
+                      {s.status==="approved" && <SmBtn onClick={()=>printPaymentSlip(s, student)} color={C.navyMid}>ðŸ“„ Slip</SmBtn>}
                     </div>
                   </div>
                 ))}
@@ -1384,13 +1392,13 @@ function ParentPortalResults({ data, matricule, pin, onBack, onExit }) {
           </div>
         )}
 
-        <button onClick={onExit} style={{width:"100%",marginTop:16,padding:"10px",background:"transparent",border:"none",color:C.gray,fontSize:12,cursor:"pointer"}}>← Exit Parent Portal</button>
+        <button onClick={onExit} style={{width:"100%",marginTop:16,padding:"10px",background:"transparent",border:"none",color:C.gray,fontSize:12,cursor:"pointer"}}>â† Exit Parent Portal</button>
       </div>
     </div>
   );
 }
 
-// ─── Pay Fees Panel (MTN MoMo USSD + screenshot upload) ─────────────────────────
+// â”€â”€â”€ Pay Fees Panel (MTN MoMo USSD + screenshot upload) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function PayFeesPanel({ matricule, pin, balance, onSubmitted }) {
   const [step, setStep] = useState("amount"); // "amount" | "instructions" | "upload" | "done"
   const [amount, setAmount] = useState(String(balance));
@@ -1433,7 +1441,7 @@ function PayFeesPanel({ matricule, pin, balance, onSubmitted }) {
   if (step==="done") {
     return (
       <div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:10,padding:16,textAlign:"center"}}>
-        <div style={{fontSize:28,marginBottom:6}}>✅</div>
+        <div style={{fontSize:28,marginBottom:6}}>âœ…</div>
         <div style={{fontWeight:800,color:C.green,fontSize:14,marginBottom:4}}>Payment Submitted</div>
         <div style={{fontSize:12,color:C.gray}}>The school office will review your payment and confirm it. Check back here for the status.</div>
       </div>
@@ -1444,18 +1452,18 @@ function PayFeesPanel({ matricule, pin, balance, onSubmitted }) {
     <div style={{background:C.white,borderRadius:10,padding:14,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
       {step==="amount" && (
         <div>
-          <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:10}}>💰 Pay School Fees</div>
+          <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:10}}>ðŸ’° Pay School Fees</div>
           <Fr label="Amount to Pay (FCFA)">
             <input style={inp} type="number" value={amount} onChange={e=>setAmount(e.target.value)} max={balance} min={1}/>
           </Fr>
           <div style={{fontSize:11,color:C.gray,marginBottom:10}}>Balance owing: {balance.toLocaleString()} FCFA. You can pay in full or in part.</div>
-          <Btn onClick={()=>setStep("instructions")} disabled={!amount||Number(amount)<=0}>Continue →</Btn>
+          <Btn onClick={()=>setStep("instructions")} disabled={!amount||Number(amount)<=0}>Continue â†’</Btn>
         </div>
       )}
 
       {step==="instructions" && (
         <div>
-          <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:10}}>📞 Dial This on Your Phone</div>
+          <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:10}}>ðŸ“ž Dial This on Your Phone</div>
           <div style={{background:"#1a4a2e",borderRadius:10,padding:16,textAlign:"center",marginBottom:12}}>
             <div style={{fontFamily:"monospace",fontWeight:900,fontSize:20,color:"#fff",letterSpacing:1}}>{ussdCode}</div>
           </div>
@@ -1466,27 +1474,27 @@ function PayFeesPanel({ matricule, pin, balance, onSubmitted }) {
             <li>Come back here and upload it</li>
           </ol>
           <div style={{display:"flex",gap:8}}>
-            <Btn onClick={()=>setStep("amount")} outline>← Back</Btn>
-            <Btn onClick={()=>setStep("upload")}>I've Paid — Upload Proof →</Btn>
+            <Btn onClick={()=>setStep("amount")} outline>â† Back</Btn>
+            <Btn onClick={()=>setStep("upload")}>I've Paid â€” Upload Proof â†’</Btn>
           </div>
         </div>
       )}
 
       {step==="upload" && (
         <div>
-          <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:10}}>📤 Upload Payment Proof</div>
+          <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:10}}>ðŸ“¤ Upload Payment Proof</div>
           <Fr label="Phone Number Used (optional, helps us verify faster)">
             <input style={inp} type="tel" placeholder="e.g. 677123456" value={momoNumber} onChange={e=>setMomoNumber(e.target.value)}/>
           </Fr>
           <input ref={fileInputRef} type="file" accept="image/*" onChange={handleShot} style={{display:"none"}}/>
           <button onClick={()=>fileInputRef.current?.click()} style={{width:"100%",padding:"12px",background:C.grayBg,border:`2px dashed ${C.border}`,borderRadius:10,cursor:"pointer",fontSize:12,fontWeight:700,color:C.navyMid,marginBottom:10}}>
-            {screenshot ? "✓ Screenshot attached — tap to change" : "📸 Tap to attach screenshot"}
+            {screenshot ? "âœ“ Screenshot attached â€” tap to change" : "ðŸ“¸ Tap to attach screenshot"}
           </button>
           {screenshot && <img src={screenshot} alt="preview" style={{width:"100%",maxHeight:180,objectFit:"contain",borderRadius:8,marginBottom:10,border:`1px solid ${C.grayLight}`}}/>}
           {err && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"8px 12px",color:C.red,fontSize:12,marginBottom:10}}>{err}</div>}
           <div style={{display:"flex",gap:8}}>
-            <Btn onClick={()=>setStep("instructions")} outline disabled={busy}>← Back</Btn>
-            <Btn onClick={submit} disabled={busy||!screenshot}>{busy?"Submitting…":"Submit for Review →"}</Btn>
+            <Btn onClick={()=>setStep("instructions")} outline disabled={busy}>â† Back</Btn>
+            <Btn onClick={submit} disabled={busy||!screenshot}>{busy?"Submittingâ€¦":"Submit for Review â†’"}</Btn>
           </div>
         </div>
       )}
@@ -1494,7 +1502,7 @@ function PayFeesPanel({ matricule, pin, balance, onSubmitted }) {
   );
 }
 
-// ─── Dashboard ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function DashboardPage({ ctx, setPage }) {
   const { students, feesMap, notices, auth } = ctx;
   const active     = students.filter(s => s.active);
@@ -1503,9 +1511,9 @@ function DashboardPage({ ctx, setPage }) {
   const collected  = active.reduce((a,s) => a+(feesMap[s.id]?.paid||0), 0);
 
   const cards = [
-    { label:"Registered",      value:regCount,                   icon:"✅", color:C.green,    page:"students" },
-    { label:"Pending Reg.",     value:pendCount,                  icon:"⏳", color:C.red,      page:"registration" },
-    ...(auth.role==="admin" ? [{ label:"Fees Collected", value:`${Math.round(collected/1000)}k F`, icon:"💰", color:C.gold, page:"fees" }] : []),
+    { label:"Registered",      value:regCount,                   icon:"âœ…", color:C.green,    page:"students" },
+    { label:"Pending Reg.",     value:pendCount,                  icon:"â³", color:C.red,      page:"registration" },
+    ...(auth.role==="admin" ? [{ label:"Fees Collected", value:`${Math.round(collected/1000)}k F`, icon:"ðŸ’°", color:C.gold, page:"fees" }] : []),
   ];
 
   return (
@@ -1513,8 +1521,8 @@ function DashboardPage({ ctx, setPage }) {
       <div style={{background:`linear-gradient(135deg,${C.navy},${C.navyMid})`,borderRadius:12,padding:"18px",marginBottom:16,color:C.white,display:"flex",alignItems:"center",gap:14}}>
         <img src={SCHOOL_LOGO} alt="SBCC Bawe crest" style={{width:76,height:76,objectFit:"contain",flexShrink:0,filter:"drop-shadow(0 2px 6px rgba(0,0,0,0.35))"}}/>
         <div style={{minWidth:0}}>
-          <h2 style={{margin:0,fontSize:17,fontWeight:800}}>Welcome, {auth.user.name.split(" ")[0]}! 👋</h2>
-          <p style={{margin:"4px 0 0",color:"rgba(255,255,255,0.6)",fontSize:12}}>Academic Year 2026/2027 · Saker Baptist Comprehensive College Bawe</p>
+          <h2 style={{margin:0,fontSize:17,fontWeight:800}}>Welcome, {auth.user.name.split(" ")[0]}! ðŸ‘‹</h2>
+          <p style={{margin:"4px 0 0",color:"rgba(255,255,255,0.6)",fontSize:12}}>Academic Year 2026/2027 Â· Saker Baptist Comprehensive College Bawe</p>
         </div>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
@@ -1558,7 +1566,7 @@ function DashboardPage({ ctx, setPage }) {
   );
 }
 
-// ─── Registration ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Registration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function RegistrationPage({ ctx }) {
   const { students, saveStudent, auth, isOnline, setOfflineQueue } = ctx;
   const [tab,     setTab]    = useState("register");
@@ -1577,7 +1585,7 @@ function RegistrationPage({ ctx }) {
     const pin  = String(Math.floor(1000 + Math.random()*9000));
 
     try {
-      // Compress photo first — needs to happen either way, online or offline
+      // Compress photo first â€” needs to happen either way, online or offline
       let photoUrl = null;
       if (form.photo_url) {
         photoUrl = await compressPhoto(form.photo_url);
@@ -1594,7 +1602,7 @@ function RegistrationPage({ ctx }) {
       };
 
       if (!isOnline) {
-        // No internet — save with a temporary ID, queue for later sync
+        // No internet â€” save with a temporary ID, queue for later sync
         const tempId = generateTempId(form.form);
         const queuedItem = { type:"register", data:{ ...baseData, studentId:tempId }, tempId };
         addToOfflineQueue(queuedItem);
@@ -1603,7 +1611,7 @@ function RegistrationPage({ ctx }) {
         setTab("receipt");
         setForm(blank);
       } else {
-        // Online — register normally, exactly as before
+        // Online â€” register normally, exactly as before
         const fNum = form.form.replace("Form ","");
         const n    = students.filter(s=>s.form===form.form).length + 1;
         const id   = `SBCC0${fNum.padStart(2,"0")}${String(n).padStart(3,"0")}`;
@@ -1622,14 +1630,14 @@ function RegistrationPage({ ctx }) {
     const photo  = receipt.photo_url;
     const photoHtml = photo
       ? `<img src="${photo}" style="width:70px;height:84px;object-fit:cover;border:2px solid #0D2340;border-radius:3px;display:block;margin:0 auto 10px">`
-      : `<div style="width:70px;height:84px;border:2px dashed #ccc;border-radius:3px;background:#f9fafb;display:flex;align-items:center;justify-content:center;font-size:24px;margin:0 auto 10px">👤</div>`;
+      : `<div style="width:70px;height:84px;border:2px dashed #ccc;border-radius:3px;background:#f9fafb;display:flex;align-items:center;justify-content:center;font-size:24px;margin:0 auto 10px">ðŸ‘¤</div>`;
     const rows = [
       ["Student Name",receipt.name],["Student ID",receipt.id],["Form",receipt.form],
       ["Gender",receipt.gender],["Date of Birth",fmtDate(receipt.dob)],
-      ["Address",receipt.address||"—"],["Parent/Guardian",receipt.parent],
+      ["Address",receipt.address||"â€”"],["Parent/Guardian",receipt.parent],
       ["Paid By",receipt.reg_paid_by],["Registration Date",fmtDate(receipt.reg_date)],
       ["Cashier",receipt.reg_cashier],["Academic Year","2026/2027"],
-    ].map(([l,v]) => `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f0f0;font-size:11.5px"><span style="color:#6B7280">${l}</span><span style="font-weight:600">${v||"—"}</span></div>`).join("");
+    ].map(([l,v]) => `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f0f0;font-size:11.5px"><span style="color:#6B7280">${l}</span><span style="font-weight:600">${v||"â€”"}</span></div>`).join("");
 
     const amtCol = receipt.reg_fee===REG_LATE ? "#C9962A" : "#15803D";
     const html = `<div style="font-family:Segoe UI,sans-serif;padding:14px;color:#0D2340">
@@ -1637,7 +1645,7 @@ function RegistrationPage({ ctx }) {
         <div style="background:#0D2340;color:#fff;padding:14px;text-align:center">
           <img src="${SCHOOL_LOGO}" alt="SBCC" style="width:54px;height:54px;object-fit:contain">
           <h2 style="font-size:14px;font-weight:900;margin:4px 0">SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE</h2>
-          <p style="font-size:9px;opacity:.65;margin:0">NGEPTANG · NONI · NW REGION</p>
+          <p style="font-size:9px;opacity:.65;margin:0">NGEPTANG Â· NONI Â· NW REGION</p>
           <div style="background:#C9962A;display:inline-block;padding:2px 12px;border-radius:10px;font-size:10px;font-weight:800;margin-top:7px">REGISTRATION RECEIPT</div>
           ${receipt.reg_fee===REG_LATE?'<div style="margin-top:4px;background:#fbbf24;color:#78350f;display:inline-block;padding:2px 9px;border-radius:9px;font-size:9px;font-weight:700">LATE REGISTRATION</div>':""}
         </div>
@@ -1651,20 +1659,20 @@ function RegistrationPage({ ctx }) {
             <div style="font-size:10px;color:#6b7280;margin-top:2px">${receipt.reg_fee===REG_LATE?"Late":"Normal"} Registration Fee</div>
           </div>
           <div style="background:#eff6ff;border:1px dashed #93c5fd;border-radius:8px;padding:12px;margin-top:11px;text-align:center">
-            <div style="font-size:10px;color:#1e40af;font-weight:700;margin-bottom:4px">📱 PARENT PORTAL ACCESS</div>
+            <div style="font-size:10px;color:#1e40af;font-weight:700;margin-bottom:4px">ðŸ“± PARENT PORTAL ACCESS</div>
             <div style="font-size:10px;color:#374151;margin-bottom:6px">Check marks, attendance & fees online</div>
             <div style="display:flex;justify-content:center;gap:16px">
               <div><div style="font-size:8px;color:#6b7280">Matricule</div><div style="font-family:monospace;font-weight:900;font-size:14px;color:#1e40af">${receipt.id}</div></div>
               <div><div style="font-size:8px;color:#6b7280">PIN</div><div style="font-family:monospace;font-weight:900;font-size:14px;color:#1e40af">${receipt.parent_pin||"----"}</div></div>
             </div>
-            <div style="font-size:8px;color:#6b7280;margin-top:6px">Keep this PIN safe — needed to view your child's records</div>
+            <div style="font-size:8px;color:#6b7280;margin-top:6px">Keep this PIN safe â€” needed to view your child's records</div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">
             <div style="border-top:1px solid #999;padding-top:3px;font-size:8px;color:#6b7280;margin-top:24px;text-align:center">Cashier Signature</div>
             <div style="border-top:1px solid #999;padding-top:3px;font-size:8px;color:#6b7280;margin-top:24px;text-align:center">Parent/Guardian Signature</div>
           </div>
         </div>
-        <div style="text-align:center;font-size:9px;color:#9ca3af;border-top:1px dashed #e5e7eb;padding:8px 14px">Academic Year 2026/2027 · Keep for your records.</div>
+        <div style="text-align:center;font-size:9px;color:#9ca3af;border-top:1px dashed #e5e7eb;padding:8px 14px">Academic Year 2026/2027 Â· Keep for your records.</div>
       </div>
     </div>`;
     domPrint("sbc-receipt", html, "A5 portrait", "7mm");
@@ -1676,7 +1684,7 @@ function RegistrationPage({ ctx }) {
   return (
     <div>
       <div style={{display:"flex",background:C.white,borderRadius:10,padding:3,marginBottom:13,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
-        {[["register","➕ Register"],["bulk","📥 Bulk Import"],["list","📋 List"],["receipt","🧾 Receipt"]].map(([k,l]) => (
+        {[["register","âž• Register"],["bulk","ðŸ“¥ Bulk Import"],["list","ðŸ“‹ List"],["receipt","ðŸ§¾ Receipt"]].map(([k,l]) => (
           <button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"9px 4px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,fontSize:11,background:tab===k?C.navy:"transparent",color:tab===k?C.white:C.gray}}>{l}</button>
         ))}
       </div>
@@ -1684,7 +1692,7 @@ function RegistrationPage({ ctx }) {
       {tab==="register" && (
         <div>
           <div style={{background:form.isLate?"#fffbeb":"#f0fdf4",border:`1px solid ${form.isLate?"#fbbf24":C.green}`,borderRadius:10,padding:"8px 12px",marginBottom:11,fontSize:12}}>
-            <strong style={{color:form.isLate?C.gold:C.green}}>{form.isLate?"⚠️ Late":"✅ Normal"} Registration</strong>
+            <strong style={{color:form.isLate?C.gold:C.green}}>{form.isLate?"âš ï¸ Late":"âœ… Normal"} Registration</strong>
             <span style={{color:C.gray,marginLeft:6}}>Fee: <strong>{form.isLate?"1,000":"500"} FCFA</strong></span>
           </div>
           <Card title="Student Information">
@@ -1713,9 +1721,9 @@ function RegistrationPage({ ctx }) {
                   r.readAsDataURL(f);
                 }}/>
                 <button type="button" onClick={()=>photoInputRef.current?.click()} style={{display:"block",width:"100%",marginTop:4,fontSize:10,color:C.navyMid,cursor:"pointer",fontWeight:700,background:C.grayBg,border:"none",borderRadius:4,padding:"5px 5px",textAlign:"center"}}>
-                  📷 {form.photo_url?"Change":"Upload"}
+                  ðŸ“· {form.photo_url?"Change":"Upload"}
                 </button>
-                {form.photo_url && <button type="button" onClick={()=>setForm(f=>({...f,photo_url:null}))} style={{marginTop:2,fontSize:9,color:C.red,background:"none",border:"none",cursor:"pointer"}}>✕ Remove</button>}
+                {form.photo_url && <button type="button" onClick={()=>setForm(f=>({...f,photo_url:null}))} style={{marginTop:2,fontSize:9,color:C.red,background:"none",border:"none",cursor:"pointer"}}>âœ• Remove</button>}
               </div>
               <div style={{flex:1}}>
                 <Fr label="Full Name *"><input style={inp} value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}/></Fr>
@@ -1737,7 +1745,7 @@ function RegistrationPage({ ctx }) {
 
           <Card title="Registration Type" style={{marginTop:10}}>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
-              {[[false,"✅ Normal","500 FCFA"],[true,"⚠️ Late","1,000 FCFA"]].map(([v,l,a]) => (
+              {[[false,"âœ… Normal","500 FCFA"],[true,"âš ï¸ Late","1,000 FCFA"]].map(([v,l,a]) => (
                 <button key={String(v)} onClick={()=>setForm(f=>({...f,isLate:v}))} style={{padding:"11px",borderRadius:10,border:`2px solid ${form.isLate===v?(v?C.gold:C.green):C.grayLight}`,background:form.isLate===v?(v?"#fffbeb":"#f0fdf4"):C.white,fontWeight:700,fontSize:12,cursor:"pointer",color:form.isLate===v?(v?C.gold:C.green):C.gray,textAlign:"center"}}>
                   {l}<br/><span style={{fontSize:11}}>{a}</span>
                 </button>
@@ -1746,7 +1754,7 @@ function RegistrationPage({ ctx }) {
           </Card>
 
           <button onClick={handleRegister} disabled={saving||!form.name.trim()||!form.parent.trim()||!form.phone.trim()} style={{width:"100%",marginTop:13,padding:"13px",background:C.navy,color:C.white,border:"none",borderRadius:10,fontWeight:800,fontSize:14,cursor:"pointer",opacity:(saving||!form.name.trim()||!form.parent.trim()||!form.phone.trim())?0.45:1}}>
-            {saving ? "Saving to Supabase…" : "Register & Generate Receipt →"}
+            {saving ? "Saving to Supabaseâ€¦" : "Register & Generate Receipt â†’"}
           </button>
         </div>
       )}
@@ -1758,7 +1766,7 @@ function RegistrationPage({ ctx }) {
       {tab==="list" && (
         <div>
           <div style={{fontSize:12,color:C.gray,marginBottom:9}}>
-            <strong style={{color:C.green}}>{registered.length}</strong> registered · <strong style={{color:C.red}}>{pending.length}</strong> pending
+            <strong style={{color:C.green}}>{registered.length}</strong> registered Â· <strong style={{color:C.red}}>{pending.length}</strong> pending
           </div>
           {students.filter(s=>s.active).sort((a,b)=>a.reg_status.localeCompare(b.reg_status)).map(s => (
             <div key={s.id} style={{background:C.white,borderRadius:10,padding:"11px 12px",marginBottom:7,borderLeft:`4px solid ${s.reg_status==="registered"?C.green:C.red}`,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
@@ -1790,7 +1798,7 @@ function RegistrationPage({ ctx }) {
             <div>
               {receipt._offline && (
                 <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:10,padding:"10px 14px",marginBottom:12,maxWidth:360,marginLeft:"auto",marginRight:"auto"}}>
-                  <div style={{fontWeight:800,color:"#991b1b",fontSize:12,marginBottom:3}}>📡 Saved Offline</div>
+                  <div style={{fontWeight:800,color:"#991b1b",fontSize:12,marginBottom:3}}>ðŸ“¡ Saved Offline</div>
                   <div style={{fontSize:11,color:"#991b1b"}}>This student's real Matricule will be assigned automatically once this device reconnects to the internet and syncs. The ID shown below is temporary.</div>
                 </div>
               )}
@@ -1798,7 +1806,7 @@ function RegistrationPage({ ctx }) {
                 <div style={{background:`linear-gradient(135deg,${C.navy},${C.navyMid})`,color:C.white,padding:"14px",textAlign:"center"}}>
                   <img src={SCHOOL_LOGO} alt="SBCC Bawe" style={{width:54,height:54,objectFit:"contain"}}/>
                   <h2 style={{margin:"4px 0",fontSize:14,fontWeight:900}}>SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE</h2>
-                  <p style={{margin:0,opacity:.6,fontSize:9}}>NGEPTANG · NONI · NW REGION</p>
+                  <p style={{margin:0,opacity:.6,fontSize:9}}>NGEPTANG Â· NONI Â· NW REGION</p>
                   <div style={{marginTop:7,background:C.gold,display:"inline-block",borderRadius:11,padding:"2px 12px",fontSize:10,fontWeight:800}}>REGISTRATION RECEIPT</div>
                 </div>
                 <div style={{padding:"12px 13px"}}>
@@ -1806,7 +1814,7 @@ function RegistrationPage({ ctx }) {
                   <div style={{fontFamily:"monospace",fontWeight:900,fontSize:13,textAlign:"center",marginBottom:9,color:C.navy}}>{receipt.reg_receipt}</div>
                   {[["Name",receipt.name],["ID",receipt.id],["Form",receipt.form],["Fee",`${(receipt.reg_fee||0).toLocaleString()} FCFA`],["Date",fmtDate(receipt.reg_date)],["Parent",receipt.parent]].map(([l,v])=>(
                     <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:`1px solid ${C.grayBg}`,fontSize:11}}>
-                      <span style={{color:C.gray}}>{l}</span><span style={{fontWeight:600,color:C.navy}}>{v||"—"}</span>
+                      <span style={{color:C.gray}}>{l}</span><span style={{fontWeight:600,color:C.navy}}>{v||"â€”"}</span>
                     </div>
                   ))}
                   <div style={{background:receipt.reg_fee===REG_LATE?"#fffbeb":"#f0fdf4",borderRadius:8,padding:"11px",margin:"11px 0",textAlign:"center"}}>
@@ -1814,7 +1822,7 @@ function RegistrationPage({ ctx }) {
                     <div style={{fontSize:26,fontWeight:900,color:receipt.reg_fee===REG_LATE?C.gold:C.green}}>{(receipt.reg_fee||0).toLocaleString()} FCFA</div>
                   </div>
                   <div style={{background:"#eff6ff",border:"1px dashed #93c5fd",borderRadius:8,padding:"11px",textAlign:"center"}}>
-                    <div style={{fontSize:10,color:"#1e40af",fontWeight:700,marginBottom:4}}>📱 PARENT PORTAL ACCESS</div>
+                    <div style={{fontSize:10,color:"#1e40af",fontWeight:700,marginBottom:4}}>ðŸ“± PARENT PORTAL ACCESS</div>
                     <div style={{display:"flex",justifyContent:"center",gap:20}}>
                       <div><div style={{fontSize:9,color:C.gray}}>Matricule</div><div style={{fontFamily:"monospace",fontWeight:900,fontSize:15,color:"#1e40af"}}>{receipt.id}</div></div>
                       <div><div style={{fontSize:9,color:C.gray}}>PIN</div><div style={{fontFamily:"monospace",fontWeight:900,fontSize:15,color:"#1e40af"}}>{receipt.parent_pin||"----"}</div></div>
@@ -1822,7 +1830,7 @@ function RegistrationPage({ ctx }) {
                   </div>
                 </div>
               </div>
-              <button onClick={printReceipt} style={{width:"100%",maxWidth:360,display:"block",margin:"0 auto",padding:"12px",background:C.navy,color:C.white,border:"none",borderRadius:9,fontWeight:800,fontSize:14,cursor:"pointer"}}>🖨 Print Receipt</button>
+              <button onClick={printReceipt} style={{width:"100%",maxWidth:360,display:"block",margin:"0 auto",padding:"12px",background:C.navy,color:C.white,border:"none",borderRadius:9,fontWeight:800,fontSize:14,cursor:"pointer"}}>ðŸ–¨ Print Receipt</button>
             </div>
           )}
         </div>
@@ -1831,7 +1839,7 @@ function RegistrationPage({ ctx }) {
   );
 }
 
-// ─── Bulk Import Panel ───────────────────────────────────────────────────────
+// â”€â”€â”€ Bulk Import Panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Expected spreadsheet columns (header row, case-insensitive, order doesn't matter):
 // Name | Form | Gender | Date of Birth | Parent/Guardian | Phone | Address
 function BulkImportPanel({ students, saveStudent, auth, onDone }) {
@@ -1975,9 +1983,9 @@ function BulkImportPanel({ students, saveStudent, auth, onDone }) {
   return (
     <div>
       <div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px 12px",marginBottom:12,fontSize:12,color:"#1e40af"}}>
-        ℹ️ Upload an Excel (.xlsx) or CSV file with columns: <strong>Name, Form, Gender, Date of Birth, Parent/Guardian, Phone, Address</strong>. Column order doesn't matter.
+        â„¹ï¸ Upload an Excel (.xlsx) or CSV file with columns: <strong>Name, Form, Gender, Date of Birth, Parent/Guardian, Phone, Address</strong>. Column order doesn't matter.
         <div style={{marginTop:6}}>
-          <SmBtn onClick={downloadTemplate} color={C.navyMid}>📥 Download Template</SmBtn>
+          <SmBtn onClick={downloadTemplate} color={C.navyMid}>ðŸ“¥ Download Template</SmBtn>
         </div>
       </div>
 
@@ -1985,7 +1993,7 @@ function BulkImportPanel({ students, saveStudent, auth, onDone }) {
         <Card title="1. Upload File">
           <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} style={{display:"none"}}/>
           <button onClick={()=>fileInputRef.current?.click()} style={{width:"100%",padding:"14px",background:C.grayBg,border:`2px dashed ${C.border}`,borderRadius:10,cursor:"pointer",fontSize:13,fontWeight:700,color:C.navyMid}}>
-            📁 {fileName || "Tap to choose a file…"}
+            ðŸ“ {fileName || "Tap to choose a fileâ€¦"}
           </button>
         </Card>
       )}
@@ -2002,12 +2010,12 @@ function BulkImportPanel({ students, saveStudent, auth, onDone }) {
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <div style={{fontWeight:700,fontSize:12,color:C.navy}}>Row {r.rowNum}: {r.name||"(no name)"}</div>
                   {r.valid
-                    ? <Pill color={C.green}>✓ {r.id}</Pill>
-                    : <Pill color={C.red}>✕ Error</Pill>
+                    ? <Pill color={C.green}>âœ“ {r.id}</Pill>
+                    : <Pill color={C.red}>âœ• Error</Pill>
                   }
                 </div>
                 {r.valid
-                  ? <div style={{fontSize:11,color:C.gray,marginTop:2}}>{r.form} · {r.gender} · {r.parent} · {r.phone}</div>
+                  ? <div style={{fontSize:11,color:C.gray,marginTop:2}}>{r.form} Â· {r.gender} Â· {r.parent} Â· {r.phone}</div>
                   : <div style={{fontSize:11,color:C.red,marginTop:2}}>{r.errors.join(", ")}</div>
                 }
               </div>
@@ -2018,11 +2026,11 @@ function BulkImportPanel({ students, saveStudent, auth, onDone }) {
               <div style={{background:C.grayBg,borderRadius:6,height:10,overflow:"hidden"}}>
                 <div style={{width:`${(progress.done/progress.total)*100}%`,height:"100%",background:C.green,transition:"width .3s"}}/>
               </div>
-              <div style={{textAlign:"center",fontSize:12,color:C.gray,marginTop:6}}>Registering {progress.done} / {progress.total}…</div>
+              <div style={{textAlign:"center",fontSize:12,color:C.gray,marginTop:6}}>Registering {progress.done} / {progress.total}â€¦</div>
             </div>
           ) : (
             <button onClick={registerAll} disabled={validCount===0} style={{width:"100%",marginTop:12,padding:"13px",background:validCount?C.navy:C.grayLight,color:C.white,border:"none",borderRadius:10,fontWeight:800,fontSize:14,cursor:validCount?"pointer":"not-allowed"}}>
-              Register {validCount} Valid Student{validCount!==1?"s":""} →
+              Register {validCount} Valid Student{validCount!==1?"s":""} â†’
             </button>
           )}
         </Card>
@@ -2031,8 +2039,8 @@ function BulkImportPanel({ students, saveStudent, auth, onDone }) {
       {results && (
         <Card title="Import Complete" style={{marginTop:10}}>
           <div style={{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap"}}>
-            <Pill color={C.green}>✓ {results.success.length} registered</Pill>
-            {results.failed.length>0 && <Pill color={C.red}>✕ {results.failed.length} failed</Pill>}
+            <Pill color={C.green}>âœ“ {results.success.length} registered</Pill>
+            {results.failed.length>0 && <Pill color={C.red}>âœ• {results.failed.length} failed</Pill>}
           </div>
           {results.failed.length>0 && (
             <div style={{marginBottom:12}}>
@@ -2046,7 +2054,7 @@ function BulkImportPanel({ students, saveStudent, auth, onDone }) {
           )}
           <div style={{display:"flex",gap:8}}>
             <Btn onClick={()=>{setResults(null);setFileName("");}} outline>Import Another File</Btn>
-            <Btn onClick={onDone}>View Student List →</Btn>
+            <Btn onClick={onDone}>View Student List â†’</Btn>
           </div>
         </Card>
       )}
@@ -2054,7 +2062,7 @@ function BulkImportPanel({ students, saveStudent, auth, onDone }) {
   );
 }
 
-// ─── Students ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Students â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function StudentsPage({ ctx }) {
   const { students, saveStudent, deleteStudent, auth, feesMap } = ctx;
   const [filter, setFilter] = useState({ form:"", search:"" });
@@ -2091,11 +2099,11 @@ function StudentsPage({ ctx }) {
 
   function exportStudents() {
     if (filter.form) {
-      // A single form is already selected — one sheet is enough
+      // A single form is already selected â€” one sheet is enough
       const rows = filtered.map(studentExportRow);
       exportToExcel(rows, `SBCC-Students-${filter.form.replace(" ","")}-${sel_year_safe()}.xlsx`, filter.form);
     } else {
-      // No form filter — split into one sheet per class, all in one workbook
+      // No form filter â€” split into one sheet per class, all in one workbook
       const sheets = FORMS.map(f => ({
         name: f,
         rows: filtered.filter(s=>s.form===f).map(studentExportRow),
@@ -2139,13 +2147,13 @@ function StudentsPage({ ctx }) {
   return (
     <div>
       <div style={{display:"flex",gap:8,marginBottom:11,flexWrap:"wrap"}}>
-        <input style={{...inp,flex:1,minWidth:130}} placeholder="Search name or ID…" value={filter.search} onChange={e=>setFilter(f=>({...f,search:e.target.value}))}/>
+        <input style={{...inp,flex:1,minWidth:130}} placeholder="Search name or IDâ€¦" value={filter.search} onChange={e=>setFilter(f=>({...f,search:e.target.value}))}/>
         <select style={{...inp,width:114}} value={filter.form} onChange={e=>setFilter(f=>({...f,form:e.target.value}))}>
           <option value="">All Forms</option>{FORMS.map(f=><option key={f}>{f}</option>)}
         </select>
-        {auth.role==="admin" && <SmBtn onClick={exportStudents} color={C.green}>📊 Export Excel</SmBtn>}
-        {auth.role==="admin" && <SmBtn onClick={()=>setShowPromote(true)} color={C.gold}>🎓 Promote Students</SmBtn>}
-        {auth.role==="admin" && missingPinCount>0 && <SmBtn onClick={generateMissingPins} color={C.navyMid}>📱 Generate {missingPinCount} Missing PIN{missingPinCount!==1?"s":""}</SmBtn>}
+        {auth.role==="admin" && <SmBtn onClick={exportStudents} color={C.green}>ðŸ“Š Export Excel</SmBtn>}
+        {auth.role==="admin" && <SmBtn onClick={()=>setShowPromote(true)} color={C.gold}>ðŸŽ“ Promote Students</SmBtn>}
+        {auth.role==="admin" && missingPinCount>0 && <SmBtn onClick={generateMissingPins} color={C.navyMid}>ðŸ“± Generate {missingPinCount} Missing PIN{missingPinCount!==1?"s":""}</SmBtn>}
         {auth.role==="admin" && <Btn onClick={()=>{setForm(blank);setModal("add");}}>+ Add</Btn>}
       </div>
 
@@ -2164,7 +2172,7 @@ function StudentsPage({ ctx }) {
           <div style={{display:"flex",gap:10,flexWrap:"wrap",marginTop:6}}>
             <Info label="Gender" value={s.gender}/>
             <Info label="Parent" value={s.parent}/>
-            <Info label="Status" value={s.reg_status==="registered"?"✅ Registered":"⏳ Pending"}/>
+            <Info label="Status" value={s.reg_status==="registered"?"âœ… Registered":"â³ Pending"}/>
           </div>
           <div style={{display:"flex",gap:6,marginTop:7}}>
             <SmBtn onClick={()=>setViewS(s)} color={C.navyMid}>View</SmBtn>
@@ -2182,20 +2190,20 @@ function StudentsPage({ ctx }) {
             <div>
               <div style={{fontWeight:800,fontSize:15,color:C.navy}}>{viewS.name}</div>
               <div style={{fontSize:11,color:C.gold,fontFamily:"monospace"}}>{viewS.id}</div>
-              <div style={{fontSize:12,color:C.gray}}>{viewS.form} · {viewS.gender}</div>
+              <div style={{fontSize:12,color:C.gray}}>{viewS.form} Â· {viewS.gender}</div>
             </div>
           </div>
-          {[["DOB",fmtDate(viewS.dob)],["Parent",viewS.parent],["Phone",viewS.phone],["Address",viewS.address],["Status",viewS.reg_status],["Receipt",viewS.reg_receipt||"—"],["Reg Date",fmtDate(viewS.reg_date)]].map(([l,v])=>(
+          {[["DOB",fmtDate(viewS.dob)],["Parent",viewS.parent],["Phone",viewS.phone],["Address",viewS.address],["Status",viewS.reg_status],["Receipt",viewS.reg_receipt||"â€”"],["Reg Date",fmtDate(viewS.reg_date)]].map(([l,v])=>(
             <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:`1px solid ${C.grayBg}`}}>
               <span style={{fontSize:12,color:C.gray}}>{l}</span>
-              <span style={{fontSize:12,fontWeight:600,color:C.navy}}>{v||"—"}</span>
+              <span style={{fontSize:12,fontWeight:600,color:C.navy}}>{v||"â€”"}</span>
             </div>
           ))}
           <div style={{background:"#eff6ff",borderRadius:8,padding:"10px 12px",marginTop:10}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
-                <div style={{fontSize:11,color:"#1e40af",fontWeight:700}}>📱 Parent Portal PIN</div>
-                <div style={{fontFamily:"monospace",fontWeight:900,fontSize:18,color:"#1e40af",marginTop:2}}>{viewS.parent_pin||"—"}</div>
+                <div style={{fontSize:11,color:"#1e40af",fontWeight:700}}>ðŸ“± Parent Portal PIN</div>
+                <div style={{fontFamily:"monospace",fontWeight:900,fontSize:18,color:"#1e40af",marginTop:2}}>{viewS.parent_pin||"â€”"}</div>
               </div>
               {auth.role==="admin" && (
                 <SmBtn onClick={async()=>{
@@ -2236,7 +2244,7 @@ function StudentsPage({ ctx }) {
                 r.readAsDataURL(f);
               }}/>
               <button type="button" onClick={()=>photoInputRef.current?.click()} style={{display:"block",width:"100%",marginTop:3,fontSize:9,color:C.navyMid,cursor:"pointer",fontWeight:700,background:C.grayBg,border:"none",borderRadius:4,padding:"3px 5px",textAlign:"center"}}>
-                📷 Photo
+                ðŸ“· Photo
               </button>
             </div>
             <div style={{flex:1}}>
@@ -2253,7 +2261,7 @@ function StudentsPage({ ctx }) {
           </div>
           <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
             <Btn onClick={()=>setModal(null)} outline>Cancel</Btn>
-            <Btn onClick={save} disabled={saving}>{saving?"Saving…":modal==="add"?"Add":"Save"}</Btn>
+            <Btn onClick={save} disabled={saving}>{saving?"Savingâ€¦":modal==="add"?"Add":"Save"}</Btn>
           </div>
         </Modal>
       )}
@@ -2263,14 +2271,14 @@ function StudentsPage({ ctx }) {
   );
 }
 
-// ─── Promote Students (end-of-year bulk promotion) ──────────────────────────────
+// â”€â”€â”€ Promote Students (end-of-year bulk promotion) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function PromoteStudentsModal({ students, saveStudent, saveFee, onClose }) {
   const [fromForm, setFromForm] = useState("Form 1");
   const toFormOptions = FORMS.slice(FORMS.indexOf(fromForm)+1);
   const isGraduating = fromForm === "Form 5";
   const [toForm, setToForm] = useState(isGraduating ? "" : (FORMS[FORMS.indexOf(fromForm)+1]||""));
   const [resetFees, setResetFees] = useState(true);
-  const [excluded, setExcluded] = useState({}); // studentId → true if excluded from promotion
+  const [excluded, setExcluded] = useState({}); // studentId â†’ true if excluded from promotion
   const [step, setStep] = useState("select"); // "select" | "confirm" | "running" | "done"
   const [progress, setProgress] = useState({done:0,total:0});
   const [results, setResults] = useState(null);
@@ -2297,7 +2305,7 @@ function PromoteStudentsModal({ students, saveStudent, saveFee, onClose }) {
     for (const s of included) {
       try {
         if (isGraduating) {
-          // Graduating students: mark inactive rather than deleting — preserves their history
+          // Graduating students: mark inactive rather than deleting â€” preserves their history
           await saveStudent({ ...s, active:false, reg_status:s.reg_status, graduated:true });
         } else {
           await saveStudent({ ...s, form: toForm });
@@ -2317,7 +2325,7 @@ function PromoteStudentsModal({ students, saveStudent, saveFee, onClose }) {
   }
 
   return (
-    <Modal title={isGraduating ? "🎓 Graduate Form 5 Students" : `🎓 Promote ${fromForm} → ${toForm}`} onClose={onClose}>
+    <Modal title={isGraduating ? "ðŸŽ“ Graduate Form 5 Students" : `ðŸŽ“ Promote ${fromForm} â†’ ${toForm}`} onClose={onClose}>
       {step==="select" && (
         <div>
           <Fr label="Promote FROM">
@@ -2344,7 +2352,7 @@ function PromoteStudentsModal({ students, saveStudent, saveFee, onClose }) {
           )}
 
           <div style={{fontSize:12,fontWeight:700,color:C.navy,marginBottom:6}}>
-            {eligible.length} student(s) in {fromForm} · {included.length} will be {isGraduating?"graduated":"promoted"}
+            {eligible.length} student(s) in {fromForm} Â· {included.length} will be {isGraduating?"graduated":"promoted"}
           </div>
           <div style={{maxHeight:220,overflowY:"auto",border:`1px solid ${C.grayLight}`,borderRadius:8,marginBottom:12}}>
             {!eligible.length
@@ -2362,7 +2370,7 @@ function PromoteStudentsModal({ students, saveStudent, saveFee, onClose }) {
           <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
             <Btn onClick={onClose} outline>Cancel</Btn>
             <Btn onClick={()=>setStep("confirm")} disabled={!included.length || (!isGraduating && !toForm)} color={isGraduating?C.red:C.gold}>
-              {isGraduating ? `Graduate ${included.length} Student(s) →` : `Promote ${included.length} Student(s) →`}
+              {isGraduating ? `Graduate ${included.length} Student(s) â†’` : `Promote ${included.length} Student(s) â†’`}
             </Btn>
           </div>
         </div>
@@ -2371,7 +2379,7 @@ function PromoteStudentsModal({ students, saveStudent, saveFee, onClose }) {
       {step==="confirm" && (
         <div>
           <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:10,padding:"14px",marginBottom:14,textAlign:"center"}}>
-            <div style={{fontSize:28,marginBottom:6}}>⚠️</div>
+            <div style={{fontSize:28,marginBottom:6}}>âš ï¸</div>
             <div style={{fontWeight:800,color:C.red,fontSize:14,marginBottom:4}}>This action cannot be undone in bulk</div>
             <div style={{fontSize:12,color:C.gray}}>
               {isGraduating
@@ -2380,8 +2388,8 @@ function PromoteStudentsModal({ students, saveStudent, saveFee, onClose }) {
             </div>
           </div>
           <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-            <Btn onClick={()=>setStep("select")} outline>← Back</Btn>
-            <Btn onClick={runPromotion} color={isGraduating?C.red:C.gold}>Yes, Confirm →</Btn>
+            <Btn onClick={()=>setStep("select")} outline>â† Back</Btn>
+            <Btn onClick={runPromotion} color={isGraduating?C.red:C.gold}>Yes, Confirm â†’</Btn>
           </div>
         </div>
       )}
@@ -2391,15 +2399,15 @@ function PromoteStudentsModal({ students, saveStudent, saveFee, onClose }) {
           <div style={{background:C.grayBg,borderRadius:6,height:10,overflow:"hidden",marginBottom:10}}>
             <div style={{width:`${(progress.done/Math.max(progress.total,1))*100}%`,height:"100%",background:C.gold,transition:"width .3s"}}/>
           </div>
-          <div style={{fontSize:13,color:C.gray}}>Processing {progress.done} / {progress.total}…</div>
+          <div style={{fontSize:13,color:C.gray}}>Processing {progress.done} / {progress.total}â€¦</div>
         </div>
       )}
 
       {step==="done" && results && (
         <div>
           <div style={{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap"}}>
-            <Pill color={C.green}>✓ {results.success.length} {isGraduating?"graduated":"promoted"}</Pill>
-            {results.failed.length>0 && <Pill color={C.red}>✕ {results.failed.length} failed</Pill>}
+            <Pill color={C.green}>âœ“ {results.success.length} {isGraduating?"graduated":"promoted"}</Pill>
+            {results.failed.length>0 && <Pill color={C.red}>âœ• {results.failed.length} failed</Pill>}
           </div>
           {results.failed.length>0 && (
             <div style={{marginBottom:12,maxHeight:150,overflowY:"auto"}}>
@@ -2415,7 +2423,7 @@ function PromoteStudentsModal({ students, saveStudent, saveFee, onClose }) {
   );
 }
 
-// ─── Teachers ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Teachers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Name of the Supabase Edge Function that creates / resets / deletes teacher logins
 const TEACHER_FUNCTION = "manage-teacher-v2";
 
@@ -2446,14 +2454,14 @@ function TeachersPage({ ctx }) {
     return p;
   }
 
-  // Temporary diagnostic — calls the function with plain fetch, bypassing the
+  // Temporary diagnostic â€” calls the function with plain fetch, bypassing the
   // Supabase client wrapper entirely, so the literal HTTP status and response
   // text are visible with zero interpretation in between.
   async function rawDiagnostic() {
-    setErr("Running diagnostic…");
+    setErr("Running diagnosticâ€¦");
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) { setErr("DIAGNOSTIC: no active session — log out and back in first."); return; }
+      if (!session?.access_token) { setErr("DIAGNOSTIC: no active session â€” log out and back in first."); return; }
 
       const url = `https://xapbkapxpdvdvelcbpyo.supabase.co/functions/v1/${TEACHER_FUNCTION}`;
       const res = await fetch(url, {
@@ -2466,7 +2474,7 @@ function TeachersPage({ ctx }) {
         body: JSON.stringify({ action:"create", name:"Diagnostic Test", email:`diagtest${Date.now()}@example.com`, password:"testpass123", subjects:[], forms:[] }),
       });
       const rawText = await res.text();
-      setErr(`DIAGNOSTIC RESULT — HTTP ${res.status}: ${rawText}`);
+      setErr(`DIAGNOSTIC RESULT â€” HTTP ${res.status}: ${rawText}`);
     } catch(e) {
       setErr("DIAGNOSTIC network error: " + e.message);
     }
@@ -2529,7 +2537,7 @@ function TeachersPage({ ctx }) {
   return (
     <div>
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:9,gap:8}}>
-        <SmBtn onClick={rawDiagnostic} color={C.red}>🔧 Run Diagnostic</SmBtn>
+        <SmBtn onClick={rawDiagnostic} color={C.red}>ðŸ”§ Run Diagnostic</SmBtn>
         <Btn onClick={()=>{setForm({name:"",email:"",password:randomPassword(),subjects:[],forms:[],active:true,joined:todayStr()});setErr("");setModal("add");}}>+ Create Teacher Account</Btn>
       </div>
       {err && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"10px 12px",color:C.red,fontSize:11,marginBottom:11,wordBreak:"break-word",whiteSpace:"pre-wrap"}}>{err}</div>}
@@ -2555,9 +2563,9 @@ function TeachersPage({ ctx }) {
       ))}
 
       {modal && modal!=="add" && modal.justCreated && (
-        <Modal title="✅ Teacher Account Created" onClose={()=>setModal(null)}>
+        <Modal title="âœ… Teacher Account Created" onClose={()=>setModal(null)}>
           <div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:10,padding:14,marginBottom:14,textAlign:"center"}}>
-            <div style={{fontSize:32,marginBottom:6}}>🎉</div>
+            <div style={{fontSize:32,marginBottom:6}}>ðŸŽ‰</div>
             <div style={{fontWeight:800,color:C.green,fontSize:14}}>{modal.name} can now log in</div>
           </div>
           <div style={{background:C.grayBg,borderRadius:8,padding:"10px 12px",marginBottom:14}}>
@@ -2568,13 +2576,13 @@ function TeachersPage({ ctx }) {
               </div>
             ))}
           </div>
-          <div style={{fontSize:11,color:C.gray,marginBottom:12}}>⚠️ Write this down or share it now — the password won't be shown again. The teacher can change it themselves later from their Profile page.</div>
+          <div style={{fontSize:11,color:C.gray,marginBottom:12}}>âš ï¸ Write this down or share it now â€” the password won't be shown again. The teacher can change it themselves later from their Profile page.</div>
           <div style={{display:"flex",gap:8}}><Btn outline onClick={()=>copyLogin(modal.email,modal.password)}>Copy login details</Btn><Btn onClick={()=>setModal(null)}>Done</Btn></div>
         </Modal>
       )}
 
       {reset && (
-        <Modal title={reset.done ? "Password reset" : `Reset password · ${reset.t.name}`} onClose={()=>!saving&&setReset(null)}>
+        <Modal title={reset.done ? "Password reset" : `Reset password Â· ${reset.t.name}`} onClose={()=>!saving&&setReset(null)}>
           {reset.done ? (<>
             <div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:10,padding:12,marginBottom:12,fontSize:13,color:C.green,fontWeight:700}}>New password saved for {reset.t.name}.</div>
             <div style={{background:C.grayBg,borderRadius:8,padding:"10px 12px",marginBottom:12,fontSize:13}}>
@@ -2592,7 +2600,7 @@ function TeachersPage({ ctx }) {
             {err && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"8px 12px",color:C.red,fontSize:12,marginTop:10}}>{err}</div>}
             <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:13}}>
               <Btn outline onClick={()=>setReset(null)} disabled={saving}>Cancel</Btn>
-              <Btn onClick={resetPassword} disabled={saving}>{saving?"Saving…":"Save new password"}</Btn>
+              <Btn onClick={resetPassword} disabled={saving}>{saving?"Savingâ€¦":"Save new password"}</Btn>
             </div>
           </>)}
         </Modal>
@@ -2606,7 +2614,7 @@ function TeachersPage({ ctx }) {
             <Fr label="Temporary Password">
               <div style={{display:"flex",gap:6}}>
                 <input style={{...inp,flex:1,fontFamily:"monospace"}} value={form.password||""} onChange={e=>setForm(f=>({...f,password:e.target.value}))}/>
-                <SmBtn onClick={()=>setForm(f=>({...f,password:randomPassword()}))} color={C.navyMid}>🎲 New</SmBtn>
+                <SmBtn onClick={()=>setForm(f=>({...f,password:randomPassword()}))} color={C.navyMid}>ðŸŽ² New</SmBtn>
               </div>
             </Fr>
           )}
@@ -2629,7 +2637,7 @@ function TeachersPage({ ctx }) {
           {err && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"8px 12px",color:C.red,fontSize:12,marginTop:10}}>{err}</div>}
           <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:13}}>
             <Btn onClick={()=>setModal(null)} outline>Cancel</Btn>
-            <Btn onClick={modal==="add"?createTeacher:editTeacher} disabled={saving}>{saving?"Saving…":modal==="add"?"Create Account":"Save"}</Btn>
+            <Btn onClick={modal==="add"?createTeacher:editTeacher} disabled={saving}>{saving?"Savingâ€¦":modal==="add"?"Create Account":"Save"}</Btn>
           </div>
         </Modal>
       )}
@@ -2644,10 +2652,10 @@ function TeacherSetupNotice({ teacher, email, needSubjects }) {
   else if (!(teacher.forms||[]).length) msg = "No classes are assigned to your profile yet. Ask the administrator to open Teachers, edit your profile and tick your classes.";
   else if (needSubjects && !(teacher.subjects||[]).length) msg = "No subjects are assigned to your profile yet. Ask the administrator to open Teachers, edit your profile and tick your subjects.";
   if (!msg) return null;
-  return <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:10,padding:12,marginBottom:11,fontSize:12.5,color:"#78350f"}}><strong>⚠️ Setup needed.</strong> {msg}</div>;
+  return <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:10,padding:12,marginBottom:11,fontSize:12.5,color:"#78350f"}}><strong>âš ï¸ Setup needed.</strong> {msg}</div>;
 }
 
-// ─── Marks Entry ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ Marks Entry â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function MarksPage({ ctx }) {
   const { students, marksMap, saveMark, auth, teachers, loadAll } = ctx;
   const isTeacher  = auth.role==="teacher";
@@ -2714,7 +2722,7 @@ function MarksPage({ ctx }) {
           <div><label style={lbl}>Subject</label><select style={inp} value={subject} onChange={e=>setFilter(f=>({...f,subject:e.target.value}))}>{availSubs.map(s=><option key={s}>{s}</option>)}</select></div>
         </div>
         <div style={{marginTop:10,padding:"8px 11px",background:"#fffbeb",borderRadius:7,border:"1px solid #fde68a",display:"flex",alignItems:"center",gap:11,flexWrap:"wrap"}}>
-          <span style={{fontSize:12,fontWeight:700,color:"#92400e"}}>📐 Coefficient:</span>
+          <span style={{fontSize:12,fontWeight:700,color:"#92400e"}}>ðŸ“ Coefficient:</span>
           <div style={{display:"flex",gap:5}}>
             {[1,2,3,4,5,6].map(n=>(
               <button key={n} onClick={()=>setCoeff(n)} style={{width:32,height:32,borderRadius:6,border:`2px solid ${coeff===n?C.navy:C.grayLight}`,background:coeff===n?C.navy:C.white,color:coeff===n?C.white:C.navy,fontWeight:800,fontSize:12,cursor:"pointer"}}>{n}</button>
@@ -2726,14 +2734,14 @@ function MarksPage({ ctx }) {
 
       <div style={{background:C.white,borderRadius:10,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
         <div style={{padding:"10px 12px",borderBottom:`1px solid ${C.grayLight}`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-          <div style={{fontSize:12}}><strong style={{color:C.navy}}>{filter.form}</strong><span style={{color:C.gray,marginLeft:5}}>· {subject} · {filter.seq} · Coeff {coeff}</span></div>
+          <div style={{fontSize:12}}><strong style={{color:C.navy}}>{filter.form}</strong><span style={{color:C.gray,marginLeft:5}}>Â· {subject} Â· {filter.seq} Â· Coeff {coeff}</span></div>
           <div style={{display:"flex",gap:7,alignItems:"center"}}>
-            {saved && <span style={{fontSize:12,color:C.green,fontWeight:700}}>✓ Saved to Supabase</span>}
-            <Btn onClick={saveAll} disabled={saving}>{saving?"Saving…":"Save Marks"}</Btn>
+            {saved && <span style={{fontSize:12,color:C.green,fontWeight:700}}>âœ“ Saved to Supabase</span>}
+            <Btn onClick={saveAll} disabled={saving}>{saving?"Savingâ€¦":"Save Marks"}</Btn>
           </div>
         </div>
         <div style={{padding:"5px 11px",background:"#fffbeb",borderBottom:`1px solid ${C.grayLight}`,fontSize:11,color:"#92400e"}}>
-          Score out of <strong>20</strong> · Weighted = score × {coeff} = max {20*coeff} pts
+          Score out of <strong>20</strong> Â· Weighted = score Ã— {coeff} = max {20*coeff} pts
         </div>
         {!formStudents.length ? <Empty text="No registered students in this form."/> : formStudents.map((s,i) => {
           const v = local[s.id] ?? "";
@@ -2754,8 +2762,8 @@ function MarksPage({ ctx }) {
                   <input type="number" min={0} max={20} style={{width:52,padding:"5px",border:`1px solid ${C.border}`,borderRadius:7,fontSize:14,fontWeight:700,textAlign:"center",color:C.navy}} value={v} onChange={e=>{setLocal(p=>({...p,[s.id]:e.target.value}));setSaved(false);}}/>
                 </div>
                 <div style={{textAlign:"center",minWidth:36}}>
-                  <div style={{fontSize:9,color:C.gray,marginBottom:2}}>×{coeff}</div>
-                  <span style={{fontSize:12,fontWeight:700,color:C.navyMid}}>{v!==""?Number(v)*coeff:"—"}</span>
+                  <div style={{fontSize:9,color:C.gray,marginBottom:2}}>Ã—{coeff}</div>
+                  <span style={{fontSize:12,fontWeight:700,color:C.navyMid}}>{v!==""?Number(v)*coeff:"â€”"}</span>
                 </div>
                 <div style={{textAlign:"center",minWidth:34}}>
                   <div style={{fontSize:9,color:C.gray,marginBottom:3}}>Grade</div>
@@ -2770,11 +2778,11 @@ function MarksPage({ ctx }) {
   );
 }
 
-// ─── Attendance ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Attendance â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const ATT_STATUSES = ["present","absent","late"];
 const ATT_LABELS = { present:"Present", absent:"Absent", late:"Late" };
 const ATT_COLORS = { present:C.green, absent:C.red, late:C.gold };
-const ATT_ICONS  = { present:"✓", absent:"✕", late:"⏰" };
+const ATT_ICONS  = { present:"âœ“", absent:"âœ•", late:"â°" };
 
 function AttendancePage({ ctx }) {
   const { students, attendanceMap, auth, teachers, saveAttendanceBulk } = ctx;
@@ -2786,7 +2794,7 @@ function AttendancePage({ ctx }) {
   const [form,  setForm]  = useState(availForms[0]||(isTeacher?"":"Form 1"));
   useEffect(() => { if (isTeacher && availForms.length && !availForms.includes(form)) setForm(availForms[0]); }, [availForms.join("|")]);
   const [date,  setDate]  = useState(todayStr());
-  const [local, setLocal] = useState({}); // studentId → status
+  const [local, setLocal] = useState({}); // studentId â†’ status
   const [saving,setSaving]= useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -2838,7 +2846,7 @@ function AttendancePage({ ctx }) {
     <div>
       {isTeacher && <TeacherSetupNotice teacher={teacher} email={auth.user.email}/>}
       <div style={{display:"flex",background:C.white,borderRadius:10,padding:3,marginBottom:13,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
-        {[["mark","📝 Mark Today"],["summary","📊 Term Summary"]].map(([k,l]) => (
+        {[["mark","ðŸ“ Mark Today"],["summary","ðŸ“Š Term Summary"]].map(([k,l]) => (
           <button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"9px 4px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:tab===k?C.navy:"transparent",color:tab===k?C.white:C.gray}}>{l}</button>
         ))}
       </div>
@@ -2865,7 +2873,7 @@ function AttendancePage({ ctx }) {
 
           <div style={{background:C.white,borderRadius:10,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
             <div style={{padding:"8px 12px",background:"#fffbeb",borderBottom:`1px solid ${C.grayLight}`,fontSize:11,color:"#92400e"}}>
-              Tap a student's status to cycle: Present → Absent → Late
+              Tap a student's status to cycle: Present â†’ Absent â†’ Late
             </div>
             {!formStudents.length
               ? <Empty text="No registered students in this form."/>
@@ -2891,7 +2899,7 @@ function AttendancePage({ ctx }) {
 
           {formStudents.length>0 && (
             <button onClick={saveAll} disabled={saving} style={{width:"100%",marginTop:13,padding:"13px",background:saved?C.green:C.navy,color:C.white,border:"none",borderRadius:10,fontWeight:800,fontSize:14,cursor:"pointer",opacity:saving?0.6:1}}>
-              {saving?"Saving…":saved?"✓ Attendance Saved":`Save Attendance — ${form} · ${fmtDate(date)}`}
+              {saving?"Savingâ€¦":saved?"âœ“ Attendance Saved":`Save Attendance â€” ${form} Â· ${fmtDate(date)}`}
             </button>
           )}
         </div>
@@ -2903,7 +2911,7 @@ function AttendancePage({ ctx }) {
 }
 
 function AttendanceSummary({ form, setForm, availForms, students, attendanceMap }) {
-  // Count how many present/absent/late days each student has recorded, all-time (per current academic year context — simple total for now)
+  // Count how many present/absent/late days each student has recorded, all-time (per current academic year context â€” simple total for now)
   const counts = students.map(s => {
     let present=0, absent=0, late=0;
     Object.keys(attendanceMap).forEach(key => {
@@ -2927,9 +2935,9 @@ function AttendanceSummary({ form, setForm, availForms, students, attendanceMap 
           <div key={c.student.id} style={{padding:"10px 12px",borderBottom:`1px solid ${C.grayBg}`,background:i%2===0?C.white:C.grayBg}}>
             <div style={{fontWeight:700,color:C.navy,fontSize:13,marginBottom:6}}>{c.student.name}</div>
             <div style={{display:"flex",gap:14,fontSize:12}}>
-              <span style={{color:C.green}}>✓ {c.present} present</span>
-              <span style={{color:C.red}}>✕ {c.absent} absent</span>
-              <span style={{color:C.gold}}>⏰ {c.late} late</span>
+              <span style={{color:C.green}}>âœ“ {c.present} present</span>
+              <span style={{color:C.red}}>âœ• {c.absent} absent</span>
+              <span style={{color:C.gold}}>â° {c.late} late</span>
               <span style={{color:C.gray,marginLeft:"auto"}}>{c.total} days recorded</span>
             </div>
           </div>
@@ -2942,10 +2950,40 @@ function AttendanceSummary({ form, setForm, availForms, students, attendanceMap 
   );
 }
 
-// ─── Report Cards ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Report Cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Shows the report card exactly as it will print: one A4 portrait page (210 Ã— 297 mm), shrunk to fit the screen
+function ReportSheet({ html }) {
+  const wrapRef = useRef(null);
+  const [fit, setFit]   = useState(0.45);
+  const [zoom, setZoom] = useState(false);
+  useEffect(() => {
+    const el = wrapRef.current; if (!el) return;
+    const update = () => setFit(Math.min(1, Math.max(0.2, el.clientWidth / 794)));
+    update();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(update) : null;
+    ro?.observe(el); window.addEventListener("resize", update);
+    return () => { ro?.disconnect(); window.removeEventListener("resize", update); };
+  }, []);
+  const scale = zoom ? 1 : fit;
+  return (
+    <div style={{marginBottom:13}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:7}}>
+        <span style={{fontSize:11.5,color:C.gray}}>A4 portrait Â· exactly as it will print</span>
+        <SmBtn onClick={()=>setZoom(z=>!z)} color={C.navyMid}>{zoom ? "Fit to screen" : "ðŸ” Zoom in"}</SmBtn>
+      </div>
+      <div ref={wrapRef} style={{width:"100%",overflowX:zoom?"auto":"hidden",background:"#e5e7eb",borderRadius:8,padding:zoom?0:"0"}}>
+        <div style={{width:794*scale,height:1123*scale,margin:"0 auto",background:"#fff",boxShadow:"0 2px 12px rgba(0,0,0,0.2)"}}>
+          <iframe title="Report card preview" srcDoc={html} scrolling="no"
+            style={{width:794,height:1123,border:"none",display:"block",transform:`scale(${scale})`,transformOrigin:"top left",pointerEvents:"none"}}/>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ReportsPage({ ctx }) {
   const SBC_SUBJECTS_LIST = [
-    "English language","French/ Français","Mathematics","Health science",
+    "English language","French/ FranÃ§ais","Mathematics","Health science",
     "Home management","Citizenship","Food and Nutrition","Chemistry",
     "History","Economics","Geography","Biology","Human Biology","Physics",
     "Literature in English","Computer Studies","Religious Studies",
@@ -2988,7 +3026,7 @@ function ReportsPage({ ctx }) {
 
   const teacherFor = sub => {
     const t = teachers.find(t=>t.active&&(t.subjects||[]).includes(sub)&&(t.forms||[]).includes(student?.form));
-    return t?.name || "—";
+    return t?.name || "â€”";
   };
   const getScore = (sub,seq) => {
     const k = `${sel.studentId}-${sub}-${seq}-${sel.year}`;
@@ -3024,27 +3062,22 @@ function ReportsPage({ ctx }) {
   };
   const overallAvg  = wAvg(modeRows);
   const totalCoeff  = modeRows.reduce((a,r)=>{ const av=sel.mode==="term"?r.termAvg:r.annualAvg; return a+(av!==null?r.coeff:0); },0);
-  const overallGrd  = overallAvg!==null ? scoreToGrade(overallAvg) : { grade:"—",remark:"—" };
+  const overallGrd  = overallAvg!==null ? scoreToGrade(overallAvg) : { grade:"â€”",remark:"â€”" };
   const passCount   = modeRows.filter(r=>{ const a=sel.mode==="term"?r.termAvg:r.annualAvg; return a!==null&&a>=10; }).length;
-  const D           = v => v!==null ? Number(v).toFixed(1) : "—";
+  const D           = v => v!==null ? Number(v).toFixed(1) : "â€”";
 
   function buildPrintHTML() {
     if (!student||!modeRows.length) return "";
 
-    const SBC_SUBJECTS = [
-      "English language","French/ Français","Mathematics","Health science",
-      "Home management","Citizenship","Food and Nutrition","Chemistry",
-      "History","Economics","Geography","Biology","Human Biology","Physics",
-      "Literature in English","Computer Studies","Religious Studies",
-      "Commerce","Accounts","Hygiene","Sport/Physical education","Manual Labour"
-    ];
+    const SBC_SUBJECTS = SBC_SUBJECTS_LIST;
+    const isTerm = sel.mode==="term";
 
-    // ── Compute class ranking ─────────────────────────────────────────────────
+    // â”€â”€ Class ranking (same rules as before) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const peers = students.filter(s=>s.active&&s.form===student.form&&s.reg_status==="registered");
     const peerAvgs = peers.map(ps=>{
       let tw=0,tc=0;
       SBC_SUBJECTS.forEach(sub=>{
-        const seqs = sel.mode==="term"
+        const seqs = isTerm
           ? TERM_SEQS[sel.term].map(sq=>{ const k=ps.id+"-"+sub+"-"+sq+"-"+sel.year; return marksMap[k]?.score??null; })
           : SEQ_LABELS.map(sq=>{ const k=ps.id+"-"+sub+"-"+sq+"-"+sel.year; return marksMap[k]?.score??null; });
         const vals=seqs.filter(x=>x!==null);
@@ -3053,230 +3086,173 @@ function ReportsPage({ ctx }) {
       });
       return{id:ps.id,avg:tc?tw/tc:0};
     }).sort((a,b)=>b.avg-a.avg);
-    const myRank = peerAvgs.findIndex(x=>x.id===student.id)+1;
-    const rankStr = myRank>0?myRank+"/"+peers.length:"—";
+    const myRank  = peerAvgs.findIndex(x=>x.id===student.id)+1;
+    const rankStr = myRank>0 ? myRank+" / "+peers.length : "â€”";
+    const classAvg = peerAvgs.length ? (peerAvgs.reduce((a,x)=>a+x.avg,0)/peerAvgs.length).toFixed(2) : "â€”";
 
-    // ── Class average ─────────────────────────────────────────────────────────
-    const classAvg = peerAvgs.length
-      ? (peerAvgs.reduce((a,x)=>a+x.avg,0)/peerAvgs.length).toFixed(2)
-      : "—";
+    // â”€â”€ Table columns (percent widths add up to 100) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    const seqNums = isTerm ? termSeqs.map(sq=>sq.replace("SEQ ","")) : ["1","2","3","4","5","6"];
+    const wSeq = isTerm ? 9 : 5.6, wAvg = isTerm ? 9 : 7, wCoef = isTerm ? 8 : 6;
+    const wScore = isTerm ? 10 : 8, wRmk = isTerm ? 13 : 11, wTch = isTerm ? 18 : 14;
+    const wSub = +(100 - seqNums.length*wSeq - wAvg - wCoef - wScore - wRmk - wTch).toFixed(1);
+    const cols = [wSub, wTch, ...seqNums.map(()=>wSeq), wAvg, wCoef, wScore, wRmk].map(w=>`<col style="width:${w}%">`).join("");
+    const seqHeaders = seqNums.map(n=>`<th>SQ${n}</th>`).join("");
 
-    const photoHtml = student.photo_url
-      ?`<img src="${student.photo_url}" style="width:60px;height:72px;object-fit:cover;border:1px solid #1a56a0;display:block">`
-      :`<div style="width:60px;height:72px;border:1px solid #999;display:flex;align-items:center;justify-content:center;font-size:8px;color:#999;text-align:center">PHOTO</div>`;
+    const findRow = sub => modeRows.find(x=>
+      x.sub===sub ||
+      (sub==="French/ FranÃ§ais"&&x.sub==="French") ||
+      (sub==="Computer Studies"&&x.sub==="Computer Science") ||
+      (sub==="Sport/Physical education"&&x.sub==="Physical Education") ||
+      (sub==="Literature in English"&&x.sub==="Literature")
+    );
 
-    const termLabel = sel.mode==="term" ? sel.term.replace(" Term","").toUpperCase()+" TERM" : "ANNUAL";
-    const seqNums = sel.mode==="term"
-      ? termSeqs.map(sq=>sq.replace("SEQ ",""))
-      : ["1","2","3","4","5","6"];
-    const seqW = sel.mode==="term" ? "9%" : "5.2%";
-    const seqHeaders = seqNums.map(n=>`<th style="background:#1a56a0;color:#fff;border:1px solid #fff;padding:2px 1px;font-size:7px;width:${seqW}">SQ${n}</th>`).join("");
-
-    const rows = SBC_SUBJECTS.map((sub,i)=>{
-      const r = modeRows.find(x=>
-        x.sub===sub||
-        (sub==="French/ Français"&&x.sub==="French")||
-        (sub==="Computer Studies"&&x.sub==="Computer Science")||
-        (sub==="Sport/Physical education"&&x.sub==="Physical Education")||
-        (sub==="Literature in English"&&x.sub==="Literature")
-      );
+    let sumScore = 0;
+    const rows = SBC_SUBJECTS.map(sub=>{
+      const r = findRow(sub);
+      const empty = `<td class="c"></td>`;
       if(!r){
-        const emptyCols = sel.mode==="term" ? termSeqs.map(()=>`<td style="border:1px solid #1a56a0"></td>`).join("") : SEQ_LABELS.map(()=>`<td style="border:1px solid #1a56a0"></td>`).join("");
-        return`<tr style="background:${i%2===0?"#fff":"#F9FAFB"}">
-          <td style="padding:1px 2px;font-size:6.2px;border:1px solid #1a56a0;line-height:1.05;word-break:break-word">${sub}</td>
-          ${emptyCols}
-          <td style="border:1px solid #1a56a0"></td>
-          <td style="border:1px solid #1a56a0"></td>
-          <td style="border:1px solid #1a56a0"></td>
-          <td style="border:1px solid #1a56a0"></td>
-        </tr>`;
+        return `<tr><td class="s">${escHtml(sub)}</td><td class="t"></td>${seqNums.map(()=>empty).join("")}${empty}${empty}${empty}${empty}</tr>`;
       }
-      const avg = sel.mode==="term"?r.termAvg:r.annualAvg;
+      const avg = isTerm ? r.termAvg : r.annualAvg;
       const {remark} = scoreToGrade(avg);
-      const pass = avg!==null&&avg>=10;
-      const pond = avg!==null?(avg*r.coeff).toFixed(1):"";
-      const scoreCols = sel.mode==="term"
-        ? r.termScores.map(s=>`<td style="text-align:center;font-size:7.5px;border:1px solid #1a56a0;padding:2px">${s!=null?s:""}</td>`).join("")
-        : SEQ_LABELS.map((_,j)=>{
-            const sc=[r.s1,r.s2,r.s3,r.s4,r.s5,r.s6][j];
-            return`<td style="text-align:center;font-size:7px;border:1px solid #1a56a0;padding:2px">${sc!=null?sc:""}</td>`;
-          }).join("");
-      const teacherName = r.teacher && r.teacher!=="—" ? r.teacher : "";
-      const subjectCell = teacherName
-        ? `${sub}<div style="font-size:6px;color:#1a56a0;font-style:italic;line-height:1.1">${teacherName}</div>`
-        : sub;
-      return`<tr style="background:${i%2===0?"#fff":"#F9FAFB"}">
-        <td style="padding:1px 2px;font-size:6.2px;border:1px solid #1a56a0;line-height:1.05;word-break:break-word">${subjectCell}</td>
+      const pass = avg!==null && avg>=10;
+      const pond = avg!==null ? avg*r.coeff : null;
+      if (pond!==null) sumScore += pond;
+      const scoreVals = isTerm ? r.termScores : [r.s1,r.s2,r.s3,r.s4,r.s5,r.s6];
+      const scoreCols = scoreVals.map(s=>`<td class="c">${s!=null?s:""}</td>`).join("");
+      const teacherName = r.teacher && !/^[?\u2014\u2013-]$/.test(String(r.teacher).trim()) ? r.teacher : "";
+      return `<tr>
+        <td class="s">${escHtml(sub)}</td>
+        <td class="t">${escHtml(teacherName)}</td>
         ${scoreCols}
-        <td style="text-align:center;font-size:7.5px;font-weight:700;border:1px solid #1a56a0;padding:2px">${avg!=null?avg.toFixed(1):""}</td>
-        <td style="text-align:center;font-size:7.5px;border:1px solid #1a56a0;padding:2px">${r.coeff}</td>
-        <td style="text-align:center;font-size:7.5px;font-weight:700;border:1px solid #1a56a0;padding:2px">${pond}</td>
-        <td style="text-align:center;font-size:6.5px;color:${pass?"#15803D":"#B91C1C"};border:1px solid #1a56a0;padding:2px">${remark.slice(0,3)}</td>
+        <td class="c b">${avg!=null?avg.toFixed(1):""}</td>
+        <td class="c">${r.coeff}</td>
+        <td class="c b">${pond!==null?pond.toFixed(1):""}</td>
+        <td class="c" style="color:${pass?"#15803D":"#B91C1C"};font-weight:700">${avg!=null?escHtml(remark):""}</td>
       </tr>`;
     }).join("");
 
+    const totalRow = `<tr class="tot">
+      <td colspan="${2+seqNums.length}" style="text-align:right;padding-right:3mm">TOTAL / AVERAGE</td>
+      <td class="c">${overallAvg!==null?overallAvg.toFixed(2):""}</td>
+      <td class="c">${totalCoeff||""}</td>
+      <td class="c">${sumScore?sumScore.toFixed(1):""}</td>
+      <td class="c">${overallAvg!==null?escHtml(overallGrd.remark):""}</td>
+    </tr>`;
 
-    // Single portrait card sized to exactly 190mm x 277mm (200mm page - 10mm margin, minus header space)
-    return`<!DOCTYPE html><html><head><meta charset="utf-8">
-<title>Report Card — ${student.name}</title>
+    const photoHtml = student.photo_url
+      ? `<img src="${student.photo_url}" alt="" style="width:22mm;height:28mm;object-fit:cover;border:1px solid #1a56a0;display:block;margin:0 auto">`
+      : `<div style="width:22mm;height:28mm;border:1px solid #999;margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:7pt;color:#999">PHOTO</div>`;
+
+    const termLabel = isTerm ? sel.term.replace(" Term","").toUpperCase()+" TERM" : "ANNUAL REPORT";
+    const blank = "&nbsp;";
+    const avgLine  = (label, on) => `${label}: <b>${on&&overallAvg!==null ? overallAvg.toFixed(2)+" / 20" : "â€”"}</b>`;
+
+    return `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Report Card â€“ ${escHtml(student.name)}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  @page{size:A4 portrait;margin:5mm}
-  @media print{
-    html,body{width:200mm!important;height:287mm!important;min-height:287mm!important;overflow:hidden!important}
-  }
+  @page{size:A4 portrait;margin:8mm}
   html,body{font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff;
     -webkit-print-color-adjust:exact;print-color-adjust:exact}
+  @media print{ html,body{width:194mm} }
+  @media screen{ html,body{width:210mm;height:297mm} body{padding:8mm} }
+  .sheet{width:194mm;height:276mm;display:flex;flex-direction:column;gap:2mm;overflow:hidden;break-inside:avoid;page-break-after:avoid}
   table{width:100%;border-collapse:collapse}
-  .page{width:200mm;max-width:200mm;margin:0 auto}
-</style></head><body><div class="page">
+  .gov{font-size:7.5pt;line-height:1.45;vertical-align:top;width:34%}
+  .info td{border:1px solid #1a56a0;padding:0 2mm;height:5.6mm;font-size:8.5pt}
+  .mk{table-layout:fixed;border:1px solid #1a56a0}
+  .mk th{background:#1a56a0;color:#fff;border:1px solid #fff;height:6.2mm;font-size:7.5pt;text-align:center}
+  .mk td{border:1px solid #1a56a0;height:5.5mm;padding:0 1.2mm;font-size:8pt;overflow:hidden;white-space:nowrap}
+  .mk tbody tr:nth-child(even) td{background:#F5F8FC}
+  .mk td.c{text-align:center} .mk td.b{font-weight:700} .mk td.s{text-align:left}
+  .mk td.t{font-size:6.5pt;font-style:italic;color:#1a56a0;text-overflow:ellipsis}
+  .mk tr.tot td{background:#E8F0FA!important;font-weight:800;font-size:8.5pt;border-top:2px solid #1a56a0}
+  .sum td{border:1px solid #000;padding:0 2.5mm;height:6.2mm;font-size:8.5pt}
+  .sum td.rem{height:8mm;vertical-align:top;padding-top:1mm}
+  .sig div.line{height:10mm;border-bottom:1px solid #000;margin-bottom:1mm}
+  .sig td{text-align:center;padding:0 5mm;font-size:8pt}
+</style></head><body><div class="sheet">
 
-<!-- HEADER -->
-<table style="margin-bottom:3px">
-  <tr>
-    <td style="width:33%;font-size:7.5px;line-height:1.5;vertical-align:top">
-      <strong>REPUBLIC OF CAMEROON</strong><br>Peace-Work-Fatherland<br>Ministry of Secondary Education
-    </td>
-    <td style="width:34%;text-align:center;vertical-align:middle"><img src="${SCHOOL_LOGO}" alt="SBCC" style="width:62px;height:62px;object-fit:contain;display:inline-block"></td>
-    <td style="width:33%;font-size:7.5px;line-height:1.5;vertical-align:top;text-align:right">
-      <strong>REPUBLIQUE DU CAMEROUN</strong><br>Paix – Travail – Patrie<br>Ministère De l'Enseignement
-    </td>
-  </tr>
-</table>
+  <table><tr>
+    <td class="gov"><b>REPUBLIC OF CAMEROON</b><br>Peace â€“ Work â€“ Fatherland<br>Ministry of Secondary Education</td>
+    <td style="text-align:center;vertical-align:middle"><img src="${SCHOOL_LOGO}" alt="SBCC" style="width:19mm;height:19mm;object-fit:contain"></td>
+    <td class="gov" style="text-align:right"><b>REPUBLIQUE DU CAMEROUN</b><br>Paix â€“ Travail â€“ Patrie<br>MinistÃ¨re De l'Enseignement</td>
+  </tr></table>
 
-<!-- SCHOOL NAME -->
-<div style="background:#1a56a0;color:#fff;text-align:center;padding:5px 4px;margin-bottom:3px">
-  <div style="font-size:15px;font-weight:900;letter-spacing:.5px">SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE</div>
-  <div style="font-size:8px;margin-top:1px;opacity:.85">Motto: Quality, Discipline, and Excellence education</div>
-</div>
+  <div style="background:#1a56a0;color:#fff;text-align:center;padding:2mm 2mm">
+    <div style="font-size:14.5pt;font-weight:900;letter-spacing:.4px">SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE</div>
+    <div style="font-size:8pt;margin-top:.5mm;opacity:.9">Motto: Quality, Discipline, and Excellence education</div>
+  </div>
 
-<!-- TITLE -->
-<div style="text-align:center;margin-bottom:3px">
-  <span style="font-size:11px;font-weight:800;text-decoration:underline">ACADEMIC REPORT CARD</span>
-  <span style="font-size:10px;font-weight:700"> / BULLETIN DE NOTES</span>
-</div>
+  <div style="text-align:center">
+    <span style="font-size:12pt;font-weight:800;text-decoration:underline">ACADEMIC REPORT CARD</span>
+    <span style="font-size:11pt;font-weight:700"> / BULLETIN DE NOTES</span>
+  </div>
 
-<!-- TERM + STUDENT INFO + PHOTO -->
-<table style="border:1px solid #000;margin-bottom:3px">
-  <tr>
-    <td colspan="4" style="border-bottom:1px solid #000;padding:2px 6px;font-size:8px">
-      <strong>${termLabel}</strong> &nbsp;|&nbsp; Class: <strong>${student.form}</strong> &nbsp;|&nbsp;
-      No. on Roll: <strong>${peers.length}</strong> &nbsp;|&nbsp; Academic Year: <strong>${sel.year}</strong>
-    </td>
-    <td rowspan="4" style="width:66px;padding:3px;border-left:1px solid #000;vertical-align:top;text-align:center">
-      ${photoHtml}
-    </td>
-  </tr>
-  <tr>
-    <td colspan="2" style="padding:2px 6px;font-size:8px;border-bottom:1px solid #ccc;border-right:1px solid #ccc">
-      Name / Nom: <strong>${student.name}</strong>
-    </td>
-    <td colspan="2" style="padding:2px 6px;font-size:8px;border-bottom:1px solid #ccc">
-      Matricule / ID: <strong>${student.id}</strong>
-    </td>
-  </tr>
-  <tr>
-    <td style="padding:2px 6px;font-size:8px;border-bottom:1px solid #ccc;border-right:1px solid #ccc">
-      Sex / Sexe: <strong>${student.gender}</strong>
-    </td>
-    <td style="padding:2px 6px;font-size:8px;border-bottom:1px solid #ccc;border-right:1px solid #ccc">
-      DOB / Naissance: <strong>${fmtDate(student.dob)}</strong>
-    </td>
-    <td colspan="2" style="padding:2px 6px;font-size:8px;border-bottom:1px solid #ccc">
-      Parent/Guardian: <strong>${student.parent||"—"}</strong>
-    </td>
-  </tr>
-  <tr>
-    <td colspan="4" style="padding:2px 6px;font-size:8px">
-      Address / Domicile: <strong>${student.address||"—"}</strong>
-    </td>
-  </tr>
-</table>
+  <table class="info"><tr>
+    <td colspan="2" style="background:#EEF4FB"><b>${termLabel}</b> &nbsp;|&nbsp; Class: <b>${escHtml(student.form)}</b> &nbsp;|&nbsp; No. on Roll: <b>${peers.length}</b> &nbsp;|&nbsp; Academic Year: <b>${escHtml(sel.year)}</b></td>
+    <td rowspan="5" style="width:27mm;text-align:center;vertical-align:middle;padding:1mm">${photoHtml}</td>
+  </tr><tr>
+    <td style="width:62%">Name / Nom: <b>${escHtml(student.name)}</b></td>
+    <td>Matricule: <b>${escHtml(student.id)}</b></td>
+  </tr><tr>
+    <td>Sex / Sexe: <b>${escHtml(student.gender)}</b></td>
+    <td>Date of birth: <b>${fmtDate(student.dob)}</b></td>
+  </tr><tr>
+    <td>Parent / Guardian: <b>${escHtml(student.parent||"â€”")}</b></td>
+    <td>Phone: <b>${escHtml(student.phone||"â€”")}</b></td>
+  </tr><tr>
+    <td colspan="2">Address / Domicile: <b>${escHtml(student.address||"â€”")}</b></td>
+  </tr></table>
 
-<!-- MARKS TABLE -->
-<table style="border:1px solid #1a56a0;margin-bottom:3px">
-  <thead>
-    <tr style="background:#1a56a0;color:#fff">
-      <th style="text-align:left;padding:2px 3px;font-size:7px;border:1px solid #fff;width:18%">SUBJECT</th>
-      ${seqHeaders}
-      <th style="padding:2px 1px;font-size:6.5px;border:1px solid #fff;width:8%">Avg</th>
-      <th style="padding:2px 1px;font-size:6.5px;border:1px solid #fff;width:7%">Coeff</th>
-      <th style="padding:2px 1px;font-size:6.5px;border:1px solid #fff;width:8%">Score</th>
-      <th style="padding:2px 1px;font-size:6.5px;border:1px solid #fff;width:7%">Rmk</th>
+  <table class="mk"><colgroup>${cols}</colgroup>
+    <thead><tr><th style="text-align:left;padding-left:1.5mm">SUBJECT</th><th>TEACHER</th>${seqHeaders}<th>Avg /20</th><th>Coeff</th><th>Score</th><th>Remark</th></tr></thead>
+    <tbody>${rows}${totalRow}</tbody>
+  </table>
+
+  <table class="sum">
+    <tr>
+      <td style="width:25%">${avgLine("Terminal Avg", isTerm)}</td>
+      <td style="width:25%">${avgLine("Annual Avg", !isTerm)}</td>
+      <td style="width:25%">Class Avg: <b>${classAvg} / 20</b></td>
+      <td style="width:25%">Position / Rang: <b>${rankStr}</b></td>
+    </tr><tr>
+      <td>Days Present: <b>${escHtml(conduct.present||"â€”")}</b></td>
+      <td>Days Absent: <b>${escHtml(conduct.absent||"â€”")}</b></td>
+      <td>Times Late: <b>${escHtml(conduct.late||"â€”")}</b></td>
+      <td>Conduct: <b>${escHtml(conduct.conduct||"â€”")}</b></td>
+    </tr><tr>
+      <td>Promoted / Repeat: ________</td>
+      <td>No. of Warnings: ________</td>
+      <td>Fees Owing: ________</td>
+      <td>Next Term Begins: ________</td>
+    </tr><tr>
+      <td colspan="4" class="rem">Class Teacher's Remark: <b>${escHtml(conduct.classTeacherRemark)||blank}</b></td>
+    </tr><tr>
+      <td colspan="4" class="rem">Principal's Remark: <b>${escHtml(conduct.principalRemark)||blank}</b></td>
     </tr>
-  </thead>
-  <tbody>${rows}</tbody>
+  </table>
 
-</table>
+  <table class="sig" style="margin-top:2mm"><tr>
+    <td style="width:33%"><div class="line"></div>Class Teacher / Prof. Principal</td>
+    <td style="width:34%"><div class="line"></div>Principal's Signature / Stamp</td>
+    <td style="width:33%"><div class="line"></div>Parent / Guardian</td>
+  </tr></table>
 
-<!-- SUMMARY -->
-<table style="border:1px solid #000;margin-bottom:3px">
-  <tr>
-    <td style="padding:3px 6px;font-size:8.5px;border-right:1px solid #000;width:25%">
-      Terminal Avg: <strong>${overallAvg?overallAvg.toFixed(2):"—"}/20</strong>
-    </td>
-    <td style="padding:3px 6px;font-size:8.5px;border-right:1px solid #000;width:25%">
-      Class Avg: <strong>${classAvg}/20</strong>
-    </td>
-    <td style="padding:3px 6px;font-size:8.5px;border-right:1px solid #000;width:25%">
-      Position / Rang: <strong>${rankStr}</strong>
-    </td>
-    <td style="padding:3px 6px;font-size:8.5px;width:25%">
-      Promoted/Repeat: __________
-    </td>
-  </tr>
-  <tr>
-    <td style="padding:3px 6px;font-size:8.5px;border-right:1px solid #000;border-top:1px solid #ccc">
-      Annual Avg: <strong>${sel.mode==="annual"&&overallAvg?overallAvg.toFixed(2):"—"}/20</strong>
-    </td>
-    <td style="padding:3px 6px;font-size:8.5px;border-right:1px solid #000;border-top:1px solid #ccc">
-      Absences: <strong>${conduct.absent||"—"}</strong>
-    </td>
-    <td style="padding:3px 6px;font-size:8.5px;border-right:1px solid #000;border-top:1px solid #ccc">
-      No. of Warnings: __________
-    </td>
-    <td style="padding:3px 6px;font-size:8.5px;border-top:1px solid #ccc">
-      Fees Owing: __________
-    </td>
-  </tr>
-  <tr>
-    <td colspan="2" style="padding:3px 6px;font-size:8.5px;border-right:1px solid #000;border-top:1px solid #ccc">
-      Class Teacher Remark: <strong>${conduct.classTeacherRemark||"_________________________"}</strong>
-    </td>
-    <td colspan="2" style="padding:3px 6px;font-size:8.5px;border-top:1px solid #ccc">
-      Next Term Begins: __________
-    </td>
-  </tr>
-</table>
-
-<!-- SIGNATURES -->
-<table style="margin-top:6px">
-  <tr>
-    <td style="width:33%;text-align:center;padding:0 8px">
-      <div style="height:22px;border-bottom:1px solid #000;margin-bottom:2px"></div>
-      <div style="font-size:8px">Class Teacher / Prof. Principal</div>
-    </td>
-    <td style="width:34%;text-align:center;padding:0 8px">
-      <div style="height:22px;border-bottom:1px solid #000;margin-bottom:2px"></div>
-      <div style="font-size:8px">Principal's Signature / Stamp</div>
-    </td>
-    <td style="width:33%;text-align:center;padding:0 8px">
-      <div style="height:22px;border-bottom:1px solid #000;margin-bottom:2px"></div>
-      <div style="font-size:8px">Parent / Guardian</div>
-    </td>
-  </tr>
-</table>
-
-<div style="text-align:center;font-size:7px;color:#888;margin-top:5px;border-top:1px dashed #ccc;padding-top:3px">
-  Saker Baptist Comprehensive College Bawe · ${sel.year} · Printed: ${new Date().toLocaleDateString("en-GB")}
-</div>
+  <div style="font-size:6.5pt;color:#444;text-align:center;line-height:1.4">
+    Grading (out of 20): A Excellent 17â€“20 Â· B+ Very Good 15â€“16.9 Â· B Good 13â€“14.9 Â· C+ Fairly Good 11â€“12.9 Â· C Average 10â€“10.9 Â· D Pass 9â€“9.9 Â· F Fail below 9
+  </div>
+  <div style="margin-top:auto;font-size:7pt;color:#888;text-align:center;border-top:1px dashed #ccc;padding-top:1.2mm">
+    Saker Baptist Comprehensive College Bawe Â· ${escHtml(sel.year)} Â· Printed: ${new Date().toLocaleDateString("en-GB")}
+  </div>
 </div></body></html>`;
   }
 
 
   function printReport() {
     if (!student||!modeRows.length) return;
-    domPrint("sbc-report", buildPrintHTML(), "A4 portrait", "5mm");
+    domPrint("sbc-report", buildPrintHTML(), "A4 portrait", "8mm");
   }
 
   // Guard: show error if something crashes
@@ -3290,7 +3266,7 @@ function ReportsPage({ ctx }) {
           <div style={{gridColumn:"1/-1"}}>
             <label style={lbl}>Select Student</label>
             <select style={inp} value={sel.studentId} onChange={e=>setSel(s=>({...s,studentId:e.target.value}))}>
-              <option value="">— Choose a student —</option>
+              <option value="">â€” Choose a student â€”</option>
               {FORMS.map(f=>(
                 <optgroup key={f} label={f}>
                   {students.filter(s=>s.form===f&&s.active).map(s=><option key={s.id} value={s.id}>{s.name} ({s.id})</option>)}
@@ -3320,21 +3296,21 @@ function ReportsPage({ ctx }) {
           {/* Photo + conduct */}
           <div style={{background:C.white,borderRadius:10,padding:12,marginBottom:11,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:9}}>
-              <span style={{fontWeight:800,color:C.navy,fontSize:13}}>📸 Photo & Conduct</span>
-              <button onClick={()=>setShowC(v=>!v)} style={{fontSize:11,padding:"4px 10px",background:C.grayBg,border:`1px solid ${C.grayLight}`,borderRadius:6,cursor:"pointer",color:C.navy,fontWeight:600}}>{showC?"▲ Hide":"▼ Fill Conduct"}</button>
+              <span style={{fontWeight:800,color:C.navy,fontSize:13}}>ðŸ“¸ Photo & Conduct</span>
+              <button onClick={()=>setShowC(v=>!v)} style={{fontSize:11,padding:"4px 10px",background:C.grayBg,border:`1px solid ${C.grayLight}`,borderRadius:6,cursor:"pointer",color:C.navy,fontWeight:600}}>{showC?"â–² Hide":"â–¼ Fill Conduct"}</button>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:showC?10:0}}>
               <PhotoBox photo={student.photo_url} size={[64,78]}/>
               <div style={{flex:1}}>
                 <div style={{fontWeight:800,color:C.navy,fontSize:14}}>{student.name}</div>
                 <div style={{fontSize:11,color:C.gold,fontFamily:"monospace"}}>{student.id}</div>
-                <div style={{fontSize:11,color:C.gray}}>{student.form} · {student.gender}</div>
+                <div style={{fontSize:11,color:C.gray}}>{student.form} Â· {student.gender}</div>
               </div>
             </div>
             {showC && (
               <div style={{borderTop:`1px solid ${C.grayLight}`,paddingTop:11}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                  <span style={{fontSize:10.5,color:C.gray}}>📅 Pre-filled from Attendance records — edit if needed</span>
+                  <span style={{fontSize:10.5,color:C.gray}}>ðŸ“… Pre-filled from Attendance records â€” edit if needed</span>
                   <SmBtn onClick={()=>setConduct(c=>({...c,present:String(attTotals.present),absent:String(attTotals.absent),late:String(attTotals.late)}))} color={C.navyMid}>Reset to Attendance</SmBtn>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
@@ -3353,169 +3329,13 @@ function ReportsPage({ ctx }) {
             )}
           </div>
 
-          {/* Preview card — SBC compact design */}
-          <div style={{background:C.white,borderRadius:8,overflow:"hidden",
-            boxShadow:"0 2px 10px rgba(0,0,0,0.1)",marginBottom:13,border:"2px solid #1a56a0"}}>
-
-            {/* Govt header */}
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",
-              padding:"5px 10px",borderBottom:"1px solid #ccc",fontSize:7.5}}>
-              <div style={{lineHeight:1.5}}><strong>REPUBLIC OF CAMEROON</strong><br/>Peace-Work-Fatherland<br/>Ministry of Secondary Education</div>
-              <img src={SCHOOL_LOGO} alt="SBCC" style={{width:46,height:46,objectFit:"contain"}}/>
-              <div style={{lineHeight:1.5,textAlign:"right"}}><strong>REPUBLIQUE DU CAMEROUN</strong><br/>Paix – Travail – Patrie<br/>Ministère De l'Enseignement</div>
-            </div>
-
-            {/* School banner */}
-            <div style={{background:"#1a56a0",color:"#fff",textAlign:"center",padding:"6px 4px"}}>
-              <div style={{fontSize:13,fontWeight:900,letterSpacing:.5}}>SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE</div>
-              <div style={{fontSize:7.5,marginTop:1,opacity:.85}}>Motto: Quality, Discipline, and Excellence education</div>
-            </div>
-
-            {/* Title */}
-            <div style={{textAlign:"center",padding:"4px 0",borderBottom:"1px solid #1a56a0",fontSize:10,fontWeight:800,textDecoration:"underline"}}>
-              ACADEMIC REPORT CARD / BULLETIN DE NOTES
-            </div>
-
-            {/* Term + student info + photo */}
-            <div style={{display:"flex",gap:0,borderBottom:"1px solid #000"}}>
-              <div style={{flex:1,fontSize:8}}>
-                <div style={{padding:"2px 6px",borderBottom:"1px solid #ccc",borderRight:"1px solid #000"}}>
-                  <strong>{sel.mode==="term"?sel.term.replace(" Term","").toUpperCase()+" TERM":"ANNUAL"}</strong> &nbsp;|&nbsp;
-                  Class: <strong>{student.form}</strong> &nbsp;|&nbsp;
-                  Roll: <strong>{students.filter(s=>s.active&&s.form===student.form).length}</strong> &nbsp;|&nbsp;
-                  Year: <strong>{sel.year}</strong>
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"1px solid #ccc"}}>
-                  <div style={{padding:"2px 6px",borderRight:"1px solid #ccc"}}>Name: <strong>{student.name}</strong></div>
-                  <div style={{padding:"2px 6px"}}>Matricule: <strong>{student.id}</strong></div>
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"1px solid #ccc"}}>
-                  <div style={{padding:"2px 6px",borderRight:"1px solid #ccc"}}>Sex: <strong>{student.gender}</strong></div>
-                  <div style={{padding:"2px 6px"}}>DOB: <strong>{fmtDate(student.dob)}</strong></div>
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr"}}>
-                  <div style={{padding:"2px 6px",borderRight:"1px solid #ccc"}}>Parent: <strong>{student.parent||"—"}</strong></div>
-                  <div style={{padding:"2px 6px"}}>Phone: <strong>{student.phone||"—"}</strong></div>
-                </div>
-              </div>
-              <div style={{width:70,borderLeft:"1px solid #000",padding:3,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                {student.photo_url
-                  ?<img src={student.photo_url} alt="" style={{width:62,height:75,objectFit:"cover",border:"1px solid #1a56a0"}}/>
-                  :<div style={{width:62,height:75,border:"1px solid #999",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:"#999",textAlign:"center"}}>PHOTO</div>
-                }
-              </div>
-            </div>
-
-            {/* Marks table */}
-            <div style={{overflowX:"auto"}}>
-              <table style={{width:"100%",borderCollapse:"collapse",minWidth:480}}>
-                <thead>
-                  <tr style={{background:"#1a56a0",color:"#fff"}}>
-                    <th style={{padding:"1px 2px",textAlign:"left",fontSize:6,border:"1px solid #1a56a0",width:"18%"}}>SUBJECT</th>
-                    {sel.mode==="term"
-                      ? termSeqs.map((sq)=><th key={sq} style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"9%"}}>SQ{sq.replace("SEQ ","")}</th>)
-                      : ["1","2","3","4","5","6"].map(s=><th key={s} style={{padding:"1px",textAlign:"center",fontSize:5.5,border:"1px solid #fff",width:"5.2%"}}>SQ{s}</th>)
-                    }
-                    <th style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"8%"}}>Avg</th>
-                    <th style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"7%"}}>Coeff</th>
-                    <th style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"8%"}}>Score</th>
-                    <th style={{padding:"1px",textAlign:"center",fontSize:6,border:"1px solid #fff",width:"7%"}}>Rmk</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[
-                    "English language","French/ Français","Mathematics","Health science",
-                    "Home management","Citizenship","Food and Nutrition","Chemistry",
-                    "History","Economics","Geography","Biology","Human Biology","Physics",
-                    "Literature in English","Computer Studies","Religious Studies",
-                    "Commerce","Accounts","Hygiene","Sport/Physical education","Manual Labour"
-                  ].map((sub,i)=>{
-                    const r=modeRows.find(x=>
-                      x.sub===sub||
-                      (sub==="French/ Français"&&x.sub==="French")||
-                      (sub==="Computer Studies"&&x.sub==="Computer Science")||
-                      (sub==="Sport/Physical education"&&x.sub==="Physical Education")||
-                      (sub==="Literature in English"&&x.sub==="Literature")
-                    );
-                    const avg=r?(sel.mode==="term"?r.termAvg:r.annualAvg):null;
-                    const score=avg!=null&&r?(avg*r.coeff).toFixed(1):"";
-                    const {remark}=r&&avg!=null?scoreToGrade(avg):{remark:""};
-                    const pass=avg!=null&&avg>=10;
-                    const teacherName = r?.teacher && r.teacher!=="—" ? r.teacher : "";
-                    return(
-                      <tr key={sub} style={{background:i%2===0?"#fff":"#F8FAFC"}}>
-                        <td style={{padding:"1px 2px",fontSize:5.8,border:"1px solid #1a56a0",lineHeight:1.05,wordBreak:"break-word"}}>
-                          {sub}
-                          {teacherName && <div style={{fontSize:5,color:"#1a56a0",fontStyle:"italic",lineHeight:1.05}}>{teacherName}</div>}
-                        </td>
-                        {sel.mode==="term"
-                          ? r?.termScores.map((s,j)=><td key={j} style={{textAlign:"center",fontSize:6.5,border:"1px solid #1a56a0",padding:"1px"}}>{s!=null?s:""}</td>)
-                          : [r?.s1,r?.s2,r?.s3,r?.s4,r?.s5,r?.s6].map((s,j)=><td key={j} style={{textAlign:"center",fontSize:6,border:"1px solid #1a56a0",padding:"1px"}}>{s!=null?s:""}</td>)
-                        }
-                        <td style={{textAlign:"center",fontSize:6.5,fontWeight:700,border:"1px solid #1a56a0",padding:"1px"}}>{avg!=null?avg.toFixed(1):""}</td>
-                        <td style={{textAlign:"center",fontSize:6.5,border:"1px solid #1a56a0",padding:"1px"}}>{r?r.coeff:""}</td>
-                        <td style={{textAlign:"center",fontSize:6.5,fontWeight:700,border:"1px solid #1a56a0",padding:"1px"}}>{score}</td>
-                        <td style={{textAlign:"center",fontSize:5.5,color:avg!=null?(pass?C.green:C.red):"#000",border:"1px solid #1a56a0",padding:"1px"}}>{remark.slice(0,3)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Summary */}
-            {(()=>{
-              // Auto compute class ranking and class average for preview
-              const peers2=students.filter(s=>s.active&&s.form===student.form&&s.reg_status==="registered");
-              const peerAvgs2=peers2.map(ps=>{
-                let tw=0,tc=0;
-                modeRows.forEach(r=>{
-                  const seqs=sel.mode==="term"
-                    ? TERM_SEQS[sel.term].map(sq=>{const k=ps.id+"-"+r.sub+"-"+sq+"-"+sel.year;return marksMap[k]?.score??null;})
-                    : SEQ_LABELS.map(sq=>{const k=ps.id+"-"+r.sub+"-"+sq+"-"+sel.year;return marksMap[k]?.score??null;});
-                  const vals=seqs.filter(x=>x!==null);
-                  if(vals.length){tw+=vals.reduce((a,b)=>a+Number(b),0)/vals.length*r.coeff;tc+=r.coeff;}
-                });
-                return{id:ps.id,avg:tc?tw/tc:0};
-              }).sort((a,b)=>b.avg-a.avg);
-              const myRank2=peerAvgs2.findIndex(x=>x.id===student.id)+1;
-              const rankStr2=myRank2>0?myRank2+"/"+peers2.length:"—";
-              const classAvg2=peerAvgs2.length?(peerAvgs2.reduce((a,x)=>a+x.avg,0)/peerAvgs2.length).toFixed(2):"—";
-              return(
-                <div style={{borderTop:"2px solid #1a56a0",padding:"5px 10px",fontSize:8.5}}>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6,marginBottom:4}}>
-                    <div>Terminal Avg: <strong>{overallAvg?overallAvg.toFixed(2):"—"}/20</strong></div>
-                    <div>Class Avg: <strong>{classAvg2}/20</strong></div>
-                    <div>Position: <strong>{rankStr2}</strong></div>
-                    <div>Promoted/Repeat: ______</div>
-                  </div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6,marginBottom:4}}>
-                    <div>Annual Avg: <strong>{sel.mode==="annual"&&overallAvg?overallAvg.toFixed(2):"—"}/20</strong></div>
-                    <div>Absences: <strong>{conduct.absent||"—"}</strong></div>
-                    <div>Warnings: ______</div>
-                    <div>Fees Owing: ______</div>
-                  </div>
-                  <div style={{borderTop:"1px solid #ccc",paddingTop:4,marginBottom:6}}>
-                    Class Teacher Remark: <strong>{conduct.classTeacherRemark||"_________________________"}</strong>
-                  </div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginTop:8}}>
-                    {["Class Teacher / Prof. Principal","Principal's Signature / Stamp","Parent / Guardian"].map((r,i)=>(
-                      <div key={r} style={{textAlign:"center"}}>
-                        <div style={{height:20,borderBottom:"1px solid #000",marginBottom:2}}></div>
-                        <div style={{fontSize:7.5}}>{r}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
+          {modeRows.length>0 && <ReportSheet html={buildPrintHTML()}/>}
 
           {modeRows.length>0
             ? <button onClick={printReport} style={{width:"100%",padding:"13px",background:`linear-gradient(90deg,${C.navy},${C.navyMid})`,color:C.white,border:"none",borderRadius:10,fontWeight:800,fontSize:15,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-                🖨 &nbsp;Print A4 Report Card — {student.name}
+                ðŸ–¨ &nbsp;Print A4 Report Card â€” {student.name}
               </button>
-            : <div style={{background:"#fef3cd",borderRadius:10,padding:"12px 16px",textAlign:"center",fontSize:13,color:"#92400e",border:"1px solid #fde68a"}}>⚠️ No marks found for this period. Enter marks first.</div>
+            : <div style={{background:"#fef3cd",borderRadius:10,padding:"12px 16px",textAlign:"center",fontSize:13,color:"#92400e",border:"1px solid #fde68a"}}>âš ï¸ No marks found for this period. Enter marks first.</div>
           }
         </div>
       )}
@@ -3529,15 +3349,15 @@ function ReportsPage({ ctx }) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  ACADEMIC ANALYTICS — shared by the Performance dashboard and Class Council
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+//  ACADEMIC ANALYTICS â€” shared by the Performance dashboard and Class Council
 //  Scores are out of 20. Averages are weighted by subject coefficient, exactly
 //  like the report cards. A student with no marks in the chosen term is left out.
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const PASS_MARK = 10; // pass mark out of 20 (same as report cards)
 const AT_RISK_FAILS = 3; // a student is "at risk" if average < pass mark OR fails this many subjects
-const fmt1 = v => (v===null||v===undefined||isNaN(v)) ? "—" : Number(v).toFixed(1);
-const fmt2 = v => (v===null||v===undefined||isNaN(v)) ? "—" : Number(v).toFixed(2);
+const fmt1 = v => (v===null||v===undefined||isNaN(v)) ? "â€”" : Number(v).toFixed(1);
+const fmt2 = v => (v===null||v===undefined||isNaN(v)) ? "â€”" : Number(v).toFixed(2);
 const escHtml = s => String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 const prevTermOf = term => TERMS[TERMS.indexOf(term)-1] || null;
 
@@ -3657,7 +3477,7 @@ const ScoreBar = ({ label, value, max=20, color, note, labelWidth=108 }) => (
 );
 const avgColor = v => v>=PASS_MARK+4 ? C.green : v>=PASS_MARK ? C.gold : C.red;
 
-// ─── Academic Performance Dashboard ────────────────────────────────────────────
+// â”€â”€â”€ Academic Performance Dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function PerformancePage({ ctx }) {
   const { students, marksMap, teachers, auth } = ctx;
   const isTeacher  = auth.role==="teacher";
@@ -3688,7 +3508,7 @@ function PerformancePage({ ctx }) {
 
   return (
     <div>
-      <h2 style={{margin:"0 0 12px",fontSize:18,fontWeight:800,color:C.navy}}>📈 Academic Performance</h2>
+      <h2 style={{margin:"0 0 12px",fontSize:18,fontWeight:800,color:C.navy}}>ðŸ“ˆ Academic Performance</h2>
 
       <Card style={{marginBottom:11}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:9}}>
@@ -3714,7 +3534,7 @@ function PerformancePage({ ctx }) {
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:11}}>
           {[
             { label:"Class average",     value:`${fmt2(stats.classAvg)}/20`, sub:`${fmt1(stats.classAvg*5)}%`, color:avgColor(stats.classAvg) },
-            { label:"Pass rate",         value:`${fmt1(stats.passRate)}%`,   sub:`average ≥ ${PASS_MARK}/20`, color:stats.passRate>=50?C.green:C.red },
+            { label:"Pass rate",         value:`${fmt1(stats.passRate)}%`,   sub:`average â‰¥ ${PASS_MARK}/20`, color:stats.passRate>=50?C.green:C.red },
             { label:"Students assessed", value:stats.n,                      sub:stats.noMarks?`${stats.noMarks} without marks`:"all have marks", color:C.navy },
             { label:"Students at risk",  value:stats.atRisk.length,          sub:`avg < ${PASS_MARK} or ${AT_RISK_FAILS}+ fails`, color:stats.atRisk.length?C.red:C.green },
           ].map(c=>(
@@ -3729,25 +3549,25 @@ function PerformancePage({ ctx }) {
         {f.cls==="all" && (
           <Card title="Class averages" style={{marginBottom:11}}>
             {stats.formStats.map(x => x.n
-              ? <ScoreBar key={x.form} label={`${x.form} (${x.n})`} value={x.avg} color={avgColor(x.avg)} note={`${fmt1(x.avg)} · ${fmt1(x.passRate)}%`} labelWidth={80}/>
+              ? <ScoreBar key={x.form} label={`${x.form} (${x.n})`} value={x.avg} color={avgColor(x.avg)} note={`${fmt1(x.avg)} Â· ${fmt1(x.passRate)}%`} labelWidth={80}/>
               : <div key={x.form} style={{fontSize:11,color:C.gray,marginBottom:6}}>{x.form}: no marks yet</div>)}
-            <div style={{fontSize:10,color:C.gray,marginTop:4}}>Bar shows average out of 20 · then pass rate</div>
+            <div style={{fontSize:10,color:C.gray,marginTop:4}}>Bar shows average out of 20 Â· then pass rate</div>
           </Card>
         )}
 
         <div style={{display:"grid",gridTemplateColumns:"1fr",gap:11,marginBottom:11}}>
-          <Card title="🏆 Best-performing subjects">
+          <Card title="ðŸ† Best-performing subjects">
             {best.map((s,i)=>(
               <div key={s.sub} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:i<best.length-1?`1px solid ${C.grayBg}`:"none"}}>
-                <div><div style={{fontSize:12.5,fontWeight:700,color:C.navy}}>{i+1}. {s.sub}</div><div style={{fontSize:10.5,color:C.gray}}>{fmt1(s.passRate)}% pass · {s.count} students</div></div>
+                <div><div style={{fontSize:12.5,fontWeight:700,color:C.navy}}>{i+1}. {s.sub}</div><div style={{fontSize:10.5,color:C.gray}}>{fmt1(s.passRate)}% pass Â· {s.count} students</div></div>
                 <Pill color={C.green}>{fmt2(s.avg)}/20</Pill>
               </div>
             ))}
           </Card>
-          <Card title="⚠️ Weakest subjects">
+          <Card title="âš ï¸ Weakest subjects">
             {weak.length ? weak.map((s,i)=>(
               <div key={s.sub} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:i<weak.length-1?`1px solid ${C.grayBg}`:"none"}}>
-                <div><div style={{fontSize:12.5,fontWeight:700,color:C.navy}}>{s.sub}</div><div style={{fontSize:10.5,color:C.gray}}>{fmt1(s.passRate)}% pass · {s.count} students</div></div>
+                <div><div style={{fontSize:12.5,fontWeight:700,color:C.navy}}>{s.sub}</div><div style={{fontSize:10.5,color:C.gray}}>{fmt1(s.passRate)}% pass Â· {s.count} students</div></div>
                 <Pill color={avgColor(s.avg)}>{fmt2(s.avg)}/20</Pill>
               </div>
             )) : <div style={{fontSize:12,color:C.gray}}>Not enough subjects with marks yet.</div>}
@@ -3756,16 +3576,16 @@ function PerformancePage({ ctx }) {
 
         <Card title="All subject averages" style={{marginBottom:11}}>
           {stats.subjects.map(s => <ScoreBar key={s.sub} label={s.sub} value={s.avg} color={avgColor(s.avg)} labelWidth={118}/>)}
-          <div style={{fontSize:10,color:C.gray,marginTop:4}}>Out of 20 · green = strong, gold = pass, red = below {PASS_MARK}</div>
+          <div style={{fontSize:10,color:C.gray,marginTop:4}}>Out of 20 Â· green = strong, gold = pass, red = below {PASS_MARK}</div>
         </Card>
 
         <Card title={`Students at risk (${stats.atRisk.length})`} style={{marginBottom:11}}>
-          {!stats.atRisk.length && <div style={{fontSize:12,color:C.green}}>✓ No student is currently at risk.</div>}
+          {!stats.atRisk.length && <div style={{fontSize:12,color:C.green}}>âœ“ No student is currently at risk.</div>}
           {risk.map(r=>(
             <div key={r.student.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"7px 0",borderBottom:`1px solid ${C.grayBg}`}}>
               <div style={{minWidth:0}}>
                 <div style={{fontSize:12.5,fontWeight:700,color:C.navy}}>{r.student.name}</div>
-                <div style={{fontSize:10.5,color:C.gray}}>{r.student.form} · {r.student.id} · {r.reason}</div>
+                <div style={{fontSize:10.5,color:C.gray}}>{r.student.form} Â· {r.student.id} Â· {r.reason}</div>
                 {r.weaknesses.length>0 && <div style={{fontSize:10.5,color:C.red,marginTop:1}}>Weak: {r.weaknesses.map(w=>w.sub).join(", ")}</div>}
               </div>
               <div style={{textAlign:"right",flexShrink:0}}>
@@ -3787,7 +3607,7 @@ function PerformancePage({ ctx }) {
                   <div style={{fontSize:12.5,fontWeight:700,color:C.navy}}>{t.term}{t.term===f.term?" (selected)":""}</div>
                   <div style={{fontSize:10.5,color:C.gray}}>{t.n} students</div>
                 </div>
-                <ScoreBar label="Average /20" value={t.classAvg} color={avgColor(t.classAvg)} note={fmt2(t.classAvg)+(dAvg!==null?` ${dAvg>=0?"▲":"▼"}${Math.abs(dAvg).toFixed(2)}`:"")} labelWidth={78}/>
+                <ScoreBar label="Average /20" value={t.classAvg} color={avgColor(t.classAvg)} note={fmt2(t.classAvg)+(dAvg!==null?` ${dAvg>=0?"â–²":"â–¼"}${Math.abs(dAvg).toFixed(2)}`:"")} labelWidth={78}/>
                 <ScoreBar label="Pass rate" value={t.passRate} max={100} color={t.passRate>=50?C.green:C.red} note={`${fmt1(t.passRate)}%`} labelWidth={78}/>
               </div>
             ) : (
@@ -3797,8 +3617,8 @@ function PerformancePage({ ctx }) {
           {prev && (gains.length>0 || drops.length>0) && (
             <div style={{marginTop:10,paddingTop:9,borderTop:`1px dashed ${C.border}`}}>
               <div style={{fontSize:11,fontWeight:700,color:C.navy,marginBottom:5}}>Subject movement vs {prev}</div>
-              {gains.map(m=><div key={m.sub} style={{fontSize:11.5,color:C.green,marginBottom:2}}>▲ {m.sub} +{m.delta.toFixed(2)}</div>)}
-              {drops.map(m=><div key={m.sub} style={{fontSize:11.5,color:C.red,marginBottom:2}}>▼ {m.sub} {m.delta.toFixed(2)}</div>)}
+              {gains.map(m=><div key={m.sub} style={{fontSize:11.5,color:C.green,marginBottom:2}}>â–² {m.sub} +{m.delta.toFixed(2)}</div>)}
+              {drops.map(m=><div key={m.sub} style={{fontSize:11.5,color:C.red,marginBottom:2}}>â–¼ {m.sub} {m.delta.toFixed(2)}</div>)}
             </div>
           )}
         </Card>
@@ -3807,7 +3627,7 @@ function PerformancePage({ ctx }) {
   );
 }
 
-// ─── Class Council ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Class Council â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const RESPONSIBLE_SUGGESTIONS = ["Principal","Vice Principal","Class Master","Discipline Master","Guidance Counsellor","Bursar"];
 
 // Printable council report for the school archive
@@ -3816,8 +3636,8 @@ function printCouncilReport(meeting, decisions, snap, teacherNames=[]) {
     <td style="text-align:center;font-weight:700">${r.pos}/${r.of}</td>
     <td><strong>${escHtml(r.name)}</strong><br><span style="color:#6B7280;font-size:9px">${escHtml(r.id)}</span></td>
     <td style="text-align:center;font-weight:700">${fmt2(r.avg)}</td>
-    <td style="color:#15803D">${r.strengths.length ? r.strengths.map(x=>`${escHtml(x.sub)} (${fmt1(x.avg)})`).join(", ") : "—"}</td>
-    <td style="color:#B91C1C">${r.weaknesses.length ? r.weaknesses.map(x=>`${escHtml(x.sub)} (${fmt1(x.avg)})`).join(", ") : "—"}</td>
+    <td style="color:#15803D">${r.strengths.length ? r.strengths.map(x=>`${escHtml(x.sub)} (${fmt1(x.avg)})`).join(", ") : "â€”"}</td>
+    <td style="color:#B91C1C">${r.weaknesses.length ? r.weaknesses.map(x=>`${escHtml(x.sub)} (${fmt1(x.avg)})`).join(", ") : "â€”"}</td>
   </tr>`;
   const stuTable = (title, list, color) => `
     <div style="margin:12px 0 4px;font-weight:800;font-size:12px;color:${color}">${title}</div>
@@ -3829,8 +3649,8 @@ function printCouncilReport(meeting, decisions, snap, teacherNames=[]) {
   const decRows = decisions.map((d,i)=>`<tr>
     <td style="text-align:center">${i+1}</td>
     <td>${escHtml(d.decision)}</td>
-    <td>${escHtml(d.responsible||"—")}</td>
-    <td style="text-align:center">${d.deadline?fmtDate(d.deadline):"—"}</td>
+    <td>${escHtml(d.responsible||"â€”")}</td>
+    <td style="text-align:center">${d.deadline?fmtDate(d.deadline):"â€”"}</td>
     <td style="text-align:center;font-weight:700;color:${statusCol(d.status)}">${statusTxt(d.status)}${d.status==="completed"&&d.completed_on?`<br><span style="font-weight:400;font-size:9px">${fmtDate(d.completed_on)}</span>`:""}</td>
   </tr>`).join("");
 
@@ -3846,7 +3666,7 @@ function printCouncilReport(meeting, decisions, snap, teacherNames=[]) {
     <div style="text-align:center;border-bottom:3px double #0D2340;padding-bottom:8px">
       <img src="${SCHOOL_LOGO}" alt="SBCC" style="width:70px;height:70px;object-fit:contain">
       <div style="font-size:16px;font-weight:900;margin-top:3px">SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE</div>
-      <div style="font-size:9px;color:#6B7280">NGEPTANG · NONI · NW REGION</div>
+      <div style="font-size:9px;color:#6B7280">NGEPTANG Â· NONI Â· NW REGION</div>
       <div style="display:inline-block;margin-top:7px;background:#0D2340;color:#fff;padding:3px 18px;border-radius:12px;font-weight:800;font-size:11px;letter-spacing:.5px">CLASS COUNCIL REPORT</div>
     </div>
 
@@ -3866,13 +3686,13 @@ function printCouncilReport(meeting, decisions, snap, teacherNames=[]) {
     </div>
 
     <h3>2. Top and bottom students</h3>
-    ${stuTable("🏆 Top three students", snap.top, "#15803D")}
-    ${stuTable("⚠ Bottom three students", snap.bottom, "#B91C1C")}
+    ${stuTable("ðŸ† Top three students", snap.top, "#15803D")}
+    ${stuTable("âš  Bottom three students", snap.bottom, "#B91C1C")}
 
     <h3>3. Meeting record</h3>
-    <div style="margin-bottom:5px"><strong>Attendees (${(meeting.attendees||[]).length}):</strong> ${(meeting.attendees||[]).length ? (meeting.attendees||[]).map(escHtml).join(", ") : "—"}</div>
+    <div style="margin-bottom:5px"><strong>Attendees (${(meeting.attendees||[]).length}):</strong> ${(meeting.attendees||[]).length ? (meeting.attendees||[]).map(escHtml).join(", ") : "â€”"}</div>
     <div><strong>Discussion:</strong></div>
-    <div style="border:1px solid #cbd5e1;border-radius:5px;padding:7px;min-height:50px;white-space:pre-wrap">${escHtml(meeting.discussion||"—")}</div>
+    <div style="border:1px solid #cbd5e1;border-radius:5px;padding:7px;min-height:50px;white-space:pre-wrap">${escHtml(meeting.discussion||"â€”")}</div>
 
     <h3>4. Decisions and follow-up</h3>
     ${decisions.length ? `<table class="grid"><thead><tr><th style="width:24px">#</th><th>Decision</th><th style="width:100px">Responsible</th><th style="width:62px">Deadline</th><th style="width:70px">Status</th></tr></thead><tbody>${decRows}</tbody></table>` : `<div style="color:#6B7280">No decisions recorded.</div>`}
@@ -3882,7 +3702,7 @@ function printCouncilReport(meeting, decisions, snap, teacherNames=[]) {
       <td style="width:50%;text-align:center"><div style="border-top:1px solid #0D2340;width:80%;margin:0 auto;padding-top:3px">Principal</div></td>
     </tr></table>
     <div style="margin-top:12px;font-size:8.5px;color:#9ca3af;text-align:center">
-      Ranking figures recorded on ${fmtDate(snap.savedOn||todayStr())} · Decision statuses printed on ${fmtDate(todayStr())} · Archive copy
+      Ranking figures recorded on ${fmtDate(snap.savedOn||todayStr())} Â· Decision statuses printed on ${fmtDate(todayStr())} Â· Archive copy
     </div>
   </div>`;
   domPrint("sbc-council-report", html, "A4 portrait", "10mm");
@@ -3989,7 +3809,7 @@ function ClassCouncilPage({ ctx }) {
           <div style={{width:34,height:34,borderRadius:"50%",background:accent+"20",color:accent,fontWeight:900,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{r.pos}</div>
           <div style={{minWidth:0}}>
             <div style={{fontSize:13,fontWeight:800,color:C.navy}}>{r.student.name}</div>
-            <div style={{fontSize:10.5,color:C.gray}}>{r.student.id} · Position {r.pos}/{r.of}</div>
+            <div style={{fontSize:10.5,color:C.gray}}>{r.student.id} Â· Position {r.pos}/{r.of}</div>
           </div>
         </div>
         <div style={{textAlign:"right",flexShrink:0}}>
@@ -3998,8 +3818,8 @@ function ClassCouncilPage({ ctx }) {
         </div>
       </div>
       <div style={{marginTop:7,fontSize:11}}>
-        <div style={{color:C.green,marginBottom:2}}><strong>Strengths:</strong> {r.strengths.length ? r.strengths.map(x=>`${x.sub} (${fmt1(x.avg)})`).join(", ") : "—"}</div>
-        <div style={{color:C.red}}><strong>Weaknesses:</strong> {r.weaknesses.length ? r.weaknesses.map(x=>`${x.sub} (${fmt1(x.avg)})`).join(", ") : "—"}</div>
+        <div style={{color:C.green,marginBottom:2}}><strong>Strengths:</strong> {r.strengths.length ? r.strengths.map(x=>`${x.sub} (${fmt1(x.avg)})`).join(", ") : "â€”"}</div>
+        <div style={{color:C.red}}><strong>Weaknesses:</strong> {r.weaknesses.length ? r.weaknesses.map(x=>`${x.sub} (${fmt1(x.avg)})`).join(", ") : "â€”"}</div>
       </div>
     </div>
   );
@@ -4010,7 +3830,7 @@ function ClassCouncilPage({ ctx }) {
 
   return (
     <div>
-      <h2 style={{margin:"0 0 12px",fontSize:18,fontWeight:800,color:C.navy}}>🏛️ Class Council</h2>
+      <h2 style={{margin:"0 0 12px",fontSize:18,fontWeight:800,color:C.navy}}>ðŸ›ï¸ Class Council</h2>
 
       {!councilReady && (
         <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:10,padding:12,marginBottom:11,fontSize:12,color:"#78350f"}}>
@@ -4040,7 +3860,7 @@ function ClassCouncilPage({ ctx }) {
       </div>
       <div style={{background:C.white,borderRadius:"0 0 11px 11px",padding:13,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
 
-        {/* ── Rankings ── */}
+        {/* â”€â”€ Rankings â”€â”€ */}
         {tab==="rank" && (!stats.n ? <Empty text={`No marks for ${sel.form} in ${sel.term}, ${sel.year}.`}/> : (<>
           <div style={{display:"flex",gap:8,marginBottom:12}}>
             {[["Class average",`${fmt2(stats.classAvg)}/20`,avgColor(stats.classAvg)],["Pass rate",`${fmt1(stats.passRate)}%`,stats.passRate>=50?C.green:C.red],["Ranked",stats.n,C.navy]].map(([l,v,c])=>(
@@ -4049,9 +3869,9 @@ function ClassCouncilPage({ ctx }) {
               </div>
             ))}
           </div>
-          <div style={{fontSize:12.5,fontWeight:800,color:C.green,margin:"4px 0 7px"}}>🏆 Top three</div>
+          <div style={{fontSize:12.5,fontWeight:800,color:C.green,margin:"4px 0 7px"}}>ðŸ† Top three</div>
           {ranking.top.map(r=><StudentCard key={r.student.id} r={r} accent={C.green}/>)}
-          <div style={{fontSize:12.5,fontWeight:800,color:C.red,margin:"12px 0 7px"}}>⚠️ Bottom three</div>
+          <div style={{fontSize:12.5,fontWeight:800,color:C.red,margin:"12px 0 7px"}}>âš ï¸ Bottom three</div>
           {ranking.bottom.length ? ranking.bottom.map(r=><StudentCard key={r.student.id} r={r} accent={C.red}/>) : <div style={{fontSize:12,color:C.gray}}>Class too small for a separate bottom three.</div>}
           {stats.noMarks>0 && <div style={{fontSize:10.5,color:C.gray,marginTop:6}}>{stats.noMarks} student(s) with no marks this term are not ranked.</div>}
           <div style={{marginTop:10}}><SmBtn color={C.navyMid} onClick={()=>setShowFull(v=>!v)}>{showFull?"Hide full class list":"Show full class list"}</SmBtn></div>
@@ -4067,10 +3887,10 @@ function ClassCouncilPage({ ctx }) {
           )}
         </>))}
 
-        {/* ── Meetings ── */}
+        {/* â”€â”€ Meetings â”€â”€ */}
         {tab==="meetings" && (<>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-            <div style={{fontSize:12,color:C.gray}}>{sel.form} · {sel.term} · {sel.year}</div>
+            <div style={{fontSize:12,color:C.gray}}>{sel.form} Â· {sel.term} Â· {sel.year}</div>
             <Btn onClick={openNew} disabled={!councilReady}>+ New meeting</Btn>
           </div>
           {!meetingsFor.length && <Empty text="No council meeting recorded for this class and term yet."/>}
@@ -4083,29 +3903,29 @@ function ClassCouncilPage({ ctx }) {
                 <div onClick={()=>setOpenId(open?null:m.id)} style={{padding:"10px 12px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,background:open?"#f8fafc":C.white}}>
                   <div>
                     <div style={{fontSize:13,fontWeight:800,color:C.navy}}>{fmtDate(m.meeting_date)}</div>
-                    <div style={{fontSize:10.5,color:C.gray}}>{(m.attendees||[]).length} attendees · {ds.length} decisions{ds.length?` (${done} done)`:""}</div>
+                    <div style={{fontSize:10.5,color:C.gray}}>{(m.attendees||[]).length} attendees Â· {ds.length} decisions{ds.length?` (${done} done)`:""}</div>
                   </div>
-                  <span style={{color:C.gray,fontSize:12}}>{open?"▲":"▼"}</span>
+                  <span style={{color:C.gray,fontSize:12}}>{open?"â–²":"â–¼"}</span>
                 </div>
                 {open && (
                   <div style={{padding:"4px 12px 12px"}}>
                     <div style={{fontSize:11,color:C.gray,marginTop:6}}>Attendees</div>
-                    <div style={{fontSize:12,color:C.navy,marginBottom:7}}>{(m.attendees||[]).join(", ")||"—"}</div>
+                    <div style={{fontSize:12,color:C.navy,marginBottom:7}}>{(m.attendees||[]).join(", ")||"â€”"}</div>
                     <div style={{fontSize:11,color:C.gray}}>Discussion</div>
-                    <div style={{fontSize:12,color:C.navy,whiteSpace:"pre-wrap",marginBottom:8}}>{m.discussion||"—"}</div>
+                    <div style={{fontSize:12,color:C.navy,whiteSpace:"pre-wrap",marginBottom:8}}>{m.discussion||"â€”"}</div>
                     <div style={{fontSize:11,color:C.gray,marginBottom:4}}>Decisions</div>
                     {!ds.length && <div style={{fontSize:12,color:C.gray}}>None recorded.</div>}
                     {ds.map(d=>(
                       <div key={d.id} style={{background:C.grayBg,borderRadius:8,padding:"8px 10px",marginBottom:6}}>
                         <div style={{fontSize:12.5,fontWeight:600,color:C.navy}}>{d.decision}</div>
-                        <div style={{fontSize:10.5,color:isOverdue(d)?C.red:C.gray,marginTop:2}}>👤 {d.responsible||"Unassigned"} · ⏰ {d.deadline?fmtDate(d.deadline):"No deadline"}{isOverdue(d)?" · OVERDUE":""}</div>
+                        <div style={{fontSize:10.5,color:isOverdue(d)?C.red:C.gray,marginTop:2}}>ðŸ‘¤ {d.responsible||"Unassigned"} Â· â° {d.deadline?fmtDate(d.deadline):"No deadline"}{isOverdue(d)?" Â· OVERDUE":""}</div>
                         <StatusButtons d={d}/>
                       </div>
                     ))}
                     <div style={{display:"flex",gap:7,marginTop:8,flexWrap:"wrap"}}>
-                      <SmBtn color={C.navyMid} onClick={()=>openEdit(m)}>✏️ Edit</SmBtn>
-                      <SmBtn color={C.green} onClick={()=>printMeeting(m)}>🖨️ Print report</SmBtn>
-                      {!isTeacher && <SmBtn color={C.red} onClick={()=>removeMeeting(m)}>🗑 Delete</SmBtn>}
+                      <SmBtn color={C.navyMid} onClick={()=>openEdit(m)}>âœï¸ Edit</SmBtn>
+                      <SmBtn color={C.green} onClick={()=>printMeeting(m)}>ðŸ–¨ï¸ Print report</SmBtn>
+                      {!isTeacher && <SmBtn color={C.red} onClick={()=>removeMeeting(m)}>ðŸ—‘ Delete</SmBtn>}
                     </div>
                   </div>
                 )}
@@ -4114,7 +3934,7 @@ function ClassCouncilPage({ ctx }) {
           })}
         </>)}
 
-        {/* ── Actions tracker ── */}
+        {/* â”€â”€ Actions tracker â”€â”€ */}
         {tab==="actions" && (<>
           <div style={{display:"flex",gap:7,marginBottom:10}}>
             {[["Pending",counts.pending,C.red],["In progress",counts.in_progress,C.gold],["Done",counts.completed,C.green]].map(([l,v,c])=>(
@@ -4123,7 +3943,7 @@ function ClassCouncilPage({ ctx }) {
               </div>
             ))}
           </div>
-          {counts.overdue>0 && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"6px 10px",fontSize:11.5,color:C.red,marginBottom:9}}>⏰ {counts.overdue} decision(s) past deadline</div>}
+          {counts.overdue>0 && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"6px 10px",fontSize:11.5,color:C.red,marginBottom:9}}>â° {counts.overdue} decision(s) past deadline</div>}
           <div style={{display:"flex",gap:6,marginBottom:10}}>
             {[["open","Open"],["completed","Completed"],["all","All"]].map(([k,l])=>(
               <button key={k} onClick={()=>setActFilter(k)} style={{padding:"5px 12px",borderRadius:14,fontSize:11.5,fontWeight:700,cursor:"pointer",border:`1px solid ${actFilter===k?C.navy:C.border}`,background:actFilter===k?C.navy:C.white,color:actFilter===k?C.white:C.gray}}>{l}</button>
@@ -4134,32 +3954,32 @@ function ClassCouncilPage({ ctx }) {
           {shownDecisions.map(d=>(
             <div key={d.id} style={{border:`1px solid ${isOverdue(d)?"#fca5a5":C.grayLight}`,borderLeft:`4px solid ${DECISION_STATUS[d.status]?.color||C.gray}`,borderRadius:9,padding:"9px 11px",marginBottom:8}}>
               <div style={{fontSize:12.5,fontWeight:600,color:C.navy}}>{d.decision}</div>
-              <div style={{fontSize:10.5,color:isOverdue(d)?C.red:C.gray,marginTop:2}}>👤 {d.responsible||"Unassigned"} · ⏰ {d.deadline?fmtDate(d.deadline):"No deadline"}{isOverdue(d)?" · OVERDUE":""}</div>
-              <div style={{fontSize:10,color:C.gray}}>From {d.meeting.term} meeting, {fmtDate(d.meeting.meeting_date)}{d.status==="completed"&&d.completed_on?` · done ${fmtDate(d.completed_on)}`:""}</div>
+              <div style={{fontSize:10.5,color:isOverdue(d)?C.red:C.gray,marginTop:2}}>ðŸ‘¤ {d.responsible||"Unassigned"} Â· â° {d.deadline?fmtDate(d.deadline):"No deadline"}{isOverdue(d)?" Â· OVERDUE":""}</div>
+              <div style={{fontSize:10,color:C.gray}}>From {d.meeting.term} meeting, {fmtDate(d.meeting.meeting_date)}{d.status==="completed"&&d.completed_on?` Â· done ${fmtDate(d.completed_on)}`:""}</div>
               <StatusButtons d={d}/>
             </div>
           ))}
         </>)}
       </div>
 
-      {/* ── Meeting form ── */}
+      {/* â”€â”€ Meeting form â”€â”€ */}
       {modal && (
         <Modal title={modal.id ? "Edit council meeting" : "New council meeting"} onClose={()=>!saving&&setModal(null)}>
-          <div style={{fontSize:11.5,color:C.gray,marginBottom:10}}>{sel.form} · {sel.term} · {sel.year}</div>
+          <div style={{fontSize:11.5,color:C.gray,marginBottom:10}}>{sel.form} Â· {sel.term} Â· {sel.year}</div>
           <Fr label="Meeting date"><input style={inp} type="date" value={modal.meeting_date} onChange={e=>setM({meeting_date:e.target.value})}/></Fr>
 
           <Fr label="Attendees (tap to select)">
             <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:7}}>
               {activeTeachers.map(n=>{ const on=modal.attendees.includes(n); return (
-                <button key={n} type="button" onClick={()=>toggleAtt(n)} style={{padding:"5px 10px",borderRadius:14,fontSize:11.5,fontWeight:600,cursor:"pointer",border:`1px solid ${on?C.navy:C.border}`,background:on?C.navy:C.white,color:on?C.white:C.gray}}>{on?"✓ ":""}{n}</button>
+                <button key={n} type="button" onClick={()=>toggleAtt(n)} style={{padding:"5px 10px",borderRadius:14,fontSize:11.5,fontWeight:600,cursor:"pointer",border:`1px solid ${on?C.navy:C.border}`,background:on?C.navy:C.white,color:on?C.white:C.gray}}>{on?"âœ“ ":""}{n}</button>
               );})}
-              {!activeTeachers.length && <span style={{fontSize:11.5,color:C.gray}}>No teachers on file — type names below.</span>}
+              {!activeTeachers.length && <span style={{fontSize:11.5,color:C.gray}}>No teachers on file â€” type names below.</span>}
             </div>
-            <input style={inp} placeholder="Others (Principal, parent delegate…) separated by commas" value={modal.other} onChange={e=>setM({other:e.target.value})}/>
+            <input style={inp} placeholder="Others (Principal, parent delegateâ€¦) separated by commas" value={modal.other} onChange={e=>setM({other:e.target.value})}/>
           </Fr>
 
           <Fr label="Discussion">
-            <textarea style={{...inp,minHeight:90,resize:"vertical"}} placeholder="Summary of what was discussed…" value={modal.discussion} onChange={e=>setM({discussion:e.target.value})}/>
+            <textarea style={{...inp,minHeight:90,resize:"vertical"}} placeholder="Summary of what was discussedâ€¦" value={modal.discussion} onChange={e=>setM({discussion:e.target.value})}/>
           </Fr>
 
           <div style={{fontSize:12,fontWeight:800,color:C.navy,margin:"12px 0 6px"}}>Decisions</div>
@@ -4185,7 +4005,7 @@ function ClassCouncilPage({ ctx }) {
 
           {err && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"8px 12px",color:C.red,fontSize:12,margin:"12px 0 0"}}>{err}</div>}
           <div style={{display:"flex",gap:8,marginTop:14}}>
-            <Btn onClick={submit} disabled={saving}>{saving?"Saving…":"Save meeting"}</Btn>
+            <Btn onClick={submit} disabled={saving}>{saving?"Savingâ€¦":"Save meeting"}</Btn>
             <Btn outline onClick={()=>setModal(null)} disabled={saving}>Cancel</Btn>
           </div>
         </Modal>
@@ -4194,7 +4014,7 @@ function ClassCouncilPage({ ctx }) {
   );
 }
 
-// ─── Fees ──────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Fees â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function FeesPage({ ctx }) {
   const { students, feesMap, saveFee, auth, isOnline, setOfflineQueue } = ctx;
   const [filter,    setFilter]    = useState({ form:"", search:"", status:"" });
@@ -4286,12 +4106,12 @@ function FeesPage({ ctx }) {
 
   function exportFeesExcel() {
     if (filter.form) {
-      // A single form is already selected — one sheet is enough
+      // A single form is already selected â€” one sheet is enough
       const scope = allActive.filter(s => s.form===filter.form).sort((a,b)=>a.name.localeCompare(b.name));
       if (!scope.length) { alert("No students to export."); return; }
       exportToExcel(scope.map(feeExportRow), `SBCC-Fees-${filter.form.replace(" ","")}-2026-2027.xlsx`, filter.form);
     } else {
-      // No form filter — split into one sheet per class, all in one workbook
+      // No form filter â€” split into one sheet per class, all in one workbook
       if (!allActive.length) { alert("No students to export."); return; }
       const sheets = FORMS.map(f => ({
         name: f,
@@ -4329,7 +4149,7 @@ function FeesPage({ ctx }) {
       const fp  = list.reduce((a,s)=>a+(feesMap[s.id]?.paid||0),0);
       const fb  = list.length*TOTAL_FEE-fp;
       return `<div style="margin-bottom:14px">
-        <div style="background:#0D2340;color:#fff;padding:5px 10px;font-size:11px;font-weight:800;border-radius:4px 4px 0 0">${form} — ${list.length} student(s) below ${threshold}%</div>
+        <div style="background:#0D2340;color:#fff;padding:5px 10px;font-size:11px;font-weight:800;border-radius:4px 4px 0 0">${form} â€” ${list.length} student(s) below ${threshold}%</div>
         <table style="width:100%;border-collapse:collapse;border:1px solid #E5E7EB">
           <thead><tr style="background:#163558;color:#fff">
             <th style="padding:5px 8px;font-size:9px;text-align:left">#</th>
@@ -4343,7 +4163,7 @@ function FeesPage({ ctx }) {
           </tr></thead>
           <tbody>${rows}</tbody>
           <tfoot><tr style="background:#EEF2FF;border-top:2px solid #0D2340">
-            <td colspan="3" style="padding:5px 8px;font-size:11px;font-weight:800">Subtotal — ${form}</td>
+            <td colspan="3" style="padding:5px 8px;font-size:11px;font-weight:800">Subtotal â€” ${form}</td>
             <td style="padding:5px 8px;text-align:right;font-size:11px;font-weight:700">${fp.toLocaleString()} F</td>
             <td style="padding:5px 8px;text-align:right;font-size:11px;font-weight:800;color:#B91C1C">${fb.toLocaleString()} F</td>
             <td colspan="3"></td>
@@ -4358,9 +4178,9 @@ function FeesPage({ ctx }) {
       <div style="text-align:center;margin-bottom:12px">
         <img src="${SCHOOL_LOGO}" alt="SBCC" style="width:48px;height:48px;object-fit:contain">
         <h2 style="font-size:15px;font-weight:900;margin:3px 0">SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE</h2>
-        <p style="font-size:9px;color:#6B7280;margin:0">NGEPTANG · NONI · NW REGION</p>
+        <p style="font-size:9px;color:#6B7280;margin:0">NGEPTANG Â· NONI Â· NW REGION</p>
         <div style="margin-top:7px;background:#B91C1C;display:inline-block;padding:3px 16px;border-radius:10px;color:#fff;font-size:11px;font-weight:800">SCHOOL FEES DEFAULTER LIST</div>
-        <p style="font-size:9.5px;color:#374151;margin-top:5px">Below <strong>${threshold}%</strong> · Total fee: <strong>${TOTAL_FEE.toLocaleString()} FCFA</strong> · Academic Year 2026/2027 · ${new Date().toLocaleDateString("en-GB")}</p>
+        <p style="font-size:9.5px;color:#374151;margin-top:5px">Below <strong>${threshold}%</strong> Â· Total fee: <strong>${TOTAL_FEE.toLocaleString()} FCFA</strong> Â· Academic Year 2026/2027 Â· ${new Date().toLocaleDateString("en-GB")}</p>
       </div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;text-align:center">
         <div style="background:#EEF2FF;border-radius:6px;padding:8px;border-left:3px solid #0D2340"><div style="font-size:17px;font-weight:900">${debtors.length}</div><div style="font-size:9px;color:#6B7280">Defaulters</div></div>
@@ -4368,7 +4188,7 @@ function FeesPage({ ctx }) {
         <div style="background:#FFFBEB;border-radius:6px;padding:8px;border-left:3px solid #C9962A"><div style="font-size:17px;font-weight:900;color:#C9962A">${totPd.toLocaleString()} F</div><div style="font-size:9px;color:#6B7280">Partially Paid</div></div>
       </div>
       ${sections}
-      <p style="font-size:8px;color:#9CA3AF;text-align:center;margin-top:10px">Confidential — administrative use only · Saker Baptist Comprehensive College Bawe</p>
+      <p style="font-size:8px;color:#9CA3AF;text-align:center;margin-top:10px">Confidential â€” administrative use only Â· Saker Baptist Comprehensive College Bawe</p>
     </div>`;
     domPrint("sbc-fees", html, "A4 portrait", "7mm");
   }
@@ -4377,7 +4197,7 @@ function FeesPage({ ctx }) {
     <div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
         <div style={{background:C.white,borderRadius:10,padding:"11px 12px",borderLeft:`4px solid ${C.navy}`,boxShadow:"0 1px 3px rgba(0,0,0,0.06)",gridColumn:"1/-1"}}>
-          <div style={{fontSize:11,color:C.gray}}>Total Expected — {allActive.length} students × {TOTAL_FEE.toLocaleString()} FCFA</div>
+          <div style={{fontSize:11,color:C.gray}}>Total Expected â€” {allActive.length} students Ã— {TOTAL_FEE.toLocaleString()} FCFA</div>
           <div style={{fontSize:20,fontWeight:900,color:C.navy,marginTop:2}}>{totalExpected.toLocaleString()} FCFA</div>
         </div>
         {[["Collected",totalCollected,C.green],["Outstanding",totalExpected-totalCollected,C.red]].map(([l,v,col])=>(
@@ -4391,14 +4211,14 @@ function FeesPage({ ctx }) {
       {pendingPayments.length>0 && (
         <div style={{background:C.white,borderRadius:10,padding:12,marginBottom:11,boxShadow:"0 1px 3px rgba(0,0,0,0.06)",border:`2px solid ${C.gold}`}}>
           <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:9,display:"flex",alignItems:"center",gap:6}}>
-            💳 Pending Payment Confirmations <Pill color={C.gold}>{pendingPayments.length}</Pill>
+            ðŸ’³ Pending Payment Confirmations <Pill color={C.gold}>{pendingPayments.length}</Pill>
           </div>
           {pendingPayments.map(sub => (
             <div key={sub.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderBottom:`1px solid ${C.grayBg}`}}>
               {sub.screenshot && <img src={sub.screenshot} alt="" onClick={()=>setReviewing(sub)} style={{width:44,height:44,objectFit:"cover",borderRadius:6,cursor:"pointer",border:`1px solid ${C.grayLight}`,flexShrink:0}}/>}
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontWeight:700,fontSize:12,color:C.navy}}>{sub.students?.name||sub.student_id} <span style={{color:C.gray,fontWeight:400}}>({sub.students?.form})</span></div>
-                <div style={{fontSize:11,color:C.gray}}>{sub.amount.toLocaleString()} FCFA · {sub.momo_number||"no number given"} · {fmtDate(sub.submitted_at?.slice(0,10))}</div>
+                <div style={{fontSize:11,color:C.gray}}>{sub.amount.toLocaleString()} FCFA Â· {sub.momo_number||"no number given"} Â· {fmtDate(sub.submitted_at?.slice(0,10))}</div>
               </div>
               <SmBtn onClick={()=>setReviewing(sub)} color={C.navyMid}>Review</SmBtn>
             </div>
@@ -4408,29 +4228,29 @@ function FeesPage({ ctx }) {
 
       {/* Defaulter print panel */}
       <div style={{background:C.white,borderRadius:10,padding:12,marginBottom:11,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
-        <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:8}}>🖨 Print Defaulter List</div>
+        <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:8}}>ðŸ–¨ Print Defaulter List</div>
         <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
           {[25,50,75,100].map(v=>(
             <button key={v} onClick={()=>setThreshold(v)} style={{padding:"6px 12px",borderRadius:7,border:`2px solid ${threshold===v?C.red:C.grayLight}`,background:threshold===v?"#FEF2F2":C.white,color:threshold===v?C.red:C.gray,fontWeight:700,fontSize:12,cursor:"pointer"}}>{"<"}{v}%</button>
           ))}
           <span style={{fontSize:12,color:C.gray,alignSelf:"center"}}>
-            → <strong style={{color:C.red}}>{allActive.filter(s=>Math.round((feesMap[s.id]?.paid||0)/TOTAL_FEE*100)<threshold).length}</strong> student(s)
+            â†’ <strong style={{color:C.red}}>{allActive.filter(s=>Math.round((feesMap[s.id]?.paid||0)/TOTAL_FEE*100)<threshold).length}</strong> student(s)
           </span>
         </div>
         <select style={{...inp,maxWidth:160,marginBottom:8}} value={filter.form} onChange={e=>setFilter(f=>({...f,form:e.target.value}))}>
           <option value="">All Forms</option>{FORMS.map(f=><option key={f}>{f}</option>)}
         </select>
         <button onClick={printDebtors} style={{width:"100%",padding:"10px",background:C.red,color:C.white,border:"none",borderRadius:8,fontWeight:800,fontSize:13,cursor:"pointer"}}>
-          🖨 Print Defaulters — Below {threshold}%{filter.form?` (${filter.form})`:""}
+          ðŸ–¨ Print Defaulters â€” Below {threshold}%{filter.form?` (${filter.form})`:""}
         </button>
         <button onClick={exportFeesExcel} style={{width:"100%",padding:"10px",marginTop:8,background:C.green,color:C.white,border:"none",borderRadius:8,fontWeight:800,fontSize:13,cursor:"pointer"}}>
-          📊 Export Full Fees Report — Excel {filter.form?`(${filter.form})`:"(All Forms)"}
+          ðŸ“Š Export Full Fees Report â€” Excel {filter.form?`(${filter.form})`:"(All Forms)"}
         </button>
       </div>
 
       {/* Filters */}
       <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
-        <input style={{...inp,flex:1,minWidth:120}} placeholder="Search…" value={filter.search} onChange={e=>setFilter(f=>({...f,search:e.target.value}))}/>
+        <input style={{...inp,flex:1,minWidth:120}} placeholder="Searchâ€¦" value={filter.search} onChange={e=>setFilter(f=>({...f,search:e.target.value}))}/>
         <select style={{...inp,width:106}} value={filter.form} onChange={e=>setFilter(f=>({...f,form:e.target.value}))}><option value="">All Forms</option>{FORMS.map(f=><option key={f}>{f}</option>)}</select>
         <select style={{...inp,width:94}} value={filter.status} onChange={e=>setFilter(f=>({...f,status:e.target.value}))}><option value="">All</option><option>Paid</option><option>Partial</option><option>Unpaid</option></select>
       </div>
@@ -4443,7 +4263,7 @@ function FeesPage({ ctx }) {
         return (
           <div key={s.id} style={{background:C.white,borderRadius:10,padding:"11px 12px",marginBottom:7,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-              <div><div style={{fontWeight:700,color:C.navy}}>{s.name}</div><div style={{fontSize:11,color:C.gray}}>{s.id} · {s.form}</div></div>
+              <div><div style={{fontWeight:700,color:C.navy}}>{s.name}</div><div style={{fontSize:11,color:C.gray}}>{s.id} Â· {s.form}</div></div>
               <div style={{textAlign:"right"}}><Pill color={sc}>{st}</Pill><div style={{fontSize:10,color:C.gray,marginTop:2}}>{pct}%</div></div>
             </div>
             <div style={{marginTop:7,background:C.grayBg,borderRadius:5,height:7,overflow:"hidden"}}>
@@ -4460,7 +4280,7 @@ function FeesPage({ ctx }) {
       {!filtered.length && <Empty text="No students match this filter."/>}
 
       {modal && (
-        <Modal title={`Record Payment — ${modal.name}`} onClose={()=>setModal(null)}>
+        <Modal title={`Record Payment â€” ${modal.name}`} onClose={()=>setModal(null)}>
           <div style={{background:C.grayBg,borderRadius:8,padding:"9px 12px",marginBottom:11}}>
             {[
               ["Total Fee",   `${TOTAL_FEE.toLocaleString()} FCFA`,         C.navy],
@@ -4494,7 +4314,7 @@ function FeesPage({ ctx }) {
               }
               catch(e){ alert("Error: "+e.message); }
               setSaving(false);
-            }} disabled={saving}>{saving?"Saving…":"Record Payment"}</Btn>
+            }} disabled={saving}>{saving?"Savingâ€¦":"Record Payment"}</Btn>
           </div>
         </Modal>
       )}
@@ -4504,13 +4324,13 @@ function FeesPage({ ctx }) {
   );
 }
 
-// ─── Payment Screenshot Review Modal ─────────────────────────────────────────────
+// â”€â”€â”€ Payment Screenshot Review Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function PaymentReviewModal({ submission, onApprove, onReject, onClose }) {
   const [showReject, setShowReject] = useState(false);
   const [reason, setReason] = useState("");
 
   return (
-    <Modal title={`Review Payment — ${submission.students?.name||submission.student_id}`} onClose={onClose}>
+    <Modal title={`Review Payment â€” ${submission.students?.name||submission.student_id}`} onClose={onClose}>
       {submission.screenshot && (
         <img src={submission.screenshot} alt="Payment screenshot" style={{width:"100%",borderRadius:8,marginBottom:12,border:`1px solid ${C.grayLight}`}}/>
       )}
@@ -4531,12 +4351,12 @@ function PaymentReviewModal({ submission, onApprove, onReject, onClose }) {
       {!showReject ? (
         <div style={{display:"flex",gap:8}}>
           <Btn onClick={()=>setShowReject(true)} outline color={C.red}>Reject</Btn>
-          <Btn onClick={()=>onApprove(submission)} color={C.green}>✓ Approve & Record Payment</Btn>
+          <Btn onClick={()=>onApprove(submission)} color={C.green}>âœ“ Approve & Record Payment</Btn>
         </div>
       ) : (
         <div>
           <Fr label="Reason for rejection (optional)">
-            <input style={inp} placeholder="e.g. Screenshot unclear, amount mismatch…" value={reason} onChange={e=>setReason(e.target.value)}/>
+            <input style={inp} placeholder="e.g. Screenshot unclear, amount mismatchâ€¦" value={reason} onChange={e=>setReason(e.target.value)}/>
           </Fr>
           <div style={{display:"flex",gap:8}}>
             <Btn onClick={()=>setShowReject(false)} outline>Cancel</Btn>
@@ -4548,7 +4368,7 @@ function PaymentReviewModal({ submission, onApprove, onReject, onClose }) {
   );
 }
 
-// ─── Notices ───────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Notices â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function NoticesPage({ ctx }) {
   const { notices, saveNotice, deleteNotice, auth } = ctx;
   const [modal, setModal] = useState(null);
@@ -4579,7 +4399,7 @@ function NoticesPage({ ctx }) {
             )}
           </div>
           <p style={{margin:"7px 0 0",fontSize:12,color:C.gray,lineHeight:1.6}}>{n.body}</p>
-          <div style={{marginTop:5,fontSize:10,color:C.gold,fontWeight:600}}>{fmtDate(n.posted_date)} — {n.author}</div>
+          <div style={{marginTop:5,fontSize:10,color:C.gold,fontWeight:600}}>{fmtDate(n.posted_date)} â€” {n.author}</div>
         </div>
       ))}
       {!notices.length && <Empty text="No notices posted."/>}
@@ -4598,13 +4418,13 @@ function NoticesPage({ ctx }) {
   );
 }
 
-// ─── Calendar ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Calendar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const EVENT_CATEGORIES = {
-  exam:     { label:"Exam",     color:C.red,    icon:"📝" },
-  holiday:  { label:"Holiday",  color:C.green,  icon:"🏖️" },
-  meeting:  { label:"Meeting",  color:C.navyMid,icon:"👥" },
-  deadline: { label:"Deadline", color:C.gold,   icon:"⏰" },
-  other:    { label:"Other",    color:C.gray,   icon:"📌" },
+  exam:     { label:"Exam",     color:C.red,    icon:"ðŸ“" },
+  holiday:  { label:"Holiday",  color:C.green,  icon:"ðŸ–ï¸" },
+  meeting:  { label:"Meeting",  color:C.navyMid,icon:"ðŸ‘¥" },
+  deadline: { label:"Deadline", color:C.gold,   icon:"â°" },
+  other:    { label:"Other",    color:C.gray,   icon:"ðŸ“Œ" },
 };
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
@@ -4680,9 +4500,9 @@ function CalendarPage({ ctx }) {
       {/* Month navigator */}
       <div style={{background:C.white,borderRadius:10,padding:12,marginBottom:11,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-          <button onClick={()=>setViewDate(new Date(year,month-1,1))} style={{background:C.grayBg,border:"none",borderRadius:8,width:32,height:32,fontSize:16,cursor:"pointer",color:C.navy}}>‹</button>
+          <button onClick={()=>setViewDate(new Date(year,month-1,1))} style={{background:C.grayBg,border:"none",borderRadius:8,width:32,height:32,fontSize:16,cursor:"pointer",color:C.navy}}>â€¹</button>
           <div style={{fontWeight:800,color:C.navy,fontSize:14}}>{MONTH_NAMES[month]} {year}</div>
-          <button onClick={()=>setViewDate(new Date(year,month+1,1))} style={{background:C.grayBg,border:"none",borderRadius:8,width:32,height:32,fontSize:16,cursor:"pointer",color:C.navy}}>›</button>
+          <button onClick={()=>setViewDate(new Date(year,month+1,1))} style={{background:C.grayBg,border:"none",borderRadius:8,width:32,height:32,fontSize:16,cursor:"pointer",color:C.navy}}>â€º</button>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}>
           {["S","M","T","W","T","F","S"].map((d,i)=><div key={i} style={{textAlign:"center",fontSize:10,color:C.gray,fontWeight:700}}>{d}</div>)}
@@ -4776,8 +4596,8 @@ function CalendarPage({ ctx }) {
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontWeight:700,color:C.navy,fontSize:13}}>{cat.icon} {ev.title}</div>
                       <div style={{fontSize:11,color:C.gray,marginTop:2}}>
-                        {fmtDate(ev.event_date)}{isRange?` – ${fmtDate(ev.end_date)}`:""}
-                        {ev.forms?.length>0 && <span> · {ev.forms.join(", ")}</span>}
+                        {fmtDate(ev.event_date)}{isRange?` â€“ ${fmtDate(ev.end_date)}`:""}
+                        {ev.forms?.length>0 && <span> Â· {ev.forms.join(", ")}</span>}
                       </div>
                       {ev.description && <div style={{fontSize:11,color:C.gray,marginTop:3}}>{ev.description}</div>}
                     </div>
@@ -4817,7 +4637,7 @@ function CalendarPage({ ctx }) {
           </div>
           <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:12}}>
             <Btn onClick={()=>setModal(null)} outline>Cancel</Btn>
-            <Btn onClick={save} disabled={saving}>{saving?"Saving…":modal==="add"?"Add Event":"Save"}</Btn>
+            <Btn onClick={save} disabled={saving}>{saving?"Savingâ€¦":modal==="add"?"Add Event":"Save"}</Btn>
           </div>
         </Modal>
       )}
@@ -4825,7 +4645,7 @@ function CalendarPage({ ctx }) {
   );
 }
 
-// ─── Profile ───────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Profile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function ProfilePage({ ctx }) {
   const { auth, teachers } = ctx;
   const u = auth.user;
@@ -4858,7 +4678,7 @@ function ProfilePage({ ctx }) {
       <div style={{background:C.white,borderRadius:13,padding:22,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",marginBottom:12}}>
         <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:18}}>
           <div style={{width:56,height:56,borderRadius:"50%",background:`linear-gradient(135deg,${C.navy},${C.navyMid})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>
-            {auth.role==="admin"?"🏫":"👩‍🏫"}
+            {auth.role==="admin"?"ðŸ«":"ðŸ‘©â€ðŸ«"}
           </div>
           <div>
             <div style={{fontWeight:800,fontSize:16,color:C.navy}}>{u.name}</div>
@@ -4868,21 +4688,21 @@ function ProfilePage({ ctx }) {
         {[
           ["Email", u.email],
           ...( t ? [
-            ["Subjects", (t.subjects||[]).join(", ")||"—"],
-            ["Forms",    (t.forms||[]).join(", ")||"—"],
+            ["Subjects", (t.subjects||[]).join(", ")||"â€”"],
+            ["Forms",    (t.forms||[]).join(", ")||"â€”"],
             ["Joined",   fmtDate(t.joined)],
           ] : [] ),
         ].map(([l,v])=>(
           <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:`1px solid ${C.grayBg}`}}>
             <span style={{fontSize:12,color:C.gray}}>{l}</span>
-            <span style={{fontSize:12,fontWeight:600,color:C.navy,maxWidth:"60%",textAlign:"right"}}>{v||"—"}</span>
+            <span style={{fontSize:12,fontWeight:600,color:C.navy,maxWidth:"60%",textAlign:"right"}}>{v||"â€”"}</span>
           </div>
         ))}
       </div>
 
       <div style={{background:C.white,borderRadius:13,padding:22,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:showPwForm?14:0}}>
-          <div style={{fontWeight:800,fontSize:14,color:C.navy}}>🔑 Password</div>
+          <div style={{fontWeight:800,fontSize:14,color:C.navy}}>ðŸ”‘ Password</div>
           <SmBtn onClick={()=>{setShowPwForm(v=>!v);setPwErr("");setPwOk("");}} color={C.navyMid}>{showPwForm?"Cancel":"Change Password"}</SmBtn>
         </div>
         {showPwForm && (
@@ -4895,7 +4715,7 @@ function ProfilePage({ ctx }) {
             </Fr>
             {pwErr && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"8px 12px",color:C.red,fontSize:12,marginBottom:10}}>{pwErr}</div>}
             {pwOk  && <div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:8,padding:"8px 12px",color:C.green,fontSize:12,marginBottom:10}}>{pwOk}</div>}
-            <Btn onClick={changePassword} disabled={pwBusy}>{pwBusy?"Updating…":"Update Password"}</Btn>
+            <Btn onClick={changePassword} disabled={pwBusy}>{pwBusy?"Updatingâ€¦":"Update Password"}</Btn>
           </div>
         )}
       </div>
