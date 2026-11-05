@@ -25,6 +25,19 @@ const SUBJECTS_BY_FORM = {
 const SEQ_LABELS  = ["SEQ 1","SEQ 2","SEQ 3","SEQ 4","SEQ 5","SEQ 6"];
 const TERM_SEQS   = {"First Term":["SEQ 1","SEQ 2"],"Second Term":["SEQ 3","SEQ 4"],"Third Term":["SEQ 5","SEQ 6"]};
 const TERMS       = ["First Term","Second Term","Third Term"];
+// Form 5 (exam class) is not assessed by sequences. It has three assessments instead.
+const F5_ASSESSMENTS = ["Pre Mock","Regional Mock","GCE Result"];
+const F5_MOCKS       = ["Pre Mock","Regional Mock"];      // scored /20, these make the Form 5 average
+const GCE_SEQ        = "GCE Result";                      // entered and shown as a grade, not a score
+const GCE_GRADES     = ["A","B","C","D","E","U"];         // stored in the score column as 5,4,3,2,1,0
+const gceToPoints    = g => { const i = GCE_GRADES.indexOf(g); return i<0 ? "" : 5-i; };
+const gceFromPoints  = v => (v===null||v===undefined||v==="") ? "" : (GCE_GRADES[5-Number(v)] || "");
+const gcePassed      = v => v!==null && v!==undefined && v!=="" && Number(v)>=3; // A, B, C
+const F5_SHORT       = { "Pre Mock":"PRE MOCK", "Regional Mock":"REG. MOCK", "GCE Result":"GCE RESULT" };
+const isF5           = form => form === "Form 5";
+const seqsForForm    = form => isF5(form) ? F5_ASSESSMENTS : SEQ_LABELS;
+const ALL_SEQ_LABELS = [...SEQ_LABELS, ...F5_ASSESSMENTS];
+const seqOrder       = q => ALL_SEQ_LABELS.indexOf(q);
 const ACAD_YEARS  = ["2026/2027","2027/2028","2028/2029"];
 const TOTAL_FEE   = 35000;
 const REG_NORMAL  = 500;
@@ -1353,9 +1366,12 @@ function ParentPortalResults({ data, matricule, pin, onBack, onExit }) {
   const allMarks = marks || [];
   const curYear  = allMarks.map(m => m.acad_year).filter(Boolean).sort().pop();
   const marksNow = curYear ? allMarks.filter(m => m.acad_year===curYear) : allMarks;
+  const f5Student = isF5(student.form);
+  const periods   = f5Student ? F5_ASSESSMENTS : TERMS;
   const termAverage = term => {
     const bySub = {};
-    marksNow.filter(m => TERM_SEQS[term].includes(m.seq) && m.score!==null && m.score!==undefined)
+    const periodSeqs = f5Student ? [term] : TERM_SEQS[term];
+    marksNow.filter(m => periodSeqs.includes(m.seq) && m.score!==null && m.score!==undefined)
             .forEach(m => { (bySub[m.subject] = bySub[m.subject] || []).push(m); });
     let tw = 0, tc = 0;
     Object.entries(bySub).forEach(([sub, list]) => {
@@ -1412,11 +1428,23 @@ function ParentPortalResults({ data, matricule, pin, onBack, onExit }) {
 
         {tab==="marks" && marksNow.length>0 && (
           <div style={{background:C.white,borderRadius:10,padding:12,marginBottom:11,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
-            <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:8}}>Term averages (out of 20)</div>
+            <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:8}}>{f5Student ? "Mock averages (out of 20) and GCE passes" : "Term averages (out of 20)"}</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,textAlign:"center"}}>
-              {TERMS.map(t => { const a = termAverage(t); const g = a!==null ? scoreToGrade(a) : null; return (
+              {periods.map(t => {
+                if (t===GCE_SEQ) {
+                  const gm = marksNow.filter(m => m.seq===GCE_SEQ && m.score!==null && m.score!==undefined);
+                  const ok = gm.filter(m => gcePassed(m.score)).length;
+                  return (
+                    <div key={t} style={{background:C.grayBg,borderRadius:8,padding:"8px 4px"}}>
+                      <div style={{fontSize:10,color:C.gray}}>GCE Result</div>
+                      <div style={{fontSize:18,fontWeight:900,color:gm.length?(ok===gm.length?C.green:C.gold):C.gray}}>{gm.length?`${ok}/${gm.length}`:"—"}</div>
+                      <div style={{fontSize:10,color:C.gray,fontWeight:700}}>{gm.length?"subjects passed":""}</div>
+                    </div>
+                  );
+                }
+                const a = termAverage(t); const g = a!==null ? scoreToGrade(a) : null; return (
                 <div key={t} style={{background:C.grayBg,borderRadius:8,padding:"8px 4px"}}>
-                  <div style={{fontSize:10,color:C.gray}}>{t.replace(" Term","")}</div>
+                  <div style={{fontSize:10,color:C.gray}}>{f5Student ? t : t.replace(" Term","")}</div>
                   <div style={{fontSize:18,fontWeight:900,color:g?gradeCol(g.grade):C.gray}}>{a!==null?a.toFixed(2):"—"}</div>
                   <div style={{fontSize:10,color:g?gradeCol(g.grade):C.gray,fontWeight:700}}>{g?g.remark:""}</div>
                 </div>
@@ -1444,7 +1472,8 @@ function ParentPortalResults({ data, matricule, pin, onBack, onExit }) {
                   <div key={sub} style={{padding:"10px 12px",borderBottom:`1px solid ${C.grayBg}`,background:i%2===0?C.white:C.grayBg}}>
                     <div style={{fontWeight:700,color:C.navy,fontSize:13,marginBottom:6}}>{sub}</div>
                     <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                      {entries.sort((a,b)=>a.seq.localeCompare(b.seq)).map(m=>{
+                      {entries.sort((a,b)=>seqOrder(a.seq)-seqOrder(b.seq)).map(m=>{
+                        if (m.seq===GCE_SEQ) { const gc = gcePassed(m.score) ? C.green : C.red; return <span key={m.seq} style={{fontSize:11,background:gc+"18",color:gc,padding:"3px 8px",borderRadius:6,fontWeight:700}}>GCE: {gceFromPoints(m.score)||"—"}</span>; }
                         const {grade}=scoreToGrade(m.score);
                         return <span key={m.seq} style={{fontSize:11,background:gradeCol(grade)+"18",color:gradeCol(grade),padding:"3px 8px",borderRadius:6,fontWeight:700}}>{m.seq.replace("SEQ ","S")}: {m.score}/20</span>;
                       })}
@@ -1639,6 +1668,7 @@ function MissingMarksAlert({ ctx, setPage }) {
   const items = [];
   markDeadlines.forEach(d => {
     FORMS.forEach(form => {
+      if (!seqsForForm(form).includes(d.seq)) return; // this assessment does not apply to this class
       const subs = teacherSubjectsIn(teacher, form).filter(sb => SUBJECTS_BY_FORM[form]?.includes(sb));
       if (!subs.length || lockStatus(form, d.seq, d.acad_year, markDeadlines, markUnlocks).locked) return;
       const pool = students.filter(s => s.active && s.reg_status==="registered" && s.form===form);
@@ -2882,11 +2912,14 @@ function MarksPage({ ctx }) {
   useEffect(() => {
     if (isTeacher && availForms.length && !availForms.includes(filter.form)) setFilter(f => ({ ...f, form:availForms[0], subject:"" }));
   }, [availForms.join("|")]);
+  // The assessment list depends on the class: Form 5 has Pre Mock / Regional Mock / GCE Result
+  const seqOptions = seqsForForm(filter.form);
+  const seqV       = seqOptions.includes(filter.seq) ? filter.seq : seqOptions[0];
   const availSubs  = isTeacher
     ? teacherSubjectsIn(teacher, filter.form).filter(s=>SUBJECTS_BY_FORM[filter.form]?.includes(s))
     : (SUBJECTS_BY_FORM[filter.form]||[]);
   const subject    = filter.subject || availSubs[0] || "";
-  const lock       = lockStatus(filter.form, filter.seq, filter.year, markDeadlines, markUnlocks);
+  const lock       = lockStatus(filter.form, seqV, filter.year, markDeadlines, markUnlocks);
   const blocked    = isTeacher && lock.locked;
 
   const [coeff,  setCoeff]  = useState(getCoeff(subject));
@@ -2901,11 +2934,11 @@ function MarksPage({ ctx }) {
   useEffect(() => {
     const init = {};
     formStudents.forEach(s => {
-      const key = `${s.id}-${subject}-${filter.seq}-${filter.year}`;
+      const key = `${s.id}-${subject}-${seqV}-${filter.year}`;
       init[s.id] = marksMap[key]?.score ?? "";
     });
     setLocal(init); setSaved(false);
-  }, [filter.form, subject, filter.seq, filter.year, students.length]);
+  }, [filter.form, subject, seqV, filter.year, students.length]);
 
   async function saveAll() {
     if (blocked) return;
@@ -2916,7 +2949,7 @@ function MarksPage({ ctx }) {
         const v = local[s.id];
         if (v===""||v===undefined) continue;
         const { error } = await supabase.from("marks").upsert({
-          student_id: s.id, subject, seq: filter.seq,
+          student_id: s.id, subject, seq: seqV,
           acad_year: filter.year, score: Number(v),
           coeff: Number(coeff)||1,
           teacher_id: teacher?.id||null,
@@ -2934,16 +2967,16 @@ function MarksPage({ ctx }) {
       {isTeacher && <TeacherSetupNotice teacher={teacher} email={auth.user.email} needSubjects/>}
       {lock.deadline && (
         <div style={{background:blocked?"#fef2f2":"#fffbeb",border:`1px solid ${blocked?"#fca5a5":"#fde68a"}`,borderRadius:8,padding:"8px 12px",marginBottom:11,fontSize:12,fontWeight:600,color:blocked?C.red:"#92400e"}}>
-          {blocked ? `🔒 ${filter.seq} marks for ${filter.form} closed on ${fmtDate(lock.deadline)}. Ask the administrator to unlock this class if a correction is needed.`
+          {blocked ? `🔒 ${seqV} marks for ${filter.form} closed on ${fmtDate(lock.deadline)}. Ask the administrator to unlock this class if a correction is needed.`
             : lock.locked ? `🔒 Deadline passed (${fmtDate(lock.deadline)}). Teachers are locked out; you can still edit.`
             : lock.unlocked && lock.passed ? `🔓 Unlocked for corrections (deadline was ${fmtDate(lock.deadline)}).`
-            : `⏰ Deadline for ${filter.seq}: ${fmtDate(lock.deadline)}.`}
+            : `⏰ Deadline for ${seqV}: ${fmtDate(lock.deadline)}.`}
         </div>
       )}
       <div style={{background:C.white,borderRadius:10,padding:12,marginBottom:11,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
           <div><label style={lbl}>Form</label><select style={inp} value={filter.form} onChange={e=>setFilter(f=>({...f,form:e.target.value,subject:""}))}>{availForms.map(f=><option key={f}>{f}</option>)}</select></div>
-          <div><label style={lbl}>Sequence</label><select style={inp} value={filter.seq} onChange={e=>setFilter(f=>({...f,seq:e.target.value}))}>{SEQ_LABELS.map(s=><option key={s}>{s}</option>)}</select></div>
+          <div><label style={lbl}>{isF5(filter.form)?"Assessment":"Sequence"}</label><select style={inp} value={seqV} onChange={e=>setFilter(f=>({...f,seq:e.target.value}))}>{seqOptions.map(s=><option key={s}>{s}</option>)}</select></div>
           <div><label style={lbl}>Academic Year</label><select style={inp} value={filter.year} onChange={e=>setFilter(f=>({...f,year:e.target.value}))}>{ACAD_YEARS.map(y=><option key={y}>{y}</option>)}</select></div>
           <div><label style={lbl}>Subject</label><select style={inp} value={subject} onChange={e=>setFilter(f=>({...f,subject:e.target.value}))}>{availSubs.map(s=><option key={s}>{s}</option>)}</select></div>
         </div>
@@ -2960,19 +2993,21 @@ function MarksPage({ ctx }) {
 
       <div style={{background:C.white,borderRadius:10,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
         <div style={{padding:"10px 12px",borderBottom:`1px solid ${C.grayLight}`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-          <div style={{fontSize:12}}><strong style={{color:C.navy}}>{filter.form}</strong><span style={{color:C.gray,marginLeft:5}}>· {subject} · {filter.seq} · Coeff {coeff}</span></div>
+          <div style={{fontSize:12}}><strong style={{color:C.navy}}>{filter.form}</strong><span style={{color:C.gray,marginLeft:5}}>· {subject} · {seqV} · Coeff {coeff}</span></div>
           <div style={{display:"flex",gap:7,alignItems:"center"}}>
             {saved && <span style={{fontSize:12,color:C.green,fontWeight:700}}>✓ Saved to Supabase</span>}
             <Btn onClick={saveAll} disabled={saving||blocked}>{saving?"Saving…":blocked?"Locked":"Save Marks"}</Btn>
           </div>
         </div>
         <div style={{padding:"5px 11px",background:"#fffbeb",borderBottom:`1px solid ${C.grayLight}`,fontSize:11,color:"#92400e"}}>
-          Score out of <strong>20</strong> · Weighted = score × {coeff} = max {20*coeff} pts
+          {seqV===GCE_SEQ ? <>Select the <strong>GCE grade</strong> (A, B, C = pass · D, E, U = fail)</> : <>Score out of <strong>20</strong> · Weighted = score × {coeff} = max {20*coeff} pts</>}
         </div>
         {!formStudents.length ? <Empty text="No registered students in this form."/> : formStudents.map((s,i) => {
           const v = local[s.id] ?? "";
-          const { grade } = scoreToGrade(v);
-          const gc2 = gradeCol(grade);
+          const gceG = seqV===GCE_SEQ ? gceFromPoints(v) : "";
+          const { grade: gradeRaw } = scoreToGrade(v);
+          const grade = seqV===GCE_SEQ ? (gceG||"—") : gradeRaw;
+          const gc2 = seqV===GCE_SEQ ? (gceG==="" ? C.gray : gcePassed(v) ? C.green : C.red) : gradeCol(grade);
           return (
             <div key={s.id} style={{padding:"8px 12px",borderBottom:`1px solid ${C.grayBg}`,display:"flex",alignItems:"center",gap:8,background:i%2===0?C.white:C.grayBg,flexWrap:"wrap"}}>
               <div style={{flex:1,minWidth:100,display:"flex",alignItems:"center",gap:8}}>
@@ -2984,12 +3019,14 @@ function MarksPage({ ctx }) {
               </div>
               <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
                 <div style={{textAlign:"center"}}>
-                  <div style={{fontSize:9,color:C.gray,marginBottom:2}}>Score /20</div>
-                  <input type="number" min={0} max={20} disabled={blocked} style={{width:52,padding:"5px",border:`1px solid ${C.border}`,borderRadius:7,fontSize:14,fontWeight:700,textAlign:"center",color:C.navy}} value={v} onChange={e=>{setLocal(p=>({...p,[s.id]:e.target.value}));setSaved(false);}}/>
+                  <div style={{fontSize:9,color:C.gray,marginBottom:2}}>{seqV===GCE_SEQ?"GCE grade":"Score /20"}</div>
+                  {seqV===GCE_SEQ
+                    ? <select disabled={blocked} style={{width:62,padding:"5px",border:`1px solid ${C.border}`,borderRadius:7,fontSize:14,fontWeight:700,textAlign:"center",color:C.navy}} value={gceFromPoints(v)} onChange={e=>{setLocal(p=>({...p,[s.id]:gceToPoints(e.target.value)}));setSaved(false);}}><option value="">—</option>{GCE_GRADES.map(g=><option key={g} value={g}>{g}</option>)}</select>
+                    : <input type="number" min={0} max={20} disabled={blocked} style={{width:52,padding:"5px",border:`1px solid ${C.border}`,borderRadius:7,fontSize:14,fontWeight:700,textAlign:"center",color:C.navy}} value={v} onChange={e=>{setLocal(p=>({...p,[s.id]:e.target.value}));setSaved(false);}}/>}
                 </div>
                 <div style={{textAlign:"center",minWidth:36}}>
-                  <div style={{fontSize:9,color:C.gray,marginBottom:2}}>×{coeff}</div>
-                  <span style={{fontSize:12,fontWeight:700,color:C.navyMid}}>{v!==""?Number(v)*coeff:"—"}</span>
+                  <div style={{fontSize:9,color:C.gray,marginBottom:2}}>{seqV===GCE_SEQ?"":"×"+coeff}</div>
+                  <span style={{fontSize:12,fontWeight:700,color:C.navyMid}}>{seqV===GCE_SEQ?"":(v!==""?Number(v)*coeff:"—")}</span>
                 </div>
                 <div style={{textAlign:"center",minWidth:34}}>
                   <div style={{fontSize:9,color:C.gray,marginBottom:3}}>Grade</div>
@@ -3019,7 +3056,8 @@ function MarksControlPage({ ctx }) {
   const currentDeadline = markDeadlines.find(d=>d.acad_year===year && d.seq===seq)?.deadline || "";
   useEffect(() => { setDlInput(currentDeadline); }, [currentDeadline, year, seq]);
 
-  const progress = useMemo(() => FORMS.map(form => {
+  const formsForSeq = F5_ASSESSMENTS.includes(seq) ? ["Form 5"] : FORMS.filter(f => !isF5(f));
+  const progress = useMemo(() => formsForSeq.map(form => {
     const pool = students.filter(s=>s.active && s.reg_status==="registered" && s.form===form);
     const subs = (SUBJECTS_BY_FORM[form]||[]).map(sub => {
       const entered = pool.filter(s => marksMap[`${s.id}-${sub}-${seq}-${year}`]).length;
@@ -3065,7 +3103,7 @@ function MarksControlPage({ ctx }) {
       <div style={{background:C.white,borderRadius:10,padding:12,marginBottom:11,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
           <div><label style={lbl}>Academic Year</label><select style={inp} value={year} onChange={e=>setYear(e.target.value)}>{ACAD_YEARS.map(y=><option key={y}>{y}</option>)}</select></div>
-          <div><label style={lbl}>Sequence</label><select style={inp} value={seq} onChange={e=>setSeq(e.target.value)}>{SEQ_LABELS.map(x=><option key={x}>{x}</option>)}</select></div>
+          <div><label style={lbl}>Sequence</label><select style={inp} value={seq} onChange={e=>setSeq(e.target.value)}>{ALL_SEQ_LABELS.map(x=><option key={x}>{x}</option>)}</select></div>
         </div>
         <div style={{display:"flex",gap:6,marginTop:10}}>
           {[["progress","Progress"],["lock","Deadline & Locks"],["history","History"]].map(([k,l])=>(
@@ -3109,7 +3147,7 @@ function MarksControlPage({ ctx }) {
           </div>
           <div style={{fontSize:10.5,color:C.gray,marginTop:6}}>Admin is never locked out. Leave empty and save to remove the deadline.</div>
         </div>
-        {FORMS.map(f => {
+        {formsForSeq.map(f => {
           const st = lockStatus(f, seq, year, markDeadlines, markUnlocks);
           return (
             <div key={f} style={{background:C.white,borderRadius:10,padding:"10px 12px",marginBottom:7,boxShadow:"0 1px 3px rgba(0,0,0,0.06)",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
@@ -3463,10 +3501,11 @@ function attendanceTotals(student, attendanceMap) {
 function computeReport(student, env, sel) {
   const { marksMap, teachers } = env;
   const subjects = SUBJECTS_BY_FORM[student.form] || [];
-  const termSeqs = TERM_SEQS[sel.term];
+  const f5       = isF5(student.form);
+  const termSeqs = f5 ? F5_ASSESSMENTS : TERM_SEQS[sel.term];
   const isTerm   = sel.mode==="term";
   const getScore = (sub,seq) => marksMap[`${student.id}-${sub}-${seq}-${sel.year}`]?.score ?? null;
-  const getC     = sub => marksMap[`${student.id}-${sub}-SEQ 1-${sel.year}`]?.coeff || getCoeff(sub);
+  const getC     = sub => marksMap[`${student.id}-${sub}-${f5?"Pre Mock":"SEQ 1"}-${sel.year}`]?.coeff || getCoeff(sub);
   const teacherFor = sub => teachers.find(t=>t.active&&teacherSubjectsIn(t, student.form).includes(sub))?.name || "—";
   const avg2 = arr => { const v=arr.filter(x=>x!==null); return v.length ? v.reduce((a,b)=>a+Number(b),0)/v.length : null; };
 
@@ -3474,6 +3513,12 @@ function computeReport(student, env, sel) {
     const s1=getScore(sub,"SEQ 1"),s2=getScore(sub,"SEQ 2"),s3=getScore(sub,"SEQ 3"),s4=getScore(sub,"SEQ 4"),s5=getScore(sub,"SEQ 5"),s6=getScore(sub,"SEQ 6");
     const t1Avg=avg2([s1,s2]), t2Avg=avg2([s3,s4]), t3Avg=avg2([s5,s6]);
     const annualAvg  = avg2([t1Avg,t2Avg,t3Avg]);
+    if (f5) {
+      // Form 5: the three assessments are the whole picture; their average is the result
+      const f5Scores = F5_ASSESSMENTS.map(q => getScore(sub,q));
+      const f5Avg = avg2(F5_MOCKS.map(q => getScore(sub,q))); // GCE is a grade, not part of the average
+      return { sub, coeff:getC(sub), teacher:teacherFor(sub), s1:null,s2:null,s3:null,s4:null,s5:null,s6:null, t1Avg:f5Avg,t2Avg:null,t3Avg:null, annualAvg:f5Avg, termScores:f5Scores, termAvg:f5Avg };
+    }
     const termScores = termSeqs.map(sq=>[s1,s2,s3,s4,s5,s6][parseInt(sq.replace("SEQ ",""))-1]);
     return { sub, coeff:getC(sub), teacher:teacherFor(sub), s1,s2,s3,s4,s5,s6, t1Avg,t2Avg,t3Avg, annualAvg, termScores, termAvg:avg2(termScores) };
   });
@@ -3491,10 +3536,11 @@ function computeReport(student, env, sel) {
 function reportCardParts(student, env, sel, conduct) {
     const { students, marksMap, feesMap, settings } = env;
     const { modeRows, overallAvg, totalCoeff, overallGrd, annualOverall } = computeReport(student, env, sel);
-    const termSeqs = TERM_SEQS[sel.term];
+    const f5 = isF5(student.form);
+    const termSeqs = f5 ? F5_ASSESSMENTS : TERM_SEQS[sel.term];
 
     // Auto-filled boxes at the bottom of the card
-    const hasAnnual = sel.mode!=="term" || sel.term==="Third Term";
+    const hasAnnual = !f5 && (sel.mode!=="term" || sel.term==="Third Term");
     const decision  = hasAnnual && annualOverall!==null ? (annualOverall>=PASS_MARK ? "Promoted" : "Repeat") : "";
     const owing     = TOTAL_FEE - (feesMap?.[student.id]?.paid || 0);
     const owingTxt  = owing>0 ? owing.toLocaleString()+" FCFA" : "Nil";
@@ -3502,14 +3548,16 @@ function reportCardParts(student, env, sel, conduct) {
     const fill = v => v ? "<b>"+escHtml(v)+"</b>" : "________";
 
     const SBC_SUBJECTS = SBC_SUBJECTS_LIST;
-    const isTerm = sel.mode==="term";
+    const isTerm = f5 ? true : sel.mode==="term";
 
     // ── Class ranking (same rules as before) ─────────────────────────────────
     const peers = students.filter(s=>s.active&&s.form===student.form&&s.reg_status==="registered");
     const peerAvgs = peers.map(ps=>{
       let tw=0,tc=0;
       SBC_SUBJECTS.forEach(sub=>{
-        const seqs = isTerm
+        const seqs = f5
+          ? F5_MOCKS.map(sq=>{ const k=ps.id+"-"+sub+"-"+sq+"-"+sel.year; return marksMap[k]?.score??null; })
+          : isTerm
           ? TERM_SEQS[sel.term].map(sq=>{ const k=ps.id+"-"+sub+"-"+sq+"-"+sel.year; return marksMap[k]?.score??null; })
           : SEQ_LABELS.map(sq=>{ const k=ps.id+"-"+sub+"-"+sq+"-"+sel.year; return marksMap[k]?.score??null; });
         const vals=seqs.filter(x=>x!==null);
@@ -3523,12 +3571,12 @@ function reportCardParts(student, env, sel, conduct) {
     const classAvg = peerAvgs.length ? (peerAvgs.reduce((a,x)=>a+x.avg,0)/peerAvgs.length).toFixed(2) : "—";
 
     // ── Table columns (percent widths add up to 100) ─────────────────────────
-    const seqNums = isTerm ? termSeqs.map(sq=>sq.replace("SEQ ","")) : ["1","2","3","4","5","6"];
-    const wSeq = isTerm ? 9 : 5.6, wAvg = isTerm ? 9 : 7, wCoef = isTerm ? 8 : 6;
-    const wScore = isTerm ? 10 : 8, wRmk = isTerm ? 13 : 11, wTch = isTerm ? 18 : 14;
+    const seqNums = f5 ? F5_ASSESSMENTS : isTerm ? termSeqs.map(sq=>sq.replace("SEQ ","")) : ["1","2","3","4","5","6"];
+    const wSeq = f5 ? 9 : isTerm ? 9 : 5.6, wAvg = isTerm ? 9 : 7, wCoef = isTerm ? 8 : 6;
+    const wScore = isTerm ? 10 : 8, wRmk = isTerm ? 13 : 11, wTch = f5 ? 12 : isTerm ? 18 : 14;
     const wSub = +(100 - seqNums.length*wSeq - wAvg - wCoef - wScore - wRmk - wTch).toFixed(1);
     const cols = [wSub, wTch, ...seqNums.map(()=>wSeq), wAvg, wCoef, wScore, wRmk].map(w=>`<col style="width:${w}%">`).join("");
-    const seqHeaders = seqNums.map(n=>`<th>SQ${n}</th>`).join("");
+    const seqHeaders = seqNums.map(n=> f5 ? `<th>${F5_SHORT[n]}</th>` : `<th>SQ${n}</th>`).join("");
 
     const findRow = sub => modeRows.find(x=>
       x.sub===sub ||
@@ -3550,8 +3598,10 @@ function reportCardParts(student, env, sel, conduct) {
       const pass = avg!==null && avg>=10;
       const pond = avg!==null ? avg*r.coeff : null;
       if (pond!==null) sumScore += pond;
-      const scoreVals = isTerm ? r.termScores : [r.s1,r.s2,r.s3,r.s4,r.s5,r.s6];
-      const scoreCols = scoreVals.map(s=>`<td class="c">${s!=null?s:""}</td>`).join("");
+      const scoreVals = isTerm ? r.termScores : [r.s1,r.s2,r.s3,r.s4,r.s5,r.s6]; // Form 5 uses termScores (3 assessments)
+      const scoreCols = scoreVals.map((s,qi)=> (f5 && F5_ASSESSMENTS[qi]===GCE_SEQ)
+        ? `<td class="c b" style="color:${gcePassed(s)?"#15803D":"#B91C1C"}">${s!=null?escHtml(gceFromPoints(s)):""}</td>`
+        : `<td class="c">${s!=null?s:""}</td>`).join("");
       const teacherName = r.teacher && !/^[?\u2014\u2013-]$/.test(String(r.teacher).trim()) ? r.teacher : "";
       return `<tr>
         <td class="s">${escHtml(sub)}</td>
@@ -3576,7 +3626,7 @@ function reportCardParts(student, env, sel, conduct) {
       ? `<img src="${student.photo_url}" alt="" style="width:22mm;height:28mm;object-fit:cover;border:1px solid #1a56a0;display:block;margin:0 auto">`
       : `<div style="width:22mm;height:28mm;border:1px solid #999;margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:7pt;color:#999">PHOTO</div>`;
 
-    const termLabel = isTerm ? sel.term.replace(" Term","").toUpperCase()+" TERM" : "ANNUAL REPORT";
+    const termLabel = f5 ? "EXAMINATION RESULTS" : isTerm ? sel.term.replace(" Term","").toUpperCase()+" TERM" : "ANNUAL REPORT";
     const blank = "&nbsp;";
     const avgLine  = (label, on) => `${label}: <b>${on&&overallAvg!==null ? overallAvg.toFixed(2)+" / 20" : "—"}</b>`;
 
@@ -3965,7 +4015,7 @@ const isOverdue = d => d.deadline && d.status!=="completed" && d.deadline < toda
 // One student's result for one term: weighted average + per-subject averages
 function studentTermResult(student, marksMap, year, term) {
   const subs = SUBJECTS_BY_FORM[student.form] || [];
-  const seqs = TERM_SEQS[term] || [];
+  const seqs = isF5(student.form) ? F5_MOCKS : (TERM_SEQS[term] || []);
   const rows = [];
   let tw = 0, tc = 0;
   subs.forEach(sub => {
