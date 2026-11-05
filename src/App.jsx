@@ -50,6 +50,25 @@ const f5Students   = settings => parseJSON(settings?.f5_students, {});
 const f5SubjectsOf = (settings, st) => { const all = SUBJECTS_BY_FORM["Form 5"]; const c = f5Students(settings)[st.id]; return c?.subjects?.length ? all.filter(x => c.subjects.includes(x)) : all; };
 const f5Writes     = (settings, st, sub) => !isF5(st.form) || f5SubjectsOf(settings, st).includes(sub);
 const f5CandNo     = (settings, st) => f5Students(settings)[st.id]?.candNo || "";
+// Form 5 mocks are written in papers. Each paper is stored as its own marks row ("Pre Mock P1" …);
+// the combined score out of 20 is stored in the normal "Pre Mock" row so ranking, locks and progress keep working.
+//   Every subject:    P1 MCQ /50 = 40%,  P2 Structural /100 = 60%
+//   Computer Studies: P1 MCQ /50 = 30%,  P2 Structural /100 = 40%,  P3 Practical /100 = 30%   (change max here if P3 is out of something else)
+const F5_PAPERS_STD  = [ {k:"P1",max:50,w:40}, {k:"P2",max:100,w:60} ];
+const F5_PAPERS_COMP = [ {k:"P1",max:50,w:30}, {k:"P2",max:100,w:40}, {k:"P3",max:100,w:30} ];
+const isComputerSub  = sub => /^computer/i.test(sub||"");
+const f5PapersFor    = sub => isComputerSub(sub) ? F5_PAPERS_COMP : F5_PAPERS_STD;
+const isPaperSeq     = q => /^(Pre Mock|Regional Mock) P[123]$/.test(q||"");
+const f5PaperNote    = sub => f5PapersFor(sub).map(p => `Paper ${p.k.slice(1)} /${p.max} (${p.w}%)`).join(" + ");
+function f5Combine(sub, vals) { // → score out of 20, or null until every paper is in
+  let t = 0;
+  for (const p of f5PapersFor(sub)) {
+    const x = vals?.[p.k];
+    if (x===""||x===null||x===undefined||!Number.isFinite(Number(x))) return null;
+    t += Number(x)/p.max*p.w;
+  }
+  return Math.round(t/5*100)/100;
+}
 const gcePassed      = v => v!==null && v!==undefined && v!=="" && Number(v)>=3; // A, B, C
 const F5_SHORT       = { "Pre Mock":"PRE MOCK", "Regional Mock":"REG. MOCK", "GCE Result":"GCE RESULT" };
 const isF5           = form => form === "Form 5";
@@ -1383,7 +1402,7 @@ function ParentPortalResults({ data, matricule, pin, onBack, onExit }) {
   // Only the latest academic year's marks (when the data says which year)
   const allMarks = marks || [];
   const curYear  = allMarks.map(m => m.acad_year).filter(Boolean).sort().pop();
-  const marksNow = curYear ? allMarks.filter(m => m.acad_year===curYear) : allMarks;
+  const marksNow = (curYear ? allMarks.filter(m => m.acad_year===curYear) : allMarks).filter(m => !isPaperSeq(m.seq));
   const f5Student = isF5(student.form);
   const periods   = f5Student ? F5_ASSESSMENTS : TERMS;
   const termAverage = term => {
@@ -1751,7 +1770,7 @@ async function exportBackup() {
   const fm = id => st[id]?.form || "";
   exportToExcelMultiSheet([
     { name:"Students", rows: students.map(s => ({ Matricule:s.id, Name:s.name, Form:s.form, Gender:s.gender||"", "Date of birth":s.dob||"", Parent:s.parent||"", Phone:s.phone||"", Address:s.address||"", Registration:s.reg_status||"", Active:s.active===false?"No":"Yes", Graduated:s.graduated?"Yes":"No" })) },
-    { name:"Marks", rows: marks.map(m => ({ Matricule:m.student_id, Name:nm(m.student_id), Form:fm(m.student_id), Subject:m.subject, Sequence:m.seq, Year:m.acad_year, "Score /20":m.score, Coeff:m.coeff, Teacher:tn[m.teacher_id]||"" })) },
+    { name:"Marks", rows: marks.filter(m => !isPaperSeq(m.seq)).map(m => ({ Matricule:m.student_id, Name:nm(m.student_id), Form:fm(m.student_id), Subject:m.subject, Sequence:m.seq, Year:m.acad_year, "Score /20":m.score, Coeff:m.coeff, Teacher:tn[m.teacher_id]||"" })) },
     { name:"Fees", rows: fees.map(f => ({ Matricule:f.student_id, Name:nm(f.student_id), Form:fm(f.student_id), Paid:f.paid||0, Total:f.total||TOTAL_FEE, Balance:(f.total||TOTAL_FEE)-(f.paid||0) })) },
     { name:"Attendance", rows: att.map(a => ({ Matricule:a.student_id, Name:nm(a.student_id), Form:fm(a.student_id), Date:a.date, Status:a.status })) },
     { name:"Teachers", rows: teachers.map(t => ({ Name:t.name, Email:t.email, Active:t.active===false?"No":"Yes", "Class teacher of":t.class_teacher_of||"", Classes: FORMS.filter(f=>teacherSubjectsIn(t,f).length).map(f=>f+": "+teacherSubjectsIn(t,f).join(", ")).join(" | ") })) },
@@ -2942,11 +2961,13 @@ function MarksPage({ ctx }) {
   const lock       = lockStatus(filter.form, seqV, filter.year, markDeadlines, markUnlocks);
   const gceAdminOnly = isTeacher && seqV===GCE_SEQ; // GCE grades are decided and entered by the admin
   const blocked    = (isTeacher && lock.locked) || gceAdminOnly;
+  const paperMode  = isF5(filter.form) && seqV!==GCE_SEQ; // Form 5 mocks: enter each paper, score /20 is worked out
 
   const [coeff,  setCoeff]  = useState(getCoeff(subject));
   const [local,  setLocal]  = useState({});
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
+  const [paperLocal, setPaperLocal] = useState({}); // studentId → {P1,P2,P3}
 
   useEffect(()=>setCoeff(getCoeff(subject)),[subject]);
 
@@ -2959,7 +2980,13 @@ function MarksPage({ ctx }) {
       const key = `${s.id}-${subject}-${seqV}-${filter.year}`;
       init[s.id] = marksMap[key]?.score ?? "";
     });
-    setLocal(init); setSaved(false);
+    const pinit = {};
+    formStudents.forEach(s => {
+      const o = {};
+      f5PapersFor(subject).forEach(pp => { o[pp.k] = marksMap[`${s.id}-${subject}-${seqV} ${pp.k}-${filter.year}`]?.score ?? ""; });
+      pinit[s.id] = o;
+    });
+    setLocal(init); setPaperLocal(pinit); setSaved(false);
   }, [filter.form, subject, seqV, filter.year, students.length]);
 
   async function saveAll() {
@@ -2968,6 +2995,28 @@ function MarksPage({ ctx }) {
     try {
       // Save all marks one by one
       for (const s of formStudents) {
+        if (paperMode) {
+          const pv = paperLocal[s.id] || {};
+          for (const pp of f5PapersFor(subject)) {
+            const x = pv[pp.k];
+            if (x===""||x===undefined) continue;
+            if (Number(x)<0 || Number(x)>pp.max) throw new Error(`${s.name}: Paper ${pp.k.slice(1)} must be between 0 and ${pp.max}`);
+            const { error: pe } = await supabase.from("marks").upsert({
+              student_id: s.id, subject, seq: `${seqV} ${pp.k}`,
+              acad_year: filter.year, score: Number(x), coeff: Number(coeff)||1, teacher_id: teacher?.id||null,
+            }, { onConflict:"student_id,subject,seq,acad_year" });
+            if (pe) throw pe;
+          }
+          const comb = f5Combine(subject, pv); // only once every paper is entered
+          if (comb!==null) {
+            const { error: ce } = await supabase.from("marks").upsert({
+              student_id: s.id, subject, seq: seqV,
+              acad_year: filter.year, score: comb, coeff: Number(coeff)||1, teacher_id: teacher?.id||null,
+            }, { onConflict:"student_id,subject,seq,acad_year" });
+            if (ce) throw ce;
+          }
+          continue;
+        }
         const v = local[s.id];
         if (v===""||v===undefined) continue;
         const { error } = await supabase.from("marks").upsert({
@@ -3023,10 +3072,11 @@ function MarksPage({ ctx }) {
           </div>
         </div>
         <div style={{padding:"5px 11px",background:"#fffbeb",borderBottom:`1px solid ${C.grayLight}`,fontSize:11,color:"#92400e"}}>
-          {seqV===GCE_SEQ ? <>Select the <strong>GCE grade</strong> (A, B, C = pass · D, E, U = fail)</> : <>Score out of <strong>20</strong> · Weighted = score × {coeff} = max {20*coeff} pts</>}
+          {seqV===GCE_SEQ ? <>Select the <strong>GCE grade</strong> (A, B, C = pass · D, E, U = fail)</> : paperMode ? <>{f5PaperNote(subject)} → score out of <strong>20</strong> · Weighted = score × {coeff}</> : <>Score out of <strong>20</strong> · Weighted = score × {coeff} = max {20*coeff} pts</>}
         </div>
         {!formStudents.length ? <Empty text="No registered students in this form."/> : formStudents.map((s,i) => {
-          const v = local[s.id] ?? "";
+          const pv = paperLocal[s.id] || {};
+          const v = paperMode ? (f5Combine(subject, pv) ?? "") : (local[s.id] ?? "");
           const gceG = seqV===GCE_SEQ ? gceFromPoints(v) : "";
           const { grade: gradeRaw } = scoreToGrade(v);
           const f5g = isF5(filter.form) && seqV!==GCE_SEQ ? f5Grade(ctx.settings, v) : null; // admin's Form 5 scale
@@ -3044,9 +3094,19 @@ function MarksPage({ ctx }) {
               </div>
               <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
                 <div style={{textAlign:"center"}}>
-                  <div style={{fontSize:9,color:C.gray,marginBottom:2}}>{seqV===GCE_SEQ?"GCE grade":"Score /20"}</div>
+                  <div style={{fontSize:9,color:C.gray,marginBottom:2}}>{seqV===GCE_SEQ?"GCE grade":paperMode?"Papers → /20":"Score /20"}</div>
                   {seqV===GCE_SEQ
                     ? <select disabled={blocked} style={{width:62,padding:"5px",border:`1px solid ${C.border}`,borderRadius:7,fontSize:14,fontWeight:700,textAlign:"center",color:C.navy}} value={gceFromPoints(v)} onChange={e=>{setLocal(p=>({...p,[s.id]:gceToPoints(e.target.value)}));setSaved(false);}}><option value="">—</option>{GCE_GRADES.map(g=><option key={g} value={g}>{g}</option>)}</select>
+                    : paperMode
+                    ? <div style={{display:"flex",alignItems:"flex-end",gap:4}}>
+                        {f5PapersFor(subject).map(pp => (
+                          <div key={pp.k} style={{textAlign:"center"}}>
+                            <div style={{fontSize:8,color:C.gray}}>P{pp.k.slice(1)} /{pp.max}</div>
+                            <input type="number" min={0} max={pp.max} disabled={blocked} style={{width:44,padding:"5px 2px",border:`1px solid ${C.border}`,borderRadius:7,fontSize:13,fontWeight:700,textAlign:"center",color:C.navy}} value={pv[pp.k] ?? ""} onChange={e=>{const val=e.target.value;setPaperLocal(x=>({...x,[s.id]:{...(x[s.id]||{}),[pp.k]:val}}));setSaved(false);}}/>
+                          </div>
+                        ))}
+                        <div style={{fontSize:12,fontWeight:800,color:C.navyMid,minWidth:42,textAlign:"center"}}>{v!=="" ? Number(v).toFixed(2) : "—"}</div>
+                      </div>
                     : <input type="number" min={0} max={20} disabled={blocked} style={{width:52,padding:"5px",border:`1px solid ${C.border}`,borderRadius:7,fontSize:14,fontWeight:700,textAlign:"center",color:C.navy}} value={v} onChange={e=>{setLocal(p=>({...p,[s.id]:e.target.value}));setSaved(false);}}/>}
                 </div>
                 <div style={{textAlign:"center",minWidth:36}}>
@@ -3640,8 +3700,11 @@ function computeReport(student, env, sel) {
   const subjectRows = subjects.map(sub => {
     if (f5) {
       // one assessment at a time: the score (or GCE grade points) is the result for that subject
-      const sc = getScore(sub, assess);
-      return { sub, coeff:getC(sub), teacher:teacherFor(sub), s1:null,s2:null,s3:null,s4:null,s5:null,s6:null, t1Avg:sc,t2Avg:null,t3Avg:null, annualAvg:sc, termScores:[sc], termAvg:sc };
+      const papers = {};
+      f5PapersFor(sub).forEach(pp => { papers[pp.k] = getScore(sub, `${assess} ${pp.k}`); });
+      const comb = assess===GCE_SEQ ? null : f5Combine(sub, papers);
+      const sc = comb!==null ? comb : getScore(sub, assess);
+      return { sub, coeff:getC(sub), teacher:teacherFor(sub), s1:null,s2:null,s3:null,s4:null,s5:null,s6:null, t1Avg:sc,t2Avg:null,t3Avg:null, annualAvg:sc, termScores:[sc], termAvg:sc, papers };
     }
     const s1=getScore(sub,"SEQ 1"),s2=getScore(sub,"SEQ 2"),s3=getScore(sub,"SEQ 3"),s4=getScore(sub,"SEQ 4"),s5=getScore(sub,"SEQ 5"),s6=getScore(sub,"SEQ 6");
     const t1Avg=avg2([s1,s2]), t2Avg=avg2([s3,s4]), t3Avg=avg2([s5,s6]);
@@ -3665,6 +3728,7 @@ function reportCardParts(student, env, sel, conduct) {
     const { modeRows, overallAvg, totalCoeff, overallGrd, annualOverall } = computeReport(student, env, sel);
     const assess = sel.f5Assess || F5_ASSESSMENTS[0];
     const isGce  = isF5(student.form) && assess===GCE_SEQ;
+    const paperMode = isF5(student.form) && !isGce; // Form 5 mock cards show Paper 1 / 2 / 3
     const f5 = isF5(student.form);
     const termSeqs = f5 ? [assess] : TERM_SEQS[sel.term];
 
@@ -3706,6 +3770,8 @@ function reportCardParts(student, env, sel, conduct) {
     const wScore = isTerm ? 10 : 8, wRmk = isTerm ? 13 : 11, wTch = f5 ? 22 : isTerm ? 18 : 14;
     const wSub = +(100 - seqNums.length*wSeq - wAvg - wCoef - wScore - wRmk - wTch).toFixed(1);
     const cols = [wSub, wTch, ...seqNums.map(()=>wSeq), wAvg, wCoef, wScore, wRmk].map(w=>`<col style="width:${w}%">`).join("");
+    const colsP = [18,14,7,7,7,8,7,6,9,17].map(w=>`<col style="width:${w}%">`).join("");
+    const paperHead = `<thead><tr><th style="text-align:left;padding-left:1.5mm">SUBJECT</th><th>TEACHER</th><th>P1 /50</th><th>P2 /100</th><th>P3 /100</th><th>TOTAL /20</th><th>GRADE</th><th>COEFF</th><th>WEIGHTED</th><th>REMARK</th></tr></thead>`;
     const seqHeaders = seqNums.map(n=> f5 ? `<th>${isGce?"GRADE":"SCORE /20"}</th>` : `<th>SQ${n}</th>`).join("");
 
     const findRow = sub => modeRows.find(x=>
@@ -3723,6 +3789,18 @@ function reportCardParts(student, env, sel, conduct) {
       const pond = !isGce && sc!==null ? sc*r.coeff : null;
       if (pond!==null) sumScore += pond;
       const col = g.pass ? "#15803D" : "#B91C1C";
+      if (paperMode) {
+        const pp = r.papers || {};
+        const cell = k => pp[k]!=null ? pp[k] : (f5PapersFor(r.sub).some(q=>q.k===k) ? "" : "—");
+        const tnP = r.teacher && !/^[?\u2014\u2013-]$/.test(String(r.teacher).trim()) ? r.teacher : "";
+        return `<tr><td class="s">${escHtml(r.sub)}</td><td class="t">${escHtml(tnP)}</td>
+        <td class="c">${cell("P1")}</td><td class="c">${cell("P2")}</td><td class="c">${cell("P3")}</td>
+        <td class="c b">${Number(sc).toFixed(2)}</td>
+        <td class="c b" style="color:${col}">${escHtml(g.grade)}</td>
+        <td class="c">${r.coeff}</td>
+        <td class="c b">${pond!==null?pond.toFixed(1):""}</td>
+        <td class="c" style="color:${col};font-weight:700">${escHtml(g.remark)}</td></tr>`;
+      }
       const tn  = r.teacher && !/^[?\u2014\u2013-]$/.test(String(r.teacher).trim()) ? r.teacher : "";
       return `<tr><td class="s">${escHtml(r.sub)}</td><td class="t">${escHtml(tn)}</td>
         <td class="c b">${isGce ? escHtml(g.grade) : sc}</td>
@@ -3760,7 +3838,14 @@ function reportCardParts(student, env, sel, conduct) {
     const rows = f5 ? f5Rows : rows0;
     const f5Passed = f5 ? modeRows.filter(r => (isGce ? gcePassed(r.termAvg) : f5Grade(settings, r.termAvg).pass)).length : 0;
 
-    const totalRow = f5 ? `<tr class="tot">
+    const totalRow = paperMode ? `<tr class="tot">
+      <td colspan="5" style="text-align:right;padding-right:3mm">TOTAL / AVERAGE</td>
+      <td class="c">${overallAvg!==null?overallAvg.toFixed(2):""}</td>
+      <td class="c">${overallAvg!==null ? f5Grade(settings, overallAvg).grade : ""}</td>
+      <td class="c">${totalCoeff||""}</td>
+      <td class="c">${sumScore?sumScore.toFixed(1):""}</td>
+      <td class="c"></td>
+    </tr>` : f5 ? `<tr class="tot">
       <td colspan="3" style="text-align:right;padding-right:3mm">${isGce ? "SUBJECTS PASSED (A–C)" : "TOTAL / AVERAGE"}</td>
       <td class="c">${isGce ? "" : (overallAvg!==null ? f5Grade(settings, overallAvg).grade : "")}</td>
       <td class="c">${isGce ? "" : (totalCoeff||"")}</td>
@@ -3839,8 +3924,8 @@ function reportCardParts(student, env, sel, conduct) {
     <td colspan="2">Address / Domicile: <b>${escHtml(student.address||"—")}</b></td>
   </tr></table>
 
-  <table class="mk"><colgroup>${cols}</colgroup>
-    <thead><tr><th style="text-align:left;padding-left:1.5mm">SUBJECT</th><th>TEACHER</th>${seqHeaders}${f5 ? "<th>Grade</th>" : "<th>Avg /20</th>"}<th>Coeff</th><th>${f5 ? "Weighted" : "Score"}</th><th>Remark</th></tr></thead>
+  <table class="mk"><colgroup>${paperMode ? colsP : cols}</colgroup>
+    ${paperMode ? paperHead : `<thead><tr><th style="text-align:left;padding-left:1.5mm">SUBJECT</th><th>TEACHER</th>${seqHeaders}${f5 ? "<th>Grade</th>" : "<th>Avg /20</th>"}<th>Coeff</th><th>${f5 ? "Weighted" : "Score"}</th><th>Remark</th></tr></thead>`}
     <tbody>${rows}${totalRow}</tbody>
   </table>
 
@@ -3878,7 +3963,7 @@ function reportCardParts(student, env, sel, conduct) {
   </tr></table>
 
   <div style="font-size:6.5pt;color:#444;text-align:center;line-height:1.4">
-    ${f5 ? (isGce ? "GCE grades: A, B, C = Pass · D, E, U = Fail" : (()=>{ const k=f5Scale(settings); return "Grading (out of 20): A "+k.A+"–20 · B "+k.B+"–"+k.A+" · C "+k.C+"–"+k.B+" · D "+k.D+"–"+k.C+" · E "+k.E+"–"+k.D+" · U below "+k.E+" · A, B, C = Pass"; })())
+    ${f5 ? (isGce ? "GCE grades: A, B, C = Pass · D, E, U = Fail" : (()=>{ const k=f5Scale(settings); return "Papers: P1 MCQ /50 (40%) + P2 Structural /100 (60%) · Computer Studies: P1 30% + P2 40% + P3 Practical 30% · Total /20 · Grading: A "+k.A+"–20 · B "+k.B+"–"+k.A+" · C "+k.C+"–"+k.B+" · D "+k.D+"–"+k.C+" · E "+k.E+"–"+k.D+" · U below "+k.E+" · A, B, C = Pass"; })())
     : "Grading (out of 20): A Excellent 17–20 · B+ Very Good 15–16.9 · B Good 13–14.9 · C+ Fairly Good 11–12.9 · C Average 10–10.9 · D Pass 9–9.9 · F Fail below 9"}
   </div>
   <div style="margin-top:auto;font-size:7pt;color:#888;text-align:center;border-top:1px dashed #ccc;padding-top:1.2mm">
