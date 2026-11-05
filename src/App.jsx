@@ -51,6 +51,15 @@ const findTeacher = (teachers, email) => teachers.find(t => normEmail(t.email) =
 const todayStr = () => new Date().toISOString().slice(0,10);
 const fmtDate  = d => { if(!d) return "—"; const [y,m,day]=d.split("-"); return `${day}/${m}/${y}`; };
 const isLate   = d => d && d > LATE_CUTOFF;
+const localToday = () => new Date().toLocaleDateString("en-CA", { timeZone:"Africa/Douala" }); // YYYY-MM-DD in Cameroon time
+
+// Is this class's marks entry closed for teachers? (deadline passed and the admin hasn't unlocked the class)
+function lockStatus(form, seq, year, deadlines, unlocks) {
+  const deadline = (deadlines||[]).find(d=>d.acad_year===year && d.seq===seq)?.deadline || null;
+  const unlocked = (unlocks||[]).some(u=>u.form===form && u.acad_year===year && u.seq===seq);
+  const passed   = !!deadline && localToday() > deadline;
+  return { deadline, unlocked, passed, locked: passed && !unlocked };
+}
 
 function scoreToGrade(v) {
   if (v===null||v===undefined||v==="") return { grade:"—", remark:"—" };
@@ -304,6 +313,7 @@ const navItems = [
   { key:"students",     label:"Students",     icon:"🎒", roles:["admin","teacher"] },
   { key:"teachers",     label:"Teachers",     icon:"👩‍🏫", roles:["admin"] },
   { key:"marks",        label:"Enter Marks",  icon:"✏️", roles:["admin","teacher"] },
+  { key:"markctl",      label:"Marks Control",icon:"🔒", roles:["admin"] },
   { key:"attendance",   label:"Attendance",   icon:"🗓️", roles:["admin","teacher"] },
   { key:"reports",      label:"Report Cards", icon:"📄", roles:["admin"] },
   { key:"performance",  label:"Performance",  icon:"📈", roles:["admin","teacher"] },
@@ -387,6 +397,9 @@ export default function App() {
   const [councilDecisions, setCouncilDecisions] = useState([]); // decisions taken at those meetings
   const [councilReady,     setCouncilReady]     = useState(true); // false until the council tables exist in Supabase
   const [notices,    setNotices]    = useState([]);
+  const [settings,   setSettings]   = useState({});   // app_settings key → value (e.g. next_term_begins)
+  const [markDeadlines, setMarkDeadlines] = useState([]); // {acad_year, seq, deadline}
+  const [markUnlocks,   setMarkUnlocks]   = useState([]); // {form, acad_year, seq}
   const [loading,    setLoading]    = useState(true);
   const [dbError,    setDbError]    = useState(null);
   const [offlineQueue, setOfflineQueue] = useState(() => loadOfflineQueue());
@@ -505,6 +518,15 @@ export default function App() {
       setCouncilMeetings(cm || []);
       setCouncilDecisions(cd || []);
       setCouncilReady(!cmErr && !cdErr);
+      // Optional tables from migration.sql — the app still works if they don't exist yet
+      const [{ data: ss }, { data: dl }, { data: ul }] = await Promise.all([
+        supabase.from("app_settings").select("*"),
+        supabase.from("mark_deadlines").select("*"),
+        supabase.from("mark_unlocks").select("*"),
+      ]);
+      setSettings(Object.fromEntries((ss||[]).map(r => [r.key, r.value])));
+      setMarkDeadlines(dl || []);
+      setMarkUnlocks(ul || []);
       setDbError(null);
     } catch(e) {
       setDbError(e.message);
@@ -641,6 +663,30 @@ export default function App() {
     }, { onConflict:"student_id,subject,seq,acad_year" });
     if (error) throw error;
     await loadAll(); // refresh marks immediately
+  }
+
+  async function saveSetting(key, value) {
+    const { error } = await supabase.from("app_settings").upsert({ key, value }, { onConflict:"key" });
+    if (error) throw error;
+    await loadAll();
+  }
+
+  async function saveDeadline(year, seq, date) {
+    const q = supabase.from("mark_deadlines");
+    const { error } = date
+      ? await q.upsert({ acad_year:year, seq, deadline:date }, { onConflict:"acad_year,seq" })
+      : await q.delete().eq("acad_year", year).eq("seq", seq);
+    if (error) throw error;
+    await loadAll();
+  }
+
+  async function setClassUnlocked(form, year, seq, unlocked) {
+    const q = supabase.from("mark_unlocks");
+    const { error } = unlocked
+      ? await q.upsert({ form, acad_year:year, seq, unlocked_by:currentUser.name }, { onConflict:"form,acad_year,seq" })
+      : await q.delete().eq("form", form).eq("acad_year", year).eq("seq", seq);
+    if (error) throw error;
+    await loadAll();
   }
 
   async function saveFee(studentId, paid) {
@@ -882,6 +928,7 @@ export default function App() {
     auth: { user: currentUser, role: userRole },
     students, teachers, marksMap, feesMap, notices, attendanceMap, calendarEvents,
     saveStudent, deleteStudent, saveTeacher, saveMark,
+    settings, markDeadlines, markUnlocks, saveSetting, saveDeadline, setClassUnlocked,
     saveFee, saveNotice, deleteNotice, loadAll, saveAttendanceBulk,
     saveCalendarEvent, deleteCalendarEvent,
     councilMeetings, councilDecisions, councilReady,
@@ -994,6 +1041,7 @@ export default function App() {
           {page==="students"     && <StudentsPage     ctx={ctx}/>}
           {page==="teachers"     && ctx.auth.role==="admin" && <TeachersPage    ctx={ctx}/>}
           {page==="marks"        && <MarksPage        ctx={ctx}/>}
+          {page==="markctl"      && ctx.auth.role==="admin" && <MarksControlPage ctx={ctx}/>}
           {page==="attendance"   && <AttendancePage   ctx={ctx}/>}
           {page==="reports"      && userRole==="admin" && <ReportsPage ctx={ctx}/>}
           {page==="performance"  && <PerformancePage  ctx={ctx}/>}
@@ -2454,32 +2502,6 @@ function TeachersPage({ ctx }) {
     return p;
   }
 
-  // Temporary diagnostic — calls the function with plain fetch, bypassing the
-  // Supabase client wrapper entirely, so the literal HTTP status and response
-  // text are visible with zero interpretation in between.
-  async function rawDiagnostic() {
-    setErr("Running diagnostic…");
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) { setErr("DIAGNOSTIC: no active session — log out and back in first."); return; }
-
-      const url = `https://xapbkapxpdvdvelcbpyo.supabase.co/functions/v1/${TEACHER_FUNCTION}`;
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${session.access_token}`,
-          "apikey": session.access_token, // some setups need this too; harmless if not required
-        },
-        body: JSON.stringify({ action:"create", name:"Diagnostic Test", email:`diagtest${Date.now()}@example.com`, password:"testpass123", subjects:[], forms:[] }),
-      });
-      const rawText = await res.text();
-      setErr(`DIAGNOSTIC RESULT — HTTP ${res.status}: ${rawText}`);
-    } catch(e) {
-      setErr("DIAGNOSTIC network error: " + e.message);
-    }
-  }
-
   async function createTeacher() {
     if (!form.name?.trim()||!form.email?.trim()||!form.password) { setErr("Please fill in the name, email and password."); return; }
     if (form.password.length < 6) { setErr("The password must be at least 6 characters."); return; }
@@ -2537,7 +2559,6 @@ function TeachersPage({ ctx }) {
   return (
     <div>
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:9,gap:8}}>
-        <SmBtn onClick={rawDiagnostic} color={C.red}>🔧 Run Diagnostic</SmBtn>
         <Btn onClick={()=>{setForm({name:"",email:"",password:randomPassword(),subjects:[],forms:[],active:true,joined:todayStr()});setErr("");setModal("add");}}>+ Create Teacher Account</Btn>
       </div>
       {err && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"10px 12px",color:C.red,fontSize:11,marginBottom:11,wordBreak:"break-word",whiteSpace:"pre-wrap"}}>{err}</div>}
@@ -2657,7 +2678,7 @@ function TeacherSetupNotice({ teacher, email, needSubjects }) {
 
 // ─── Marks Entry ───────────────────────────────────────────────────────────────
 function MarksPage({ ctx }) {
-  const { students, marksMap, saveMark, auth, teachers, loadAll } = ctx;
+  const { students, marksMap, saveMark, auth, teachers, loadAll, markDeadlines, markUnlocks } = ctx;
   const isTeacher  = auth.role==="teacher";
   const teacher    = findTeacher(teachers, auth.user.email);
   const availForms = isTeacher ? (teacher?.forms||[]) : FORMS;
@@ -2671,6 +2692,8 @@ function MarksPage({ ctx }) {
     ? (teacher?.subjects||[]).filter(s=>SUBJECTS_BY_FORM[filter.form]?.includes(s))
     : (SUBJECTS_BY_FORM[filter.form]||[]);
   const subject    = filter.subject || availSubs[0] || "";
+  const lock       = lockStatus(filter.form, filter.seq, filter.year, markDeadlines, markUnlocks);
+  const blocked    = isTeacher && lock.locked;
 
   const [coeff,  setCoeff]  = useState(getCoeff(subject));
   const [local,  setLocal]  = useState({});
@@ -2691,6 +2714,7 @@ function MarksPage({ ctx }) {
   }, [filter.form, subject, filter.seq, filter.year, students.length]);
 
   async function saveAll() {
+    if (blocked) return;
     setSaving(true);
     try {
       // Save all marks one by one
@@ -2714,6 +2738,14 @@ function MarksPage({ ctx }) {
   return (
     <div>
       {isTeacher && <TeacherSetupNotice teacher={teacher} email={auth.user.email} needSubjects/>}
+      {lock.deadline && (
+        <div style={{background:blocked?"#fef2f2":"#fffbeb",border:`1px solid ${blocked?"#fca5a5":"#fde68a"}`,borderRadius:8,padding:"8px 12px",marginBottom:11,fontSize:12,fontWeight:600,color:blocked?C.red:"#92400e"}}>
+          {blocked ? `🔒 ${filter.seq} marks for ${filter.form} closed on ${fmtDate(lock.deadline)}. Ask the administrator to unlock this class if a correction is needed.`
+            : lock.locked ? `🔒 Deadline passed (${fmtDate(lock.deadline)}). Teachers are locked out; you can still edit.`
+            : lock.unlocked && lock.passed ? `🔓 Unlocked for corrections (deadline was ${fmtDate(lock.deadline)}).`
+            : `⏰ Deadline for ${filter.seq}: ${fmtDate(lock.deadline)}.`}
+        </div>
+      )}
       <div style={{background:C.white,borderRadius:10,padding:12,marginBottom:11,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
           <div><label style={lbl}>Form</label><select style={inp} value={filter.form} onChange={e=>setFilter(f=>({...f,form:e.target.value,subject:""}))}>{availForms.map(f=><option key={f}>{f}</option>)}</select></div>
@@ -2737,7 +2769,7 @@ function MarksPage({ ctx }) {
           <div style={{fontSize:12}}><strong style={{color:C.navy}}>{filter.form}</strong><span style={{color:C.gray,marginLeft:5}}>· {subject} · {filter.seq} · Coeff {coeff}</span></div>
           <div style={{display:"flex",gap:7,alignItems:"center"}}>
             {saved && <span style={{fontSize:12,color:C.green,fontWeight:700}}>✓ Saved to Supabase</span>}
-            <Btn onClick={saveAll} disabled={saving}>{saving?"Saving…":"Save Marks"}</Btn>
+            <Btn onClick={saveAll} disabled={saving||blocked}>{saving?"Saving…":blocked?"Locked":"Save Marks"}</Btn>
           </div>
         </div>
         <div style={{padding:"5px 11px",background:"#fffbeb",borderBottom:`1px solid ${C.grayLight}`,fontSize:11,color:"#92400e"}}>
@@ -2759,7 +2791,7 @@ function MarksPage({ ctx }) {
               <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
                 <div style={{textAlign:"center"}}>
                   <div style={{fontSize:9,color:C.gray,marginBottom:2}}>Score /20</div>
-                  <input type="number" min={0} max={20} style={{width:52,padding:"5px",border:`1px solid ${C.border}`,borderRadius:7,fontSize:14,fontWeight:700,textAlign:"center",color:C.navy}} value={v} onChange={e=>{setLocal(p=>({...p,[s.id]:e.target.value}));setSaved(false);}}/>
+                  <input type="number" min={0} max={20} disabled={blocked} style={{width:52,padding:"5px",border:`1px solid ${C.border}`,borderRadius:7,fontSize:14,fontWeight:700,textAlign:"center",color:C.navy}} value={v} onChange={e=>{setLocal(p=>({...p,[s.id]:e.target.value}));setSaved(false);}}/>
                 </div>
                 <div style={{textAlign:"center",minWidth:36}}>
                   <div style={{fontSize:9,color:C.gray,marginBottom:2}}>×{coeff}</div>
@@ -2774,6 +2806,153 @@ function MarksPage({ ctx }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// ─── Marks Control (admin): who has entered marks, deadlines & locks, change history ───
+function MarksControlPage({ ctx }) {
+  const { students, teachers, marksMap, markDeadlines, markUnlocks, saveDeadline, setClassUnlocked } = ctx;
+  const [tab,  setTab]  = useState("progress"); // progress | lock | history
+  const [year, setYear] = useState("2026/2027");
+  const [seq,  setSeq]  = useState("SEQ 1");
+  const [open, setOpen] = useState({});
+  const [dlInput, setDlInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [histForm, setHistForm] = useState("");
+  const [hist, setHist] = useState({ rows:[], loading:false, error:"" });
+
+  const currentDeadline = markDeadlines.find(d=>d.acad_year===year && d.seq===seq)?.deadline || "";
+  useEffect(() => { setDlInput(currentDeadline); }, [currentDeadline, year, seq]);
+
+  const progress = useMemo(() => FORMS.map(form => {
+    const pool = students.filter(s=>s.active && s.reg_status==="registered" && s.form===form);
+    const subs = (SUBJECTS_BY_FORM[form]||[]).map(sub => {
+      const entered = pool.filter(s => marksMap[`${s.id}-${sub}-${seq}-${year}`]).length;
+      const tch = teachers.filter(t=>t.active && (t.subjects||[]).includes(sub) && (t.forms||[]).includes(form)).map(t=>t.name);
+      const status = !pool.length ? "na" : entered>=pool.length ? "done" : entered>0 ? "partial" : "none";
+      return { sub, entered, total:pool.length, teachers:tch, status };
+    });
+    return { form, n:pool.length, subs, done:subs.filter(x=>x.status==="done").length };
+  }), [students, teachers, marksMap, seq, year]);
+
+  function copyMissing() {
+    const lines = [];
+    progress.forEach(p => {
+      const miss = p.subs.filter(x=>x.status==="partial"||x.status==="none");
+      if (!miss.length) return;
+      lines.push(p.form);
+      miss.forEach(x => lines.push(`- ${x.sub} (${x.teachers.join(", ")||"no teacher assigned"}): ${x.entered}/${x.total}`));
+    });
+    const text = lines.length ? `Missing ${seq} marks, ${year}:\n`+lines.join("\n") : "All marks are in.";
+    navigator.clipboard?.writeText(text).then(()=>alert("Copied. Paste it into WhatsApp."), ()=>alert(text));
+  }
+
+  async function run(fn) {
+    setBusy(true);
+    try { await fn(); }
+    catch(e) { alert("Error: "+e.message+"\n\nHave you run migration.sql in Supabase?"); }
+    setBusy(false);
+  }
+
+  async function loadHistory() {
+    setHist(h => ({ ...h, loading:true, error:"" }));
+    const { data, error } = await supabase.from("marks_history").select("*").eq("acad_year", year).eq("seq", seq).order("changed_at", { ascending:false }).limit(300);
+    setHist({ rows:data||[], loading:false, error:error?error.message:"" });
+  }
+  useEffect(() => { if (tab==="history") loadHistory(); }, [tab, year, seq]);
+
+  const statusColor = { done:C.green, partial:C.gold, none:C.red, na:C.gray };
+  const stuById = Object.fromEntries(students.map(s=>[s.id,s]));
+  const histRows = hist.rows.filter(r => !histForm || stuById[r.student_id]?.form===histForm);
+
+  return (
+    <div>
+      <div style={{background:C.white,borderRadius:10,padding:12,marginBottom:11,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <div><label style={lbl}>Academic Year</label><select style={inp} value={year} onChange={e=>setYear(e.target.value)}>{ACAD_YEARS.map(y=><option key={y}>{y}</option>)}</select></div>
+          <div><label style={lbl}>Sequence</label><select style={inp} value={seq} onChange={e=>setSeq(e.target.value)}>{SEQ_LABELS.map(x=><option key={x}>{x}</option>)}</select></div>
+        </div>
+        <div style={{display:"flex",gap:6,marginTop:10}}>
+          {[["progress","Progress"],["lock","Deadline & Locks"],["history","History"]].map(([k,l])=>(
+            <button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:`2px solid ${tab===k?C.navy:C.grayLight}`,background:tab===k?C.navy:C.white,color:tab===k?C.white:C.gray,fontWeight:700,fontSize:11.5,cursor:"pointer"}}>{l}</button>
+          ))}
+        </div>
+      </div>
+
+      {tab==="progress" && <>
+        <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><SmBtn onClick={copyMissing} color={C.navyMid}>📋 Copy missing list</SmBtn></div>
+        {progress.map(p => (
+          <div key={p.form} style={{background:C.white,borderRadius:10,marginBottom:9,boxShadow:"0 1px 3px rgba(0,0,0,0.06)",overflow:"hidden"}}>
+            <div onClick={()=>setOpen(o=>({...o,[p.form]:!o[p.form]}))} style={{padding:"11px 12px",cursor:"pointer"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div style={{fontWeight:800,color:C.navy,fontSize:13}}>{p.form} <span style={{fontWeight:400,color:C.gray,fontSize:11}}>· {p.n} students</span></div>
+                <Pill color={p.done===p.subs.length&&p.n?C.green:C.gold}>{p.done}/{p.subs.length} subjects {open[p.form]?"▲":"▼"}</Pill>
+              </div>
+              <div style={{marginTop:7,background:C.grayBg,borderRadius:5,height:7,overflow:"hidden"}}>
+                <div style={{width:`${p.subs.length?p.done/p.subs.length*100:0}%`,height:"100%",background:C.green}}/>
+              </div>
+            </div>
+            {open[p.form] && p.subs.map((x,i) => (
+              <div key={x.sub} style={{padding:"7px 12px",borderTop:`1px solid ${C.grayBg}`,display:"flex",justifyContent:"space-between",gap:8,background:i%2?C.grayBg:C.white}}>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:12.5,fontWeight:600,color:C.navy}}>{x.sub}</div>
+                  <div style={{fontSize:10.5,color:x.teachers.length?C.gray:C.red}}>{x.teachers.join(", ")||"No teacher assigned"}</div>
+                </div>
+                <Pill color={statusColor[x.status]}>{x.status==="na"?"—":`${x.entered}/${x.total}`}</Pill>
+              </div>
+            ))}
+          </div>
+        ))}
+      </>}
+
+      {tab==="lock" && <>
+        <div style={{background:C.white,borderRadius:10,padding:12,marginBottom:11,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+          <label style={lbl}>Deadline for {seq} ({year}) — teachers are locked out the day after</label>
+          <div style={{display:"flex",gap:8}}>
+            <input type="date" style={{...inp,flex:1}} value={dlInput} onChange={e=>setDlInput(e.target.value)}/>
+            <Btn disabled={busy} onClick={()=>run(()=>saveDeadline(year, seq, dlInput))}>{dlInput?"Save":"Clear"}</Btn>
+          </div>
+          <div style={{fontSize:10.5,color:C.gray,marginTop:6}}>Admin is never locked out. Leave empty and save to remove the deadline.</div>
+        </div>
+        {FORMS.map(f => {
+          const st = lockStatus(f, seq, year, markDeadlines, markUnlocks);
+          return (
+            <div key={f} style={{background:C.white,borderRadius:10,padding:"10px 12px",marginBottom:7,boxShadow:"0 1px 3px rgba(0,0,0,0.06)",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+              <div>
+                <div style={{fontWeight:700,color:C.navy,fontSize:13}}>{f}</div>
+                <div style={{fontSize:11,color:st.locked?C.red:C.gray}}>
+                  {!st.deadline ? "Open (no deadline set)" : !st.passed ? `Open until ${fmtDate(st.deadline)}` : st.unlocked ? "Unlocked for correction" : `Locked since ${fmtDate(st.deadline)}`}
+                </div>
+              </div>
+              {st.passed && (st.unlocked
+                ? <SmBtn color={C.red} onClick={()=>run(()=>setClassUnlocked(f, year, seq, false))}>🔒 Lock again</SmBtn>
+                : <SmBtn color={C.green} onClick={()=>run(()=>setClassUnlocked(f, year, seq, true))}>🔓 Unlock</SmBtn>)}
+            </div>
+          );
+        })}
+      </>}
+
+      {tab==="history" && <>
+        <div style={{marginBottom:9}}>
+          <select style={{...inp,maxWidth:160}} value={histForm} onChange={e=>setHistForm(e.target.value)}><option value="">All forms</option>{FORMS.map(f=><option key={f}>{f}</option>)}</select>
+        </div>
+        {hist.loading && <Spin text="Loading history…"/>}
+        {hist.error && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"10px 12px",color:C.red,fontSize:12,marginBottom:9}}>{hist.error}<br/>Run migration.sql in Supabase if you haven't.</div>}
+        {!hist.loading && !hist.error && !histRows.length && <Empty text="No changes recorded for this sequence."/>}
+        {histRows.map(r => {
+          const stu = stuById[r.student_id];
+          return (
+            <div key={r.id} style={{background:C.white,borderRadius:10,padding:"9px 12px",marginBottom:6,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+              <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
+                <div style={{fontWeight:700,color:C.navy,fontSize:12.5}}>{stu?.name||r.student_id} <span style={{fontWeight:400,color:C.gray}}>· {stu?.form}</span></div>
+                <div style={{fontWeight:800,fontSize:13,color:C.navy,whiteSpace:"nowrap"}}>{r.old_score??"—"} → {r.new_score??"deleted"}</div>
+              </div>
+              <div style={{fontSize:11,color:C.gray}}>{r.subject} · by {r.changed_by_name||"unknown"} · {new Date(r.changed_at).toLocaleString("en-GB",{timeZone:"Africa/Douala",day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"})}</div>
+            </div>
+          );
+        })}
+      </>}
     </div>
   );
 }
@@ -2987,93 +3166,68 @@ function ReportsPage({ ctx }) {
   return <ReportsPageInner ctx={ctx}/>;
 }
 
-function ReportsPageInner({ ctx }) {
-  const SBC_SUBJECTS_LIST = [
-    "English language","French/ Français","Mathematics","Health science",
-    "Home management","Citizenship","Food and Nutrition","Chemistry",
-    "History","Economics","Geography","Biology","Human Biology","Physics",
-    "Literature in English","Computer Studies","Religious Studies",
-    "Commerce","Accounts","Hygiene","Sport/Physical education","Manual Labour"
-  ];
-  const { students, marksMap, teachers, attendanceMap } = ctx;
-  const [sel,     setSel]     = useState({ studentId:"", year:"2026/2027", mode:"term", term:"First Term" });
-  const [conduct, setConduct] = useState({ present:"", absent:"", late:"", conduct:"Very Good", classTeacherRemark:"", principalRemark:"" });
-  const [showC,   setShowC]   = useState(false);
 
-  const student  = students.find(s=>s.id===sel.studentId);
-  const subjects = student ? (SUBJECTS_BY_FORM[student.form]||[]) : [];
+// ─── Report-card engine (shared by single print, whole-class print and WhatsApp PDF) ───
+const SBC_SUBJECTS_LIST = [
+  "English language","French/ Français","Mathematics","Health science",
+  "Home management","Citizenship","Food and Nutrition","Chemistry",
+  "History","Economics","Geography","Biology","Human Biology","Physics",
+  "Literature in English","Computer Studies","Religious Studies",
+  "Commerce","Accounts","Hygiene","Sport/Physical education","Manual Labour"
+];
+
+function attendanceTotals(student, attendanceMap) {
+  let present=0, absent=0, late=0;
+  if (!student) return { present, absent, late };
+  Object.keys(attendanceMap||{}).forEach(key => {
+    if (!key.startsWith(student.id+"-")) return;
+    const st = attendanceMap[key].status;
+    if (st==="present") present++; else if (st==="absent") absent++; else if (st==="late") late++;
+  });
+  return { present, absent, late };
+}
+
+// Everything the card needs for one student. env = { marksMap, teachers, ... }
+function computeReport(student, env, sel) {
+  const { marksMap, teachers } = env;
+  const subjects = SUBJECTS_BY_FORM[student.form] || [];
   const termSeqs = TERM_SEQS[sel.term];
-
-  // Auto-compute real attendance totals for this student from the Attendance page's data
-  const attTotals = (()=>{
-    if (!student) return { present:0, absent:0, late:0 };
-    let present=0, absent=0, late=0;
-    Object.keys(attendanceMap||{}).forEach(key => {
-      if (!key.startsWith(student.id+"-")) return;
-      const st = attendanceMap[key].status;
-      if (st==="present") present++;
-      else if (st==="absent") absent++;
-      else if (st==="late") late++;
-    });
-    return { present, absent, late };
-  })();
-
-  // Pre-fill conduct fields with real attendance whenever the selected student changes,
-  // but only if the admin hasn't already typed something for this student
-  useEffect(() => {
-    if (!student) return;
-    setConduct(c => ({
-      ...c,
-      absent: c.absent===""? String(attTotals.absent) : c.absent,
-      present: c.present===""? String(attTotals.present) : c.present,
-      late: c.late===""? String(attTotals.late) : c.late,
-    }));
-  }, [student?.id]);
-
-  const teacherFor = sub => {
-    const t = teachers.find(t=>t.active&&(t.subjects||[]).includes(sub)&&(t.forms||[]).includes(student?.form));
-    return t?.name || "—";
-  };
-  const getScore = (sub,seq) => {
-    const k = `${sel.studentId}-${sub}-${seq}-${sel.year}`;
-    return marksMap[k]?.score ?? null;
-  };
-  const getC = sub => {
-    const k = `${sel.studentId}-${sub}-SEQ 1-${sel.year}`;
-    return marksMap[k]?.coeff || getCoeff(sub);
-  };
+  const isTerm   = sel.mode==="term";
+  const getScore = (sub,seq) => marksMap[`${student.id}-${sub}-${seq}-${sel.year}`]?.score ?? null;
+  const getC     = sub => marksMap[`${student.id}-${sub}-SEQ 1-${sel.year}`]?.coeff || getCoeff(sub);
+  const teacherFor = sub => teachers.find(t=>t.active&&(t.subjects||[]).includes(sub)&&(t.forms||[]).includes(student.form))?.name || "—";
+  const avg2 = arr => { const v=arr.filter(x=>x!==null); return v.length ? v.reduce((a,b)=>a+Number(b),0)/v.length : null; };
 
   const subjectRows = subjects.map(sub => {
-    const s1=getScore(sub,"SEQ 1"),s2=getScore(sub,"SEQ 2");
-    const s3=getScore(sub,"SEQ 3"),s4=getScore(sub,"SEQ 4");
-    const s5=getScore(sub,"SEQ 5"),s6=getScore(sub,"SEQ 6");
-    const coeff   = getC(sub);
-    const teacher = teacherFor(sub);
-    const avg2    = (arr) => { const v=arr.filter(x=>x!==null); return v.length ? v.reduce((a,b)=>a+Number(b),0)/v.length : null; };
+    const s1=getScore(sub,"SEQ 1"),s2=getScore(sub,"SEQ 2"),s3=getScore(sub,"SEQ 3"),s4=getScore(sub,"SEQ 4"),s5=getScore(sub,"SEQ 5"),s6=getScore(sub,"SEQ 6");
     const t1Avg=avg2([s1,s2]), t2Avg=avg2([s3,s4]), t3Avg=avg2([s5,s6]);
-    const annualAvg   = avg2([t1Avg,t2Avg,t3Avg]);
-    const termScores  = termSeqs.map(sq=>[s1,s2,s3,s4,s5,s6][parseInt(sq.replace("SEQ ",""))-1]);
-    const termAvg     = avg2(termScores);
-    return { sub,coeff,teacher,s1,s2,s3,s4,s5,s6,t1Avg,t2Avg,t3Avg,annualAvg,termScores,termAvg };
+    const annualAvg  = avg2([t1Avg,t2Avg,t3Avg]);
+    const termScores = termSeqs.map(sq=>[s1,s2,s3,s4,s5,s6][parseInt(sq.replace("SEQ ",""))-1]);
+    return { sub, coeff:getC(sub), teacher:teacherFor(sub), s1,s2,s3,s4,s5,s6, t1Avg,t2Avg,t3Avg, annualAvg, termScores, termAvg:avg2(termScores) };
   });
 
-  const modeRows = sel.mode==="term"
-    ? subjectRows.filter(r=>r.termAvg!==null)
-    : subjectRows.filter(r=>r.annualAvg!==null);
+  const pick    = r => isTerm ? r.termAvg : r.annualAvg;
+  const modeRows = subjectRows.filter(r => pick(r)!==null);
+  const wAvg = (rows, f) => { let tw=0,tc=0; rows.forEach(r=>{ const a=f(r); if(a!==null){tw+=a*r.coeff;tc+=r.coeff;} }); return tc ? tw/tc : null; };
+  const overallAvg   = wAvg(modeRows, pick);
+  const annualOverall = wAvg(subjectRows.filter(r=>r.annualAvg!==null), r=>r.annualAvg);
+  const totalCoeff   = modeRows.reduce((a,r)=>a+r.coeff,0);
+  const overallGrd   = overallAvg!==null ? scoreToGrade(overallAvg) : { grade:"—", remark:"—" };
+  return { subjectRows, modeRows, overallAvg, annualOverall, totalCoeff, overallGrd };
+}
 
-  const wAvg = rows => {
-    let tw=0,tc=0;
-    rows.forEach(r=>{ const a=sel.mode==="term"?r.termAvg:r.annualAvg; if(a!==null){tw+=a*r.coeff;tc+=r.coeff;} });
-    return tc ? tw/tc : null;
-  };
-  const overallAvg  = wAvg(modeRows);
-  const totalCoeff  = modeRows.reduce((a,r)=>{ const av=sel.mode==="term"?r.termAvg:r.annualAvg; return a+(av!==null?r.coeff:0); },0);
-  const overallGrd  = overallAvg!==null ? scoreToGrade(overallAvg) : { grade:"—",remark:"—" };
-  const passCount   = modeRows.filter(r=>{ const a=sel.mode==="term"?r.termAvg:r.annualAvg; return a!==null&&a>=10; }).length;
-  const D           = v => v!==null ? Number(v).toFixed(1) : "—";
+function reportCardParts(student, env, sel, conduct) {
+    const { students, marksMap, feesMap, settings } = env;
+    const { modeRows, overallAvg, totalCoeff, overallGrd, annualOverall } = computeReport(student, env, sel);
+    const termSeqs = TERM_SEQS[sel.term];
 
-  function buildPrintHTML() {
-    if (!student||!modeRows.length) return "";
+    // Auto-filled boxes at the bottom of the card
+    const hasAnnual = sel.mode!=="term" || sel.term==="Third Term";
+    const decision  = hasAnnual && annualOverall!==null ? (annualOverall>=PASS_MARK ? "Promoted" : "Repeat") : "";
+    const owing     = TOTAL_FEE - (feesMap?.[student.id]?.paid || 0);
+    const owingTxt  = owing>0 ? owing.toLocaleString()+" FCFA" : "Nil";
+    const nextBegin = settings?.next_term_begins ? fmtDate(settings.next_term_begins) : "";
+    const fill = v => v ? "<b>"+escHtml(v)+"</b>" : "________";
 
     const SBC_SUBJECTS = SBC_SUBJECTS_LIST;
     const isTerm = sel.mode==="term";
@@ -3154,9 +3308,7 @@ function ReportsPageInner({ ctx }) {
     const blank = "&nbsp;";
     const avgLine  = (label, on) => `${label}: <b>${on&&overallAvg!==null ? overallAvg.toFixed(2)+" / 20" : "—"}</b>`;
 
-    return `<!DOCTYPE html><html><head><meta charset="utf-8">
-<title>Report Card – ${escHtml(student.name)}</title>
-<style>
+    const css = `
   *{box-sizing:border-box;margin:0;padding:0}
   @page{size:A4 portrait;margin:8mm}
   html,body{font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff;
@@ -3178,7 +3330,8 @@ function ReportsPageInner({ ctx }) {
   .sum td.rem{height:8mm;vertical-align:top;padding-top:1mm}
   .sig div.line{height:10mm;border-bottom:1px solid #000;margin-bottom:1mm}
   .sig td{text-align:center;padding:0 5mm;font-size:8pt}
-</style></head><body><div class="sheet">
+`;
+    const sheet = `<div class="sheet">
 
   <table><tr>
     <td class="gov"><b>REPUBLIC OF CAMEROON</b><br>Peace – Work – Fatherland<br>Ministry of Secondary Education</td>
@@ -3229,10 +3382,10 @@ function ReportsPageInner({ ctx }) {
       <td>Times Late: <b>${escHtml(conduct.late||"—")}</b></td>
       <td>Conduct: <b>${escHtml(conduct.conduct||"—")}</b></td>
     </tr><tr>
-      <td>Promoted / Repeat: ________</td>
+      <td>Promoted / Repeat: ${fill(decision)}</td>
       <td>No. of Warnings: ________</td>
-      <td>Fees Owing: ________</td>
-      <td>Next Term Begins: ________</td>
+      <td>Fees Owing: ${fill(owingTxt)}</td>
+      <td>Next Term Begins: ${fill(nextBegin)}</td>
     </tr><tr>
       <td colspan="4" class="rem">Class Teacher's Remark: <b>${escHtml(conduct.classTeacherRemark)||blank}</b></td>
     </tr><tr>
@@ -3252,9 +3405,134 @@ function ReportsPageInner({ ctx }) {
   <div style="margin-top:auto;font-size:7pt;color:#888;text-align:center;border-top:1px dashed #ccc;padding-top:1.2mm">
     Saker Baptist Comprehensive College Bawe · ${escHtml(sel.year)} · Printed: ${new Date().toLocaleDateString("en-GB")}
   </div>
-</div></body></html>`;
+</div>`;
+    return { css, sheet };
+}
+
+
+
+function reportCardDoc(parts, title) {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>${escHtml(title||"Report Card")}</title>
+<style>${parts.css}</style></head><body>${parts.sheet}</body></html>`;
+}
+
+// Several cards in one printable document, one per A4 page
+function reportCardBatchDoc(partsList, title) {
+  const extra = `
+@media print{.sheet{break-after:page;page-break-after:always}.sheet:last-child{break-after:auto;page-break-after:auto}}
+@media screen{html,body{height:auto!important}.sheet{margin-bottom:8mm}}`;
+  return reportCardDoc({ css: partsList[0].css + extra, sheet: partsList.map(p=>p.sheet).join("\n") }, title);
+}
+
+// Parent phone → international digits for wa.me / sms links (Cameroon: 9 digits → +237)
+function waNumber(phone) {
+  let d = String(phone||"").replace(/\D/g,"");
+  if (d.startsWith("00")) d = d.slice(2);
+  if (d.length===9) d = "237"+d;
+  return d.length>=11 ? d : "";
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 10000);
+}
+
+// Renders full HTML pages (one A4 page each) into a real PDF file. Needs: npm i html2canvas jspdf
+async function htmlDocsToPdfBlob(docs) {
+  const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import("html2canvas"), import("jspdf")]);
+  const pdf = new jsPDF({ unit:"mm", format:"a4", orientation:"portrait" });
+  for (let i=0; i<docs.length; i++) {
+    const frame = document.createElement("iframe");
+    frame.style.cssText = "position:fixed;left:-10000px;top:0;width:794px;height:1123px;border:0";
+    document.body.appendChild(frame);
+    await new Promise(res => { frame.onload = res; frame.srcdoc = docs[i]; });
+    const d = frame.contentDocument;
+    await Promise.all([...d.images].map(im => im.complete ? 0 : new Promise(r => { im.onload = im.onerror = r; })));
+    await new Promise(r => setTimeout(r, 120));
+    const canvas = await html2canvas(d.documentElement, { scale:2, backgroundColor:"#ffffff", width:794, height:1123, windowWidth:794, windowHeight:1123, useCORS:true });
+    if (i>0) pdf.addPage();
+    pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, 210, 297);
+    frame.remove();
+  }
+  return pdf.output("blob");
+}
+
+function ReportsPageInner({ ctx }) {
+  const { students, marksMap, teachers, attendanceMap, feesMap, settings, saveSetting } = ctx;
+  const [sel,     setSel]     = useState({ studentId:"", year:"2026/2027", mode:"term", term:"First Term" });
+  const [conduct, setConduct] = useState({ present:"", absent:"", late:"", conduct:"Very Good", classTeacherRemark:"", principalRemark:"" });
+  const [showC,   setShowC]   = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [batchForm, setBatchForm] = useState("Form 1");
+  const [nextTerm, setNextTerm] = useState(settings?.next_term_begins || "");
+  const [savingNT, setSavingNT] = useState(false);
+
+  const student  = students.find(s=>s.id===sel.studentId);
+  const subjects = student ? (SUBJECTS_BY_FORM[student.form]||[]) : [];
+  const termSeqs = TERM_SEQS[sel.term];
+
+  // Auto-compute real attendance totals for this student from the Attendance page's data
+  const attTotals = attendanceTotals(student, attendanceMap);
+
+  // Pre-fill conduct fields with real attendance whenever the selected student changes,
+  // but only if the admin hasn't already typed something for this student
+  useEffect(() => {
+    if (!student) return;
+    setConduct(c => ({
+      ...c,
+      absent: c.absent===""? String(attTotals.absent) : c.absent,
+      present: c.present===""? String(attTotals.present) : c.present,
+      late: c.late===""? String(attTotals.late) : c.late,
+    }));
+  }, [student?.id]);
+
+  const env = { students, marksMap, teachers, feesMap, settings };
+  const modeRows = student ? computeReport(student, env, sel).modeRows : [];
+  const periodLabel = sel.mode==="term" ? sel.term : "Annual";
+  const buildPrintHTML = () => (!student || !modeRows.length) ? "" : reportCardDoc(reportCardParts(student, env, sel, conduct), "Report Card – "+student.name);
+
+  // One document with every card of a class, alphabetical, one per A4 page
+  function printClass() {
+    const pool = students.filter(s=>s.active && s.form===batchForm && s.reg_status==="registered");
+    const list = []; let skipped = 0;
+    pool.forEach(s => {
+      if (!computeReport(s, env, sel).modeRows.length) { skipped++; return; }
+      const att = attendanceTotals(s, attendanceMap);
+      list.push(reportCardParts(s, env, sel, { present:String(att.present), absent:String(att.absent), late:String(att.late), conduct:"", classTeacherRemark:"", principalRemark:"" }));
+    });
+    if (!list.length) { alert("No student in "+batchForm+" has marks for this period."); return; }
+    if (skipped && !window.confirm(skipped+" student(s) have no marks for this period and will be left out. Print "+list.length+" report cards?")) return;
+    domPrint("sbc-class-reports", reportCardBatchDoc(list, batchForm+" report cards"), "A4 portrait", "8mm");
   }
 
+  async function shareWhatsApp() {
+    const num = waNumber(student.phone);
+    if (!num) { alert("This student has no valid parent phone number. Add it on the Students page first."); return; }
+    setSharing(true);
+    const win = window.open("", "_blank"); // opened now, while the tap still counts, so the browser allows it
+    try {
+      const blob = await htmlDocsToPdfBlob([buildPrintHTML()]);
+      downloadBlob(blob, "Report-Card-"+student.name.replace(/[^A-Za-z0-9]+/g,"-")+"-"+periodLabel.replace(/\s+/g,"")+".pdf");
+      const text = "Good day "+(student.parent||"Sir/Madam")+", please find attached "+student.name+"'s "+periodLabel+" report card ("+sel.year+") from Saker Baptist Comprehensive College Bawe.";
+      const url = "https://wa.me/"+num+"?text="+encodeURIComponent(text);
+      if (win) win.location.href = url; else window.location.href = url;
+    } catch(e) {
+      win?.close();
+      alert("Could not create the PDF: "+e.message);
+    }
+    setSharing(false);
+  }
+
+  async function saveNextTerm() {
+    setSavingNT(true);
+    try { await saveSetting("next_term_begins", nextTerm || ""); alert("Saved."); }
+    catch(e) { alert("Could not save: "+e.message+"\n\nRun migration.sql in Supabase first."); }
+    setSavingNT(false);
+  }
 
   function printReport() {
     if (!student||!modeRows.length) return;
@@ -3292,6 +3570,22 @@ function ReportsPageInner({ ctx }) {
               </div>
             </div>
           )}
+        </div>
+      </div>
+
+      <div style={{background:C.white,borderRadius:10,padding:12,marginBottom:11,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+        <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:8}}>🖨 Whole class (one PDF)</div>
+        <div style={{display:"flex",gap:8}}>
+          <select style={{...inp,flex:1}} value={batchForm} onChange={e=>setBatchForm(e.target.value)}>{FORMS.map(f=><option key={f}>{f}</option>)}</select>
+          <Btn onClick={printClass}>Print all</Btn>
+        </div>
+        <div style={{fontSize:10.5,color:C.gray,marginTop:6}}>Uses the year / report type / term above. Choose "Save as PDF" in the print window.</div>
+        <div style={{borderTop:`1px solid ${C.grayLight}`,marginTop:11,paddingTop:10}}>
+          <label style={lbl}>Next term begins (printed on every card)</label>
+          <div style={{display:"flex",gap:8}}>
+            <input type="date" style={{...inp,flex:1}} value={nextTerm} onChange={e=>setNextTerm(e.target.value)}/>
+            <Btn onClick={saveNextTerm} disabled={savingNT}>{savingNT?"Saving…":"Save"}</Btn>
+          </div>
         </div>
       </div>
 
@@ -3343,6 +3637,11 @@ function ReportsPageInner({ ctx }) {
               </button>
             : <div style={{background:"#fef3cd",borderRadius:10,padding:"12px 16px",textAlign:"center",fontSize:13,color:"#92400e",border:"1px solid #fde68a"}}>⚠️ No marks found for this period. Enter marks first.</div>
           }
+          {modeRows.length>0 && (
+            <button onClick={shareWhatsApp} disabled={sharing} style={{width:"100%",marginTop:9,padding:"12px",background:"#128C7E",color:C.white,border:"none",borderRadius:10,fontWeight:800,fontSize:14,cursor:sharing?"wait":"pointer",opacity:sharing?0.7:1}}>
+              {sharing ? "Preparing PDF…" : "💬  Save PDF & open WhatsApp"}
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -4279,7 +4578,19 @@ function FeesPage({ ctx }) {
               <span style={{color:C.gray}}>Paid: <strong>{paid.toLocaleString()}</strong> / {TOTAL_FEE.toLocaleString()} F</span>
               <span style={{color:bal>0?C.red:C.green}}>Bal: <strong>{bal.toLocaleString()} F</strong></span>
             </div>
-            <SmBtn onClick={()=>{setModal(s);setAmount("");}} color={C.navy} style={{marginTop:7}}>Record Payment</SmBtn>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginTop:7}}>
+              <SmBtn onClick={()=>{setModal(s);setAmount("");}} color={C.navy}>Record Payment</SmBtn>
+              {bal>0 && (() => {
+                const num = waNumber(s.phone);
+                if (!num) return <span style={{fontSize:11,color:C.gray}}>No parent phone</span>;
+                const msg = `Dear ${s.parent||"Parent/Guardian"}, this is a reminder from Saker Baptist Comprehensive College Bawe. ${s.name} (${s.form}) has an outstanding school fees balance of ${bal.toLocaleString()} FCFA (paid ${paid.toLocaleString()} of ${TOTAL_FEE.toLocaleString()} FCFA). Kindly settle it at your earliest convenience. Thank you.`;
+                const lnk = (href, color, text) => <a href={href} target="_blank" rel="noreferrer" style={{padding:"4px 10px",background:color+"18",color,border:`1px solid ${color}30`,borderRadius:6,fontWeight:700,fontSize:12,textDecoration:"none",whiteSpace:"nowrap"}}>{text}</a>;
+                return <>
+                  {lnk(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, "#128C7E", "💬 WhatsApp reminder")}
+                  {lnk(`sms:+${num}?&body=${encodeURIComponent(msg)}`, C.navyMid, "✉️ SMS")}
+                </>;
+              })()}
+            </div>
           </div>
         );
       })}
