@@ -3135,6 +3135,10 @@ function F5SetupPanel({ ctx }) {
   const [busy, setBusy] = useState("");
   const [open, setOpen] = useState("");
   const [draft, setDraft] = useState({ subjects:[], candNo:"" });
+  const [bulkSubs, setBulkSubs] = useState([]);
+  const [bulkSel,  setBulkSel]  = useState([]);
+  const [bulkMode, setBulkMode] = useState("replace"); // replace | add | remove
+  const [tmplId,   setTmplId]   = useState("");
   const all = SUBJECTS_BY_FORM["Form 5"];
   const pool = students.filter(x => x.active && x.form==="Form 5" && x.reg_status==="registered").sort((a,b)=>a.name.localeCompare(b.name));
   const cfg = f5Students(settings);
@@ -3148,6 +3152,29 @@ function F5SetupPanel({ ctx }) {
     setBusy("scale");
     try { await saveSetting("f5_grade_scale", JSON.stringify(n)); alert("Form 5 grade scale saved."); }
     catch(e) { alert("Error: "+e.message); }
+    setBusy("");
+  }
+  async function applyBulk() {
+    if (!bulkSubs.length) { alert("Tick at least one subject."); return; }
+    if (!bulkSel.length)  { alert("Select at least one student."); return; }
+    const verb = bulkMode==="replace" ? "set their subjects to exactly these" : bulkMode==="add" ? "add these subjects to their lists" : "remove these subjects from their lists";
+    if (!window.confirm(`Apply to ${bulkSel.length} student(s) and ${verb}?`)) return;
+    setBusy("bulk");
+    try {
+      const cur = f5Students(settings), next = { ...cur };
+      let skipped = 0;
+      bulkSel.forEach(id => {
+        const old  = cur[id] || {};
+        const base = old.subjects?.length ? old.subjects : all; // no list yet = writes everything
+        let subjects = bulkMode==="replace" ? bulkSubs : bulkMode==="add" ? [...new Set([...base, ...bulkSubs])] : base.filter(x => !bulkSubs.includes(x));
+        subjects = all.filter(x => subjects.includes(x));
+        if (!subjects.length) { skipped++; return; }
+        next[id] = { subjects, candNo: old.candNo || "" };
+      });
+      await saveSetting("f5_students", JSON.stringify(next));
+      setBulkSel([]);
+      alert(`Done.${skipped ? " "+skipped+" student(s) skipped because they would have no subjects left." : ""}`);
+    } catch(e) { alert("Error: "+e.message); }
     setBusy("");
   }
   function openStudent(st) {
@@ -3181,6 +3208,50 @@ function F5SetupPanel({ ctx }) {
           ))}
         </div>
         <div style={{marginTop:9}}><Btn onClick={saveScale} disabled={busy==="scale"}>{busy==="scale"?"Saving…":"Save grade scale"}</Btn></div>
+      </div>
+
+      <div style={card}>
+        <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:4}}>Bulk set subjects</div>
+        <div style={{fontSize:11,color:C.gray,marginBottom:8}}>Tick the subjects, select the students (for example all Science students), then apply once.</div>
+        <label style={lbl}>Copy ticks from a student (optional)</label>
+        <select style={inp} value={tmplId} onChange={e=>{ const id=e.target.value; setTmplId(id); const c=cfg[id]; setBulkSubs(c?.subjects?.length ? [...c.subjects] : id ? [...all] : []); }}>
+          <option value="">— None —</option>
+          {pool.map(st=><option key={st.id} value={st.id}>{st.name}</option>)}
+        </select>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:8}}>
+          <label style={{...lbl,marginBottom:0}}>Subjects ({bulkSubs.length})</label>
+          <div style={{display:"flex",gap:6}}><SmBtn onClick={()=>setBulkSubs([...all])} color={C.navyMid}>All</SmBtn><SmBtn onClick={()=>setBulkSubs([])} color={C.gray}>None</SmBtn></div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4,marginTop:6}}>
+          {all.map(sub => (
+            <label key={sub} style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:C.navy}}>
+              <input type="checkbox" checked={bulkSubs.includes(sub)} onChange={e=>setBulkSubs(b=>e.target.checked?[...b,sub]:b.filter(x=>x!==sub))}/>{sub}
+            </label>
+          ))}
+        </div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:10}}>
+          <label style={{...lbl,marginBottom:0}}>Students ({bulkSel.length} selected)</label>
+          <div style={{display:"flex",gap:6}}>
+            <SmBtn onClick={()=>setBulkSel(pool.map(x=>x.id))} color={C.navyMid}>All</SmBtn>
+            <SmBtn onClick={()=>setBulkSel(pool.filter(x=>!cfg[x.id]?.subjects?.length).map(x=>x.id))} color={C.navyMid}>No list yet</SmBtn>
+            <SmBtn onClick={()=>setBulkSel([])} color={C.gray}>None</SmBtn>
+          </div>
+        </div>
+        <div style={{maxHeight:200,overflowY:"auto",border:`1px solid ${C.grayLight}`,borderRadius:8,padding:6,marginTop:6}}>
+          {!pool.length && <div style={{fontSize:12,color:C.gray}}>No registered Form 5 students.</div>}
+          {pool.map(st => (
+            <label key={st.id} style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:C.navy,padding:"3px 0"}}>
+              <input type="checkbox" checked={bulkSel.includes(st.id)} onChange={e=>setBulkSel(b=>e.target.checked?[...b,st.id]:b.filter(x=>x!==st.id))}/>
+              {st.name} <span style={{color:C.gray,fontSize:10}}>({cfg[st.id]?.subjects?.length ? cfg[st.id].subjects.length+" subjects" : "not set"})</span>
+            </label>
+          ))}
+        </div>
+        <div style={{display:"flex",gap:6,marginTop:10}}>
+          {[["replace","Replace"],["add","Add"],["remove","Remove"]].map(([k,l])=>(
+            <button key={k} onClick={()=>setBulkMode(k)} style={{flex:1,padding:"7px 4px",borderRadius:8,border:`2px solid ${bulkMode===k?C.navy:C.grayLight}`,background:bulkMode===k?C.navy:C.white,color:bulkMode===k?C.white:C.gray,fontWeight:700,fontSize:11.5,cursor:"pointer"}}>{l}</button>
+          ))}
+        </div>
+        <div style={{marginTop:9}}><Btn onClick={applyBulk} disabled={busy==="bulk"}>{busy==="bulk"?"Applying…":`Apply to ${bulkSel.length} student(s)`}</Btn></div>
       </div>
 
       <div style={card}>
@@ -3221,6 +3292,243 @@ function F5SetupPanel({ ctx }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+const GRADE_PTS = { A:5, B:4, C:3, D:2, E:1, U:0 };
+
+// One row per Form 5 student for the chosen assessment
+function f5SummaryRows(ctx, year, assess) {
+  const { students, settings, marksMap, teachers } = ctx;
+  const env = { marksMap, teachers, settings };
+  const isG = assess===GCE_SEQ;
+  const pool = students.filter(x => x.active && x.form==="Form 5" && x.reg_status==="registered").sort((a,b)=>a.name.localeCompare(b.name));
+  const rows = pool.map(st => {
+    const rep = computeReport(st, env, { year, mode:"term", term:"First Term", f5Assess:assess });
+    const written = f5SubjectsOf(settings, st).length;
+    const entered = rep.modeRows.length;
+    const subs = {};
+    let passed = 0, pts = 0; const failed = []; const dist = {};
+    rep.modeRows.forEach(r => {
+      if (isG) {
+        const g = gceFromPoints(r.termAvg); subs[r.sub] = g; dist[g] = (dist[g]||0)+1;
+        if (gcePassed(r.termAvg)) passed++; else failed.push(r.sub);
+        pts += Number(r.termAvg)||0;
+      } else {
+        const g = f5Grade(settings, r.termAvg); subs[r.sub] = Number(r.termAvg).toFixed(2);
+        if (g.pass) passed++; else failed.push(r.sub);
+      }
+    });
+    const avg = isG ? null : rep.overallAvg;
+    return { st, written, entered, subs, passed, failed, pts, avg,
+             grade: avg!==null && !isG ? f5Grade(settings, avg).grade : "—",
+             distStr: GCE_GRADES.filter(g=>dist[g]).map(g=>g+dist[g]).join(" ") };
+  });
+  const ranked = rows.filter(r => r.entered>0).sort((a,b) => isG ? (b.passed-a.passed)||(b.pts-a.pts) : (b.avg??-1)-(a.avg??-1));
+  let last = null, pos = 0;
+  ranked.forEach((r,i) => { const key = isG ? r.passed+"|"+r.pts : r.avg; if (key!==last) { pos = i+1; last = key; } r.rank = pos; });
+  return { rows, ranked };
+}
+
+function f5SummaryDocs(ranked, meta) {
+  const per = 26, pages = [];
+  for (let i=0; i<Math.max(ranked.length,1); i+=per) pages.push(ranked.slice(i, i+per));
+  return pages.map((chunk, pi) => `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:14mm 11mm;color:#111;font-size:10pt}
+    h1{font-size:14pt;margin:0 0 1mm;text-align:center} h2{font-size:10.5pt;margin:0 0 4mm;text-align:center;font-weight:600;color:#333}
+    table{width:100%;border-collapse:collapse;font-size:8.5pt} th,td{border:1px solid #999;padding:1.4mm 1.6mm;text-align:center}
+    th{background:#E8EEF7} td.l{text-align:left} .bad{color:#B91C1C} .ok{color:#15803D;font-weight:700}
+    .foot{margin-top:4mm;font-size:8pt;color:#555;text-align:center}
+  </style></head><body>
+    <h1>Saker Baptist Comprehensive College Bawe</h1>
+    <h2>Form 5 · ${escHtml(meta.assess)} · ${escHtml(meta.year)} — Class Summary</h2>
+    <table><thead><tr><th>Rank</th><th>Name</th><th>Cand. No</th><th>Subj. written</th><th>${meta.isG?"Grades":"Average /20"}</th><th>${meta.isG?"Passed":"Grade"}</th><th>${meta.isG?"Failed subjects":"Passed (A–C)"}</th>${meta.isG?"":"<th>Failed subjects</th>"}</tr></thead><tbody>
+    ${chunk.map(r => `<tr><td>${r.rank}</td><td class="l">${escHtml(r.st.name)}</td><td>${escHtml(f5CandNo(meta.settings, r.st))}</td><td>${r.entered}/${r.written}</td>
+      ${meta.isG
+        ? `<td>${escHtml(r.distStr)}</td><td class="ok">${r.passed}/${r.entered}</td><td class="l bad">${escHtml(r.failed.join(", "))}</td>`
+        : `<td><b>${r.avg!==null?r.avg.toFixed(2):"—"}</b></td><td><b>${escHtml(r.grade)}</b></td><td class="ok">${r.passed}/${r.entered}</td><td class="l bad">${escHtml(r.failed.join(", "))}</td>`}</tr>`).join("")}
+    </tbody></table>
+    <div class="foot">${escHtml(meta.note)} · Page ${pi+1} of ${pages.length} · Printed ${new Date().toLocaleDateString("en-GB")}</div>
+  </body></html>`);
+}
+
+function F5Summary({ ctx }) {
+  const { settings } = ctx;
+  const [year, setYear]     = useState("2026/2027");
+  const [assess, setAssess] = useState("Pre Mock");
+  const [busy, setBusy]     = useState(false);
+  const isG = assess===GCE_SEQ;
+  const { rows, ranked } = useMemo(() => f5SummaryRows(ctx, year, assess), [ctx.students, ctx.marksMap, ctx.settings, year, assess]);
+  const avgs = ranked.filter(r=>r.avg!==null).map(r=>r.avg);
+  const classAvg = avgs.length ? (avgs.reduce((a,b)=>a+b,0)/avgs.length).toFixed(2) : "—";
+  const k = f5Scale(settings);
+  const note = isG ? "GCE grades: A, B, C = Pass · D, E, U = Fail" : `Grading: A ≥${k.A} · B ≥${k.B} · C ≥${k.C} · D ≥${k.D} · E ≥${k.E} · U below · A–C = Pass`;
+
+  function excel() {
+    const allSubs = SUBJECTS_BY_FORM["Form 5"];
+    const out = ranked.map(r => {
+      const o = { Rank:r.rank, Name:r.st.name, Matricule:r.st.id, "Candidate No":f5CandNo(settings, r.st), "Subjects written":r.written, "Subjects entered":r.entered };
+      allSubs.forEach(sb => { o[sb] = r.subs[sb] ?? (f5Writes(settings, r.st, sb) ? "" : "—"); });
+      if (isG) { o["Passed (A–C)"] = r.passed; o["Failed subjects"] = r.failed.join(", "); }
+      else { o["Average /20"] = r.avg!==null ? Number(r.avg.toFixed(2)) : ""; o["Grade"] = r.grade; o["Passed (A–C)"] = r.passed; o["Failed subjects"] = r.failed.join(", "); }
+      return o;
+    });
+    exportToExcel(out, `SBCC-Form5-${assess.replace(/\s+/g,"")}-${year.replace("/","-")}.xlsx`, "Form 5 "+assess);
+  }
+  async function pdf() {
+    if (!ranked.length) { alert("No marks entered yet for this assessment."); return; }
+    setBusy(true);
+    try {
+      const blob = await htmlDocsToPdfBlob(f5SummaryDocs(ranked, { assess, year, isG, settings, note }), null, 1.5, 0.85);
+      downloadBlob(blob, `Form5-${assess.replace(/\s+/g,"")}-Summary.pdf`);
+    } catch(e) { alert("Could not create the PDF: "+e.message); }
+    setBusy(false);
+  }
+  const card = { background:C.white, borderRadius:10, padding:12, marginBottom:11, boxShadow:"0 1px 3px rgba(0,0,0,0.06)" };
+  const passTotal = ranked.reduce((a,r)=>a+r.passed,0), enteredTotal = ranked.reduce((a,r)=>a+r.entered,0);
+  return (
+    <div>
+      <div style={card}>
+        <div style={{display:"flex",gap:6,marginBottom:8}}>
+          {F5_ASSESSMENTS.map(t=>(
+            <button key={t} onClick={()=>setAssess(t)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:`2px solid ${assess===t?C.navy:C.grayLight}`,background:assess===t?C.navy:C.white,color:assess===t?C.white:C.gray,fontWeight:700,fontSize:11,cursor:"pointer"}}>{t}</button>
+          ))}
+        </div>
+        <select style={inp} value={year} onChange={e=>setYear(e.target.value)}>{ACAD_YEARS.map(y=><option key={y}>{y}</option>)}</select>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginTop:9,textAlign:"center"}}>
+          <div style={{background:C.grayBg,borderRadius:8,padding:"7px 2px"}}><div style={{fontSize:10,color:C.gray}}>Students</div><div style={{fontSize:17,fontWeight:900,color:C.navy}}>{ranked.length}/{rows.length}</div></div>
+          <div style={{background:C.grayBg,borderRadius:8,padding:"7px 2px"}}><div style={{fontSize:10,color:C.gray}}>{isG?"Subject passes":"Class average"}</div><div style={{fontSize:17,fontWeight:900,color:C.navy}}>{isG ? `${passTotal}/${enteredTotal}` : classAvg}</div></div>
+          <div style={{background:C.grayBg,borderRadius:8,padding:"7px 2px"}}><div style={{fontSize:10,color:C.gray}}>Pass rate</div><div style={{fontSize:17,fontWeight:900,color:C.navy}}>{enteredTotal ? Math.round(passTotal/enteredTotal*100)+"%" : "—"}</div></div>
+        </div>
+        <div style={{display:"flex",gap:8,marginTop:10}}><Btn onClick={pdf} disabled={busy}>{busy?"Making PDF…":"📄 PDF"}</Btn><Btn onClick={excel} outline>📊 Excel (all subjects)</Btn></div>
+      </div>
+      {!ranked.length && <Empty text="No marks entered yet for this assessment and year."/>}
+      {ranked.map(r => {
+        const good = r.passed===r.entered;
+        return (
+          <div key={r.st.id} style={{background:C.white,borderRadius:10,padding:"9px 12px",marginBottom:7,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div style={{width:30,height:30,borderRadius:15,background:C.navy,color:C.white,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:12,flexShrink:0}}>{r.rank}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:700,color:C.navy,fontSize:13}}>{r.st.name}</div>
+                <div style={{fontSize:10,color:C.gray}}>{f5CandNo(settings, r.st) ? "Cand. "+f5CandNo(settings, r.st)+" · " : ""}{r.entered}/{r.written} subjects entered</div>
+              </div>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontWeight:900,fontSize:15,color:C.navy}}>{isG ? r.distStr||"—" : `${r.avg!==null?r.avg.toFixed(2):"—"} · ${r.grade}`}</div>
+                <div style={{fontSize:10.5,fontWeight:700,color:good?C.green:C.gold}}>{r.passed}/{r.entered} passed</div>
+              </div>
+            </div>
+            {r.failed.length>0 && <div style={{fontSize:10.5,color:C.red,marginTop:5}}>Failed: {r.failed.join(", ")}</div>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// GCE results: pass rates, grade spread and movement from the mocks
+function F5Gce({ ctx }) {
+  const { students, settings, marksMap, teachers } = ctx;
+  const [year, setYear] = useState("2026/2027");
+  const env = { marksMap, teachers, settings };
+  const pool = students.filter(x => x.active && x.form==="Form 5" && x.reg_status==="registered").sort((a,b)=>a.name.localeCompare(b.name));
+  const data = useMemo(() => {
+    const subj = {}; const stu = [];
+    pool.forEach(st => {
+      let entered = 0, passed = 0;
+      f5SubjectsOf(settings, st).forEach(sub => {
+        const o = subj[sub] || (subj[sub] = { sub, written:0, entered:0, passed:0, dist:{}, up:0, same:0, down:0 });
+        o.written++;
+        const gp = marksMap[`${st.id}-${sub}-${GCE_SEQ}-${year}`]?.score;
+        if (gp===undefined || gp===null) return;
+        o.entered++; entered++;
+        const g = gceFromPoints(gp); o.dist[g] = (o.dist[g]||0)+1;
+        if (gcePassed(gp)) { o.passed++; passed++; }
+        const rs = marksMap[`${st.id}-${sub}-Regional Mock-${year}`]?.score;
+        if (rs!==undefined && rs!==null) {
+          const rp = GRADE_PTS[f5Grade(settings, rs).grade];
+          if (Number(gp) > rp) o.up++; else if (Number(gp) < rp) o.down++; else o.same++;
+        }
+      });
+      const pre = computeReport(st, env, { year, mode:"term", term:"First Term", f5Assess:"Pre Mock" }).overallAvg;
+      const reg = computeReport(st, env, { year, mode:"term", term:"First Term", f5Assess:"Regional Mock" }).overallAvg;
+      stu.push({ st, entered, passed, pre, reg });
+    });
+    return { subjects: Object.values(subj).filter(o=>o.entered>0).sort((a,b)=>(b.passed/b.entered)-(a.passed/a.entered)), stu: stu.filter(x=>x.entered>0).sort((a,b)=>(b.passed/b.entered)-(a.passed/a.entered)||b.passed-a.passed) };
+  }, [students, marksMap, settings, year]);
+  const totE = data.subjects.reduce((a,o)=>a+o.entered,0), totP = data.subjects.reduce((a,o)=>a+o.passed,0);
+  const allPass = data.stu.filter(x=>x.passed===x.entered).length;
+  const best = data.subjects[0], worst = data.subjects[data.subjects.length-1];
+  const card = { background:C.white, borderRadius:10, padding:12, marginBottom:11, boxShadow:"0 1px 3px rgba(0,0,0,0.06)" };
+  const pct = (a,b) => b ? Math.round(a/b*100)+"%" : "—";
+  function xlSubjects() {
+    exportToExcel(data.subjects.map(o => ({ Subject:o.sub, Written:o.written, Entered:o.entered, Passed:o.passed, "Pass rate":pct(o.passed,o.entered), A:o.dist.A||0, B:o.dist.B||0, C:o.dist.C||0, D:o.dist.D||0, E:o.dist.E||0, U:o.dist.U||0, "Up vs Regional":o.up, "Same":o.same, "Down":o.down })), `SBCC-GCE-Subjects-${year.replace("/","-")}.xlsx`, "GCE subjects");
+  }
+  function xlStudents() {
+    exportToExcel(data.stu.map(x => ({ Name:x.st.name, Matricule:x.st.id, "Candidate No":f5CandNo(settings, x.st), "Pre Mock avg /20":x.pre!==null?Number(x.pre.toFixed(2)):"", "Regional Mock avg /20":x.reg!==null?Number(x.reg.toFixed(2)):"", "GCE subjects entered":x.entered, "GCE passed (A–C)":x.passed })), `SBCC-GCE-Students-${year.replace("/","-")}.xlsx`, "GCE students");
+  }
+  return (
+    <div>
+      <div style={card}>
+        <select style={inp} value={year} onChange={e=>setYear(e.target.value)}>{ACAD_YEARS.map(y=><option key={y}>{y}</option>)}</select>
+        {!data.subjects.length ? <div style={{marginTop:8}}><Empty text="No GCE grades entered for this year yet. Enter them in Marks → Form 5 → GCE Result."/></div> : <>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginTop:9,textAlign:"center"}}>
+            <div style={{background:C.grayBg,borderRadius:8,padding:"7px 2px"}}><div style={{fontSize:10,color:C.gray}}>Overall pass rate (A–C)</div><div style={{fontSize:19,fontWeight:900,color:C.navy}}>{pct(totP,totE)}</div><div style={{fontSize:10,color:C.gray}}>{totP}/{totE} subject results</div></div>
+            <div style={{background:C.grayBg,borderRadius:8,padding:"7px 2px"}}><div style={{fontSize:10,color:C.gray}}>Passed every subject</div><div style={{fontSize:19,fontWeight:900,color:C.navy}}>{allPass}/{data.stu.length}</div><div style={{fontSize:10,color:C.gray}}>students</div></div>
+            <div style={{background:C.grayBg,borderRadius:8,padding:"7px 2px"}}><div style={{fontSize:10,color:C.gray}}>Strongest subject</div><div style={{fontSize:12,fontWeight:800,color:C.green}}>{best?.sub}</div><div style={{fontSize:10,color:C.gray}}>{best ? pct(best.passed,best.entered) : ""}</div></div>
+            <div style={{background:C.grayBg,borderRadius:8,padding:"7px 2px"}}><div style={{fontSize:10,color:C.gray}}>Weakest subject</div><div style={{fontSize:12,fontWeight:800,color:C.red}}>{worst?.sub}</div><div style={{fontSize:10,color:C.gray}}>{worst ? pct(worst.passed,worst.entered) : ""}</div></div>
+          </div>
+          <div style={{display:"flex",gap:8,marginTop:10}}><SmBtn onClick={xlSubjects} color={C.navyMid}>📊 Subjects Excel</SmBtn><SmBtn onClick={xlStudents} color={C.navyMid}>📊 Students Excel</SmBtn></div>
+        </>}
+      </div>
+
+      {data.subjects.length>0 && <div style={card}>
+        <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:6}}>By subject (best pass rate first)</div>
+        {data.subjects.map(o => {
+          const mv = o.up+o.same+o.down;
+          return (
+            <div key={o.sub} style={{borderTop:`1px solid ${C.grayBg}`,padding:"7px 0"}}>
+              <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
+                <div style={{fontWeight:700,color:C.navy,fontSize:12.5}}>{o.sub}</div>
+                <div style={{fontWeight:800,fontSize:12.5,color:o.passed/o.entered>=0.5?C.green:C.red}}>{pct(o.passed,o.entered)} <span style={{fontWeight:600,color:C.gray,fontSize:10.5}}>({o.passed}/{o.entered})</span></div>
+              </div>
+              <div style={{fontSize:10.5,color:C.gray,marginTop:2}}>{GCE_GRADES.filter(g=>o.dist[g]).map(g=>g+": "+o.dist[g]).join("  ·  ")}</div>
+              {mv>0 && <div style={{fontSize:10.5,color:C.gray,marginTop:1}}>vs Regional Mock: <span style={{color:C.green,fontWeight:700}}>▲ {o.up}</span> · ▬ {o.same} · <span style={{color:C.red,fontWeight:700}}>▼ {o.down}</span></div>}
+            </div>
+          );
+        })}
+      </div>}
+
+      {data.stu.length>0 && <div style={card}>
+        <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:6}}>By student</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 46px 46px 56px",gap:4,fontSize:9.5,color:C.gray,fontWeight:700,paddingBottom:4}}><div>Name</div><div style={{textAlign:"center"}}>Pre</div><div style={{textAlign:"center"}}>Reg.</div><div style={{textAlign:"center"}}>GCE</div></div>
+        {data.stu.map(x => (
+          <div key={x.st.id} style={{display:"grid",gridTemplateColumns:"1fr 46px 46px 56px",gap:4,alignItems:"center",borderTop:`1px solid ${C.grayBg}`,padding:"6px 0",fontSize:12}}>
+            <div style={{fontWeight:700,color:C.navy}}>{x.st.name}</div>
+            <div style={{textAlign:"center",color:C.navyMid}}>{x.pre!==null?x.pre.toFixed(1):"—"}</div>
+            <div style={{textAlign:"center",color:C.navyMid}}>{x.reg!==null?x.reg.toFixed(1):"—"}</div>
+            <div style={{textAlign:"center",fontWeight:800,color:x.passed===x.entered?C.green:C.gold}}>{x.passed}/{x.entered}</div>
+          </div>
+        ))}
+        <div style={{fontSize:10,color:C.gray,marginTop:6}}>Pre and Reg. are mock averages out of 20. GCE is subjects passed (A–C) out of subjects entered.</div>
+      </div>}
+    </div>
+  );
+}
+
+function F5Tools({ ctx }) {
+  const [sub, setSub] = useState("summary");
+  return (
+    <div>
+      <div style={{display:"flex",gap:6,marginBottom:10}}>
+        {[["summary","Class summary"],["gce","GCE analysis"],["setup","Setup"]].map(([k,l])=>(
+          <button key={k} onClick={()=>setSub(k)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:`2px solid ${sub===k?C.navy:C.grayLight}`,background:sub===k?C.navy:C.white,color:sub===k?C.white:C.gray,fontWeight:700,fontSize:11.5,cursor:"pointer"}}>{l}</button>
+        ))}
+      </div>
+      {sub==="summary" && <F5Summary ctx={ctx}/>}
+      {sub==="gce"     && <F5Gce ctx={ctx}/>}
+      {sub==="setup"   && <F5SetupPanel ctx={ctx}/>}
     </div>
   );
 }
@@ -3296,7 +3604,7 @@ function MarksControlPage({ ctx }) {
         </div>
       </div>
 
-      {tab==="f5" && <F5SetupPanel ctx={ctx}/>}
+      {tab==="f5" && <F5Tools ctx={ctx}/>}
 
       {tab==="progress" && <>
         <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><SmBtn onClick={copyMissing} color={C.navyMid}>📋 Copy missing list</SmBtn></div>
