@@ -325,6 +325,7 @@ const navItems = [
   { key:"teachers",     label:"Teachers",     icon:"👩‍🏫", roles:["admin"] },
   { key:"marks",        label:"Enter Marks",  icon:"✏️", roles:["admin","teacher"] },
   { key:"markctl",      label:"Marks Control",icon:"🔒", roles:["admin"] },
+  { key:"remarks",      label:"Class Remarks",icon:"🗒️", roles:["admin","teacher"] },
   { key:"attendance",   label:"Attendance",   icon:"🗓️", roles:["admin","teacher"] },
   { key:"reports",      label:"Report Cards", icon:"📄", roles:["admin"] },
   { key:"performance",  label:"Performance",  icon:"📈", roles:["admin","teacher"] },
@@ -409,6 +410,7 @@ export default function App() {
   const [councilReady,     setCouncilReady]     = useState(true); // false until the council tables exist in Supabase
   const [notices,    setNotices]    = useState([]);
   const [settings,   setSettings]   = useState({});   // app_settings key → value (e.g. next_term_begins)
+  const [remarksMap, setRemarksMap] = useState({}); // "studentId|year|term" → {conduct, remark}
   const [markDeadlines, setMarkDeadlines] = useState([]); // {acad_year, seq, deadline}
   const [markUnlocks,   setMarkUnlocks]   = useState([]); // {form, acad_year, seq}
   const [loading,    setLoading]    = useState(true);
@@ -530,11 +532,13 @@ export default function App() {
       setCouncilDecisions(cd || []);
       setCouncilReady(!cmErr && !cdErr);
       // Optional tables from migration.sql — the app still works if they don't exist yet
-      const [{ data: ss }, { data: dl }, { data: ul }] = await Promise.all([
+      const [{ data: ss }, { data: dl }, { data: ul }, { data: rm }] = await Promise.all([
         supabase.from("app_settings").select("*"),
         supabase.from("mark_deadlines").select("*"),
         supabase.from("mark_unlocks").select("*"),
+        supabase.from("class_remarks").select("*"),
       ]);
+      setRemarksMap(Object.fromEntries((rm||[]).map(r => [`${r.student_id}|${r.acad_year}|${r.term}`, r])));
       setSettings(Object.fromEntries((ss||[]).map(r => [r.key, r.value])));
       setMarkDeadlines(dl || []);
       setMarkUnlocks(ul || []);
@@ -660,6 +664,7 @@ export default function App() {
       id: t.id, name: t.name, email: t.email,
       subjects: t.subjects||[], forms: t.forms||[],
       ...(t.assignments !== undefined ? { assignments: t.assignments } : {}),
+      ...(t.class_teacher_of !== undefined ? { class_teacher_of: t.class_teacher_of } : {}),
       active: t.active!==false, joined: t.joined||todayStr(),
     };
     const { error } = await supabase.from("teachers").upsert(row, { onConflict:"id" });
@@ -675,6 +680,15 @@ export default function App() {
     }, { onConflict:"student_id,subject,seq,acad_year" });
     if (error) throw error;
     await loadAll(); // refresh marks immediately
+  }
+
+  async function saveRemarks(rows) {
+    const now = new Date().toISOString();
+    const { error } = await supabase.from("class_remarks").upsert(
+      rows.map(r => ({ ...r, updated_by:currentUser.name, updated_at:now })),
+      { onConflict:"student_id,acad_year,term" });
+    if (error) throw error;
+    await loadAll();
   }
 
   async function saveSetting(key, value) {
@@ -940,6 +954,7 @@ export default function App() {
     auth: { user: currentUser, role: userRole },
     students, teachers, marksMap, feesMap, notices, attendanceMap, calendarEvents,
     saveStudent, deleteStudent, saveTeacher, saveMark,
+    remarksMap, saveRemarks,
     settings, markDeadlines, markUnlocks, saveSetting, saveDeadline, setClassUnlocked,
     saveFee, saveNotice, deleteNotice, loadAll, saveAttendanceBulk,
     saveCalendarEvent, deleteCalendarEvent,
@@ -1054,6 +1069,7 @@ export default function App() {
           {page==="teachers"     && ctx.auth.role==="admin" && <TeachersPage    ctx={ctx}/>}
           {page==="marks"        && <MarksPage        ctx={ctx}/>}
           {page==="markctl"      && ctx.auth.role==="admin" && <MarksControlPage ctx={ctx}/>}
+          {page==="remarks"      && <ClassRemarksPage ctx={ctx}/>}
           {page==="attendance"   && <AttendancePage   ctx={ctx}/>}
           {page==="reports"      && userRole==="admin" && <ReportsPage ctx={ctx}/>}
           {page==="performance"  && <PerformancePage  ctx={ctx}/>}
@@ -1327,10 +1343,34 @@ function ParentPortalResults({ data, matricule, pin, onBack, onExit }) {
   const { student, marks, attendance, fee, recent_submissions } = data;
   const [tab, setTab] = useState("marks");
   const [refreshedData, setRefreshedData] = useState(data);
+  const [extra, setExtra] = useState(null); // class teacher remarks + next term date (needs migration3.sql)
+  useEffect(() => {
+    supabase.rpc("parent_report_extra", { p_matricule: matricule, p_pin: pin })
+      .then(({ data: d, error }) => { if (!error && d) setExtra(d); }, () => {});
+  }, []);
+
+  // Only the latest academic year's marks (when the data says which year)
+  const allMarks = marks || [];
+  const curYear  = allMarks.map(m => m.acad_year).filter(Boolean).sort().pop();
+  const marksNow = curYear ? allMarks.filter(m => m.acad_year===curYear) : allMarks;
+  const termAverage = term => {
+    const bySub = {};
+    marksNow.filter(m => TERM_SEQS[term].includes(m.seq) && m.score!==null && m.score!==undefined)
+            .forEach(m => { (bySub[m.subject] = bySub[m.subject] || []).push(m); });
+    let tw = 0, tc = 0;
+    Object.entries(bySub).forEach(([sub, list]) => {
+      const avg = list.reduce((a,m)=>a+Number(m.score),0) / list.length;
+      const c = Number(list[0].coeff) || getCoeff(sub);
+      tw += avg*c; tc += c;
+    });
+    return tc ? tw/tc : null;
+  };
+  const remarkRows = (extra?.remarks||[]).filter(r => !curYear || r.acad_year===curYear)
+    .sort((a,b) => TERMS.indexOf(a.term) - TERMS.indexOf(b.term));
 
   // Group marks by subject, term
   const bySubject = {};
-  (marks||[]).forEach(m => {
+  marksNow.forEach(m => {
     if (!bySubject[m.subject]) bySubject[m.subject] = [];
     bySubject[m.subject].push(m);
   });
@@ -1370,6 +1410,32 @@ function ParentPortalResults({ data, matricule, pin, onBack, onExit }) {
           ))}
         </div>
 
+        {tab==="marks" && marksNow.length>0 && (
+          <div style={{background:C.white,borderRadius:10,padding:12,marginBottom:11,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+            <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:8}}>Term averages (out of 20)</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,textAlign:"center"}}>
+              {TERMS.map(t => { const a = termAverage(t); const g = a!==null ? scoreToGrade(a) : null; return (
+                <div key={t} style={{background:C.grayBg,borderRadius:8,padding:"8px 4px"}}>
+                  <div style={{fontSize:10,color:C.gray}}>{t.replace(" Term","")}</div>
+                  <div style={{fontSize:18,fontWeight:900,color:g?gradeCol(g.grade):C.gray}}>{a!==null?a.toFixed(2):"—"}</div>
+                  <div style={{fontSize:10,color:g?gradeCol(g.grade):C.gray,fontWeight:700}}>{g?g.remark:""}</div>
+                </div>
+              ); })}
+            </div>
+            {extra?.next_term_begins && <div style={{fontSize:12,color:C.navy,marginTop:10}}>📅 Next term begins: <strong>{fmtDate(extra.next_term_begins)}</strong></div>}
+          </div>
+        )}
+        {tab==="marks" && remarkRows.length>0 && (
+          <div style={{background:C.white,borderRadius:10,padding:12,marginBottom:11,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+            <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:8}}>Class teacher's remarks</div>
+            {remarkRows.map(r => (
+              <div key={r.term} style={{padding:"7px 0",borderTop:`1px solid ${C.grayBg}`}}>
+                <div style={{fontSize:11,color:C.gray}}>{r.term}{r.conduct ? <> · Conduct: <strong style={{color:C.navy}}>{r.conduct}</strong></> : null}</div>
+                {r.remark && <div style={{fontSize:12.5,color:C.navy,marginTop:2}}>{r.remark}</div>}
+              </div>
+            ))}
+          </div>
+        )}
         {tab==="marks" && (
           <div style={{background:C.white,borderRadius:10,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
             {Object.keys(bySubject).length===0
@@ -1563,8 +1629,90 @@ function PayFeesPanel({ matricule, pin, balance, onSubmitted }) {
 }
 
 // ─── Dashboard ─────────────────────────────────────────────────────────────────
+// ─── Missing-marks alert (teachers' dashboard) ────────────────────────────────
+function MissingMarksAlert({ ctx, setPage }) {
+  const { auth, teachers, students, marksMap, markDeadlines, markUnlocks } = ctx;
+  if (auth.role !== "teacher") return null;
+  const teacher = findTeacher(teachers, auth.user.email);
+  if (!teacher) return null;
+  const today = new Date(localToday());
+  const items = [];
+  markDeadlines.forEach(d => {
+    FORMS.forEach(form => {
+      const subs = teacherSubjectsIn(teacher, form).filter(sb => SUBJECTS_BY_FORM[form]?.includes(sb));
+      if (!subs.length || lockStatus(form, d.seq, d.acad_year, markDeadlines, markUnlocks).locked) return;
+      const pool = students.filter(s => s.active && s.reg_status==="registered" && s.form===form);
+      if (!pool.length) return;
+      subs.forEach(sub => {
+        const n = pool.filter(s => marksMap[`${s.id}-${sub}-${d.seq}-${d.acad_year}`]).length;
+        if (n < pool.length) items.push({ seq:d.seq, deadline:d.deadline, form, sub, n, total:pool.length });
+      });
+    });
+  });
+  if (!items.length) return null;
+  items.sort((a,b) => a.deadline.localeCompare(b.deadline) || a.form.localeCompare(b.form));
+  const shown = items.slice(0, 8);
+  const days = dl => Math.round((new Date(dl) - today) / 864e5);
+  return (
+    <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:11,padding:12,marginBottom:14}}>
+      <div style={{fontWeight:800,color:"#92400e",fontSize:13,marginBottom:6}}>⚠️ Marks still to enter ({items.length})</div>
+      {shown.map((x,i) => {
+        const dd = days(x.deadline);
+        return (
+          <div key={i} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"4px 0",borderTop:i?"1px solid #fde68a":"none",fontSize:12}}>
+            <span style={{color:C.navy}}><strong>{x.form}</strong> · {x.sub} · {x.seq}</span>
+            <span style={{color:dd<0?C.red:"#92400e",fontWeight:700,whiteSpace:"nowrap"}}>{x.n}/{x.total} · {dd<0?"overdue":dd===0?"due today":`${dd}d left`}</span>
+          </div>
+        );
+      })}
+      {items.length>shown.length && <div style={{fontSize:11,color:"#92400e",marginTop:4}}>+ {items.length-shown.length} more</div>}
+      <button onClick={()=>setPage("marks")} style={{marginTop:9,padding:"8px 14px",background:"#92400e",color:C.white,border:"none",borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer"}}>Enter marks</button>
+    </div>
+  );
+}
+
+// ─── Full backup to Excel (admin) ─────────────────────────────────────────────
+async function fetchAllRows(table, orderCols) {
+  const out = [], size = 1000;
+  for (let from = 0; ; from += size) {
+    let q = supabase.from(table).select("*");
+    orderCols.forEach(c => { q = q.order(c); });
+    const { data, error } = await q.range(from, from+size-1);
+    if (error) throw error;
+    out.push(...data);
+    if (data.length < size) break;
+  }
+  return out;
+}
+
+async function exportBackup() {
+  const [students, teachers, marks, fees, att, rem, dl] = await Promise.all([
+    fetchAllRows("students", ["id"]),
+    fetchAllRows("teachers", ["id"]),
+    fetchAllRows("marks", ["student_id","subject","seq","acad_year"]),
+    fetchAllRows("fees", ["student_id"]),
+    fetchAllRows("attendance", ["student_id","date"]),
+    supabase.from("class_remarks").select("*").then(r => r.data || []),
+    supabase.from("mark_deadlines").select("*").then(r => r.data || []),
+  ]);
+  const st = Object.fromEntries(students.map(s => [s.id, s]));
+  const tn = Object.fromEntries(teachers.map(t => [t.id, t.name]));
+  const nm = id => st[id]?.name || "";
+  const fm = id => st[id]?.form || "";
+  exportToExcelMultiSheet([
+    { name:"Students", rows: students.map(s => ({ Matricule:s.id, Name:s.name, Form:s.form, Gender:s.gender||"", "Date of birth":s.dob||"", Parent:s.parent||"", Phone:s.phone||"", Address:s.address||"", Registration:s.reg_status||"", Active:s.active===false?"No":"Yes", Graduated:s.graduated?"Yes":"No" })) },
+    { name:"Marks", rows: marks.map(m => ({ Matricule:m.student_id, Name:nm(m.student_id), Form:fm(m.student_id), Subject:m.subject, Sequence:m.seq, Year:m.acad_year, "Score /20":m.score, Coeff:m.coeff, Teacher:tn[m.teacher_id]||"" })) },
+    { name:"Fees", rows: fees.map(f => ({ Matricule:f.student_id, Name:nm(f.student_id), Form:fm(f.student_id), Paid:f.paid||0, Total:f.total||TOTAL_FEE, Balance:(f.total||TOTAL_FEE)-(f.paid||0) })) },
+    { name:"Attendance", rows: att.map(a => ({ Matricule:a.student_id, Name:nm(a.student_id), Form:fm(a.student_id), Date:a.date, Status:a.status })) },
+    { name:"Teachers", rows: teachers.map(t => ({ Name:t.name, Email:t.email, Active:t.active===false?"No":"Yes", "Class teacher of":t.class_teacher_of||"", Classes: FORMS.filter(f=>teacherSubjectsIn(t,f).length).map(f=>f+": "+teacherSubjectsIn(t,f).join(", ")).join(" | ") })) },
+    { name:"Class remarks", rows: rem.map(r => ({ Matricule:r.student_id, Name:nm(r.student_id), Form:fm(r.student_id), Year:r.acad_year, Term:r.term, Conduct:r.conduct||"", Remark:r.remark||"" })) },
+    { name:"Deadlines", rows: dl.map(d => ({ Year:d.acad_year, Sequence:d.seq, Deadline:d.deadline })) },
+  ], `SBCC-Backup-${todayStr()}.xlsx`);
+}
+
 function DashboardPage({ ctx, setPage }) {
   const { students, feesMap, notices, auth } = ctx;
+  const [backingUp, setBackingUp] = useState(false);
   const active     = students.filter(s => s.active);
   const regCount   = active.filter(s => s.reg_status==="registered").length;
   const pendCount  = active.filter(s => s.reg_status==="pending").length;
@@ -1585,6 +1733,7 @@ function DashboardPage({ ctx, setPage }) {
           <p style={{margin:"4px 0 0",color:"rgba(255,255,255,0.6)",fontSize:12}}>Academic Year 2026/2027 · Saker Baptist Comprehensive College Bawe</p>
         </div>
       </div>
+      <MissingMarksAlert ctx={ctx} setPage={setPage}/>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
         {cards.map(c => (
           <div key={c.label} onClick={()=>setPage(c.page)} style={{background:C.white,borderRadius:11,padding:13,borderLeft:`4px solid ${c.color}`,cursor:"pointer",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
@@ -1594,6 +1743,14 @@ function DashboardPage({ ctx, setPage }) {
           </div>
         ))}
       </div>
+      {auth.role==="admin" && (
+        <div style={{marginBottom:11}}>
+          <Card title="💾 Backup">
+            <div style={{fontSize:11.5,color:C.gray,marginBottom:8}}>One Excel file with students, marks, fees, attendance, teachers and class remarks. Photos are not included.</div>
+            <Btn disabled={backingUp} onClick={async()=>{ setBackingUp(true); try { await exportBackup(); } catch(e) { alert("Backup failed: "+e.message); } setBackingUp(false); }}>{backingUp?"Preparing…":"Download backup (Excel)"}</Btn>
+          </Card>
+        </div>
+      )}
       <Card title="Enrollment by Form">
         {FORMS.map(f => {
           const n = active.filter(s=>s.form===f).length;
@@ -2530,8 +2687,9 @@ function TeachersPage({ ctx }) {
       });
       if (error) throw new Error(await functionErrorMessage(error));
       if (data?.error) throw new Error(data.error);
-      if (Object.keys(a).length) {
-        const { error: e2 } = await supabase.from("teachers").update({ assignments:a }).ilike("email", form.email.trim());
+      const extra = { ...(Object.keys(a).length ? { assignments:a } : {}), ...(form.class_teacher_of ? { class_teacher_of:form.class_teacher_of } : {}) };
+      if (Object.keys(extra).length) {
+        const { error: e2 } = await supabase.from("teachers").update(extra).ilike("email", form.email.trim());
         if (e2) throw new Error("Account created, but saving the classes failed: "+e2.message+". Run migration2.sql in Supabase, then edit this teacher.");
       }
       setModal({ justCreated:true, name:form.name, email:form.email.trim().toLowerCase(), password:form.password });
@@ -2561,7 +2719,7 @@ function TeachersPage({ ctx }) {
   async function editTeacher() {
     if (!form.name?.trim()) return;
     setSaving(true);
-    try { const a = cleanAssign(form.assignments); await saveTeacher({ id:modal.id, name:form.name, email:form.email, ...derive(a), assignments:a, active:form.active, joined:form.joined }); setModal(null); }
+    try { const a = cleanAssign(form.assignments); await saveTeacher({ id:modal.id, name:form.name, email:form.email, ...derive(a), assignments:a, ...("class_teacher_of" in form ? { class_teacher_of: form.class_teacher_of||null } : {}), active:form.active, joined:form.joined }); setModal(null); }
     catch(e) { setErr("Error: "+e.message); }
     setSaving(false);
   }
@@ -2594,6 +2752,7 @@ function TeachersPage({ ctx }) {
             </div>
             <Pill color={t.active?C.green:C.red}>{t.active?"Active":"Inactive"}</Pill>
           </div>
+          {t.class_teacher_of && <div style={{marginTop:6,fontSize:11.5,color:C.green,fontWeight:700}}>🗒️ Class teacher of {t.class_teacher_of}</div>}
           {FORMS.filter(f=>teacherSubjectsIn(t,f).length).map(f=>(
             <div key={f} style={{marginTop:6,display:"flex",flexWrap:"wrap",gap:4,alignItems:"center"}}>
               <Pill color={C.gold}>{f}</Pill>
@@ -2682,6 +2841,13 @@ function TeachersPage({ ctx }) {
                 </div>
               </div>
             ))}
+          </div>
+          <div style={{marginTop:10}}>
+            <Fr label="Class teacher of (writes conduct & remarks for that form)">
+              <select style={inp} value={form.class_teacher_of||""} onChange={e=>setForm(f=>({...f,class_teacher_of:e.target.value||null}))}>
+                <option value="">— none —</option>{FORMS.map(f=><option key={f}>{f}</option>)}
+              </select>
+            </Fr>
           </div>
           {err && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"8px 12px",color:C.red,fontSize:12,marginTop:10}}>{err}</div>}
           <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:13}}>
@@ -2981,6 +3147,84 @@ function MarksControlPage({ ctx }) {
           );
         })}
       </>}
+    </div>
+  );
+}
+
+// ─── Class Remarks: the class teacher writes conduct + remark for every student ───
+const CONDUCT_OPTIONS = ["Excellent","Very Good","Good","Satisfactory","Needs Improvement"];
+
+function ClassRemarksPage({ ctx }) {
+  const { students, teachers, auth, remarksMap, saveRemarks } = ctx;
+  const isTeacher = auth.role==="teacher";
+  const teacher   = findTeacher(teachers, auth.user.email);
+  const myForms   = isTeacher ? (teacher?.class_teacher_of ? [teacher.class_teacher_of] : []) : FORMS;
+  const [sel, setSel] = useState({ form:myForms[0]||"Form 1", year:"2026/2027", term:"First Term" });
+  const [local, setLocal] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => { if (myForms.length && !myForms.includes(sel.form)) setSel(x => ({ ...x, form:myForms[0] })); }, [myForms.join("|")]);
+
+  const pool = students.filter(s => s.active && s.reg_status==="registered" && s.form===sel.form);
+  useEffect(() => {
+    const init = {};
+    pool.forEach(s => { const r = remarksMap[`${s.id}|${sel.year}|${sel.term}`]; init[s.id] = { conduct:r?.conduct||"", remark:r?.remark||"" }; });
+    setLocal(init); setSaved(false);
+  }, [sel.form, sel.year, sel.term, students.length]);
+
+  if (isTeacher && !myForms.length) return (
+    <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:10,padding:12,fontSize:12.5,color:"#78350f"}}>
+      <strong>⚠️ Not a class teacher yet.</strong> Ask the administrator to open Teachers, edit your profile and choose the form you are class teacher of.
+    </div>
+  );
+
+  const setField = (id, k, v) => { setLocal(p => ({ ...p, [id]: { ...p[id], [k]:v } })); setSaved(false); };
+  async function saveAll() {
+    const rows = pool
+      .filter(s => local[s.id] && (local[s.id].conduct || local[s.id].remark.trim()))
+      .map(s => ({ student_id:s.id, acad_year:sel.year, term:sel.term, conduct:local[s.id].conduct||null, remark:local[s.id].remark.trim()||null }));
+    if (!rows.length) { alert("Nothing to save."); return; }
+    setSaving(true);
+    try { await saveRemarks(rows); setSaved(true); }
+    catch(e) { alert("Save error: "+e.message+"\n\nHave you run migration3.sql in Supabase?"); }
+    setSaving(false);
+  }
+  const done = pool.filter(s => local[s.id]?.remark?.trim()).length;
+
+  return (
+    <div>
+      <div style={{background:C.white,borderRadius:10,padding:12,marginBottom:11,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <div><label style={lbl}>Form</label><select style={inp} value={sel.form} onChange={e=>setSel(x=>({...x,form:e.target.value}))}>{myForms.map(f=><option key={f}>{f}</option>)}</select></div>
+          <div><label style={lbl}>Academic Year</label><select style={inp} value={sel.year} onChange={e=>setSel(x=>({...x,year:e.target.value}))}>{ACAD_YEARS.map(y=><option key={y}>{y}</option>)}</select></div>
+        </div>
+        <div style={{display:"flex",gap:6,marginTop:10}}>
+          {TERMS.map(t => (
+            <button key={t} onClick={()=>setSel(x=>({...x,term:t}))} style={{flex:1,padding:"8px 4px",borderRadius:8,border:`2px solid ${sel.term===t?C.navy:C.grayLight}`,background:sel.term===t?C.navy:C.white,color:sel.term===t?C.white:C.gray,fontWeight:700,fontSize:11,cursor:"pointer"}}>{t}</button>
+          ))}
+        </div>
+        <div style={{fontSize:10.5,color:C.gray,marginTop:8}}>Appears on the report card. The Third Term remark is also used on the annual report.</div>
+      </div>
+
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,gap:8}}>
+        <span style={{fontSize:12,color:C.gray}}>{done}/{pool.length} remarks written</span>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          {saved && <span style={{fontSize:12,color:C.green,fontWeight:700}}>✓ Saved</span>}
+          <Btn onClick={saveAll} disabled={saving}>{saving?"Saving…":"Save all"}</Btn>
+        </div>
+      </div>
+
+      {!pool.length ? <Empty text="No registered students in this form."/> : pool.map(s => (
+        <div key={s.id} style={{background:C.white,borderRadius:10,padding:"10px 12px",marginBottom:7,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:7}}>
+            <div style={{minWidth:0}}><div style={{fontWeight:700,color:C.navy,fontSize:13}}>{s.name}</div><div style={{fontSize:10,fontFamily:"monospace",color:C.gray}}>{s.id}</div></div>
+            <select style={{...inp,width:140,padding:"6px 8px",fontSize:12}} value={local[s.id]?.conduct||""} onChange={e=>setField(s.id,"conduct",e.target.value)}>
+              <option value="">Conduct…</option>{CONDUCT_OPTIONS.map(o=><option key={o}>{o}</option>)}
+            </select>
+          </div>
+          <input style={inp} placeholder="Class teacher's remark" value={local[s.id]?.remark||""} onChange={e=>setField(s.id,"remark",e.target.value)}/>
+        </div>
+      ))}
     </div>
   );
 }
@@ -3493,7 +3737,8 @@ async function htmlDocsToPdfBlob(docs, onProgress, scale=2, quality=0.92) {
 }
 
 function ReportsPageInner({ ctx }) {
-  const { students, marksMap, teachers, attendanceMap, feesMap, settings, saveSetting } = ctx;
+  const { students, marksMap, teachers, attendanceMap, feesMap, settings, saveSetting, remarksMap } = ctx;
+  const remTerm = sel0 => sel0.mode==="term" ? sel0.term : "Third Term";
   const [sel,     setSel]     = useState({ studentId:"", year:"2026/2027", mode:"term", term:"First Term" });
   const [conduct, setConduct] = useState({ present:"", absent:"", late:"", conduct:"Very Good", classTeacherRemark:"", principalRemark:"" });
   const [showC,   setShowC]   = useState(false);
@@ -3523,6 +3768,11 @@ function ReportsPageInner({ ctx }) {
   }, [student?.id]);
 
   const env = { students, marksMap, teachers, feesMap, settings };
+  const curRem = student ? remarksMap?.[`${student.id}|${sel.year}|${remTerm(sel)}`] : null;
+  useEffect(() => {
+    if (!student) return;
+    setConduct(c => ({ ...c, conduct: curRem?.conduct || "Very Good", classTeacherRemark: curRem?.remark || "" }));
+  }, [student?.id, sel.year, sel.term, sel.mode, curRem?.conduct, curRem?.remark]);
   const modeRows = student ? computeReport(student, env, sel).modeRows : [];
   const periodLabel = sel.mode==="term" ? sel.term : "Annual";
   const buildPrintHTML = () => (!student || !modeRows.length) ? "" : reportCardDoc(reportCardParts(student, env, sel, conduct), "Report Card – "+student.name);
@@ -3534,7 +3784,8 @@ function ReportsPageInner({ ctx }) {
     pool.forEach(s => {
       if (!computeReport(s, env, sel).modeRows.length) { skipped++; return; }
       const att = attendanceTotals(s, attendanceMap);
-      list.push(reportCardParts(s, env, sel, { present:String(att.present), absent:String(att.absent), late:String(att.late), conduct:"", classTeacherRemark:"", principalRemark:"" }));
+      const rm = remarksMap?.[`${s.id}|${sel.year}|${remTerm(sel)}`];
+      list.push(reportCardParts(s, env, sel, { present:String(att.present), absent:String(att.absent), late:String(att.late), conduct:rm?.conduct||"", classTeacherRemark:rm?.remark||"", principalRemark:"" }));
     });
     if (!list.length) { alert("No student in "+batchForm+" has marks for this period."); return; }
     if (skipped && !window.confirm(skipped+" student(s) have no marks for this period and will be left out. Print "+list.length+" report cards?")) return;
