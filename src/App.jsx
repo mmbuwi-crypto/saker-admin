@@ -3442,7 +3442,7 @@ function downloadBlob(blob, filename) {
 }
 
 // Renders full HTML pages (one A4 page each) into a real PDF file. Needs: npm i html2canvas jspdf
-async function htmlDocsToPdfBlob(docs) {
+async function htmlDocsToPdfBlob(docs, onProgress, scale=2, quality=0.92) {
   const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import("html2canvas"), import("jspdf")]);
   const pdf = new jsPDF({ unit:"mm", format:"a4", orientation:"portrait" });
   for (let i=0; i<docs.length; i++) {
@@ -3453,10 +3453,13 @@ async function htmlDocsToPdfBlob(docs) {
     const d = frame.contentDocument;
     await Promise.all([...d.images].map(im => im.complete ? 0 : new Promise(r => { im.onload = im.onerror = r; })));
     await new Promise(r => setTimeout(r, 120));
-    const canvas = await html2canvas(d.documentElement, { scale:2, backgroundColor:"#ffffff", width:794, height:1123, windowWidth:794, windowHeight:1123, useCORS:true });
+    const canvas = await html2canvas(d.documentElement, { scale, backgroundColor:"#ffffff", width:794, height:1123, windowWidth:794, windowHeight:1123, useCORS:true });
     if (i>0) pdf.addPage();
-    pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, 210, 297);
+    pdf.addImage(canvas.toDataURL("image/jpeg", quality), "JPEG", 0, 0, 210, 297);
+    canvas.width = canvas.height = 0; // free memory
     frame.remove();
+    onProgress?.(i+1, docs.length);
+    await new Promise(r => setTimeout(r, 30));
   }
   return pdf.output("blob");
 }
@@ -3467,6 +3470,7 @@ function ReportsPageInner({ ctx }) {
   const [conduct, setConduct] = useState({ present:"", absent:"", late:"", conduct:"Very Good", classTeacherRemark:"", principalRemark:"" });
   const [showC,   setShowC]   = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [batchProg, setBatchProg] = useState(null); // null | {done,total}
   const [batchForm, setBatchForm] = useState("Form 1");
   const [nextTerm, setNextTerm] = useState(settings?.next_term_begins || "");
   const [savingNT, setSavingNT] = useState(false);
@@ -3496,7 +3500,7 @@ function ReportsPageInner({ ctx }) {
   const buildPrintHTML = () => (!student || !modeRows.length) ? "" : reportCardDoc(reportCardParts(student, env, sel, conduct), "Report Card – "+student.name);
 
   // One document with every card of a class, alphabetical, one per A4 page
-  function printClass() {
+  async function printClass() {
     const pool = students.filter(s=>s.active && s.form===batchForm && s.reg_status==="registered");
     const list = []; let skipped = 0;
     pool.forEach(s => {
@@ -3506,7 +3510,13 @@ function ReportsPageInner({ ctx }) {
     });
     if (!list.length) { alert("No student in "+batchForm+" has marks for this period."); return; }
     if (skipped && !window.confirm(skipped+" student(s) have no marks for this period and will be left out. Print "+list.length+" report cards?")) return;
-    domPrint("sbc-class-reports", reportCardBatchDoc(list, batchForm+" report cards"), "A4 portrait", "8mm");
+    setBatchProg({ done:0, total:list.length });
+    try {
+      const docs = list.map(p => reportCardDoc(p, "Report Card"));
+      const blob = await htmlDocsToPdfBlob(docs, (done,total) => setBatchProg({ done, total }), 1.5, 0.85);
+      downloadBlob(blob, "Report-Cards-"+batchForm.replace(/\s+/g,"")+"-"+periodLabel.replace(/\s+/g,"")+".pdf");
+    } catch(e) { alert("Could not create the PDF: "+e.message); }
+    setBatchProg(null);
   }
 
   async function shareWhatsApp() {
@@ -3574,12 +3584,12 @@ function ReportsPageInner({ ctx }) {
       </div>
 
       <div style={{background:C.white,borderRadius:10,padding:12,marginBottom:11,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
-        <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:8}}>🖨 Whole class (one PDF)</div>
+        <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:8}}>📄 Whole class (one PDF)</div>
         <div style={{display:"flex",gap:8}}>
           <select style={{...inp,flex:1}} value={batchForm} onChange={e=>setBatchForm(e.target.value)}>{FORMS.map(f=><option key={f}>{f}</option>)}</select>
-          <Btn onClick={printClass}>Print all</Btn>
+          <Btn onClick={printClass} disabled={!!batchProg}>{batchProg?`${batchProg.done}/${batchProg.total}…`:"Make PDF"}</Btn>
         </div>
-        <div style={{fontSize:10.5,color:C.gray,marginTop:6}}>Uses the year / report type / term above. Choose "Save as PDF" in the print window.</div>
+        <div style={{fontSize:10.5,color:C.gray,marginTop:6}}>Uses the year / report type / term above. Downloads one PDF. Keep this screen open until it finishes.</div>
         <div style={{borderTop:`1px solid ${C.grayLight}`,marginTop:11,paddingTop:10}}>
           <label style={lbl}>Next term begins (printed on every card)</label>
           <div style={{display:"flex",gap:8}}>
