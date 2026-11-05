@@ -45,6 +45,17 @@ const getCoeff = sub => DEFAULT_COEFF[sub] || 2;
 
 // Match a logged-in user to their teacher profile (ignores capital letters and stray spaces in the email)
 const normEmail = e => String(e || "").trim().toLowerCase();
+// Subjects a teacher teaches in ONE class. Uses the per-class assignments; teachers not converted yet
+// fall back to the old rule (every subject in every ticked class).
+function teacherSubjectsIn(t, form) {
+  if (!t) return [];
+  if (t.assignments && Object.keys(t.assignments).length) return t.assignments[form] || [];
+  return (t.forms||[]).includes(form) ? (t.subjects||[]) : [];
+}
+function teacherAssignments(t) {
+  if (t?.assignments && Object.keys(t.assignments).length) return { ...t.assignments };
+  return Object.fromEntries((t?.forms||[]).map(f => [f, [...(t.subjects||[])]]));
+}
 const findTeacher = (teachers, email) => teachers.find(t => normEmail(t.email) === normEmail(email));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -648,6 +659,7 @@ export default function App() {
     const row = {
       id: t.id, name: t.name, email: t.email,
       subjects: t.subjects||[], forms: t.forms||[],
+      ...(t.assignments !== undefined ? { assignments: t.assignments } : {}),
       active: t.active!==false, joined: t.joined||todayStr(),
     };
     const { error } = await supabase.from("teachers").upsert(row, { onConflict:"id" });
@@ -2487,12 +2499,17 @@ async function functionErrorMessage(error) {
 function TeachersPage({ ctx }) {
   const { teachers, saveTeacher } = ctx;
   const [modal,  setModal]  = useState(null);
-  const [form,   setForm]   = useState({ name:"", email:"", password:"", subjects:[], forms:[], active:true });
+  const [form,   setForm]   = useState({ name:"", email:"", password:"", assignments:{}, active:true });
   const [saving, setSaving] = useState(false);
   const [err,    setErr]    = useState("");
   const [reset,  setReset]  = useState(null); // { t, password, done }
 
-  const toggle = (k,v) => setForm(f => ({ ...f, [k]: f[k].includes(v) ? f[k].filter(x=>x!==v) : [...f[k],v] }));
+  // Per-class assignments: { "Form 1": ["Mathematics"], "Form 3": ["Physics"] }
+  const setAssign   = fn => setForm(f => ({ ...f, assignments: fn({ ...(f.assignments||{}) }) }));
+  const toggleClass = fm => setAssign(a => { if (a[fm]) delete a[fm]; else a[fm] = []; return a; });
+  const toggleSub   = (fm, sub) => setAssign(a => { const cur = a[fm]||[]; a[fm] = cur.includes(sub) ? cur.filter(x=>x!==sub) : [...cur, sub]; return a; });
+  const cleanAssign = a => Object.fromEntries(Object.entries(a||{}).filter(([,v]) => v.length));
+  const derive      = a => ({ forms: FORMS.filter(f=>a[f]), subjects: [...new Set(Object.values(a).flat())] });
 
   function randomPassword() {
     // Easy-to-read 8-character password: avoids ambiguous characters (0/O, 1/l/I)
@@ -2507,11 +2524,16 @@ function TeachersPage({ ctx }) {
     if (form.password.length < 6) { setErr("The password must be at least 6 characters."); return; }
     setErr(""); setSaving(true);
     try {
+      const a = cleanAssign(form.assignments), d = derive(a);
       const { data, error } = await supabase.functions.invoke(TEACHER_FUNCTION, {
-        body: { action:"create", name:form.name.trim(), email:form.email.trim().toLowerCase(), password:form.password, subjects:form.subjects, forms:form.forms },
+        body: { action:"create", name:form.name.trim(), email:form.email.trim().toLowerCase(), password:form.password, subjects:d.subjects, forms:d.forms },
       });
       if (error) throw new Error(await functionErrorMessage(error));
       if (data?.error) throw new Error(data.error);
+      if (Object.keys(a).length) {
+        const { error: e2 } = await supabase.from("teachers").update({ assignments:a }).ilike("email", form.email.trim());
+        if (e2) throw new Error("Account created, but saving the classes failed: "+e2.message+". Run migration2.sql in Supabase, then edit this teacher.");
+      }
       setModal({ justCreated:true, name:form.name, email:form.email.trim().toLowerCase(), password:form.password });
     } catch(e) { setErr("Could not create teacher: " + e.message); }
     setSaving(false);
@@ -2539,7 +2561,7 @@ function TeachersPage({ ctx }) {
   async function editTeacher() {
     if (!form.name?.trim()) return;
     setSaving(true);
-    try { await saveTeacher({ id:modal.id, name:form.name, email:form.email, subjects:form.subjects, forms:form.forms, active:form.active, joined:form.joined }); setModal(null); }
+    try { const a = cleanAssign(form.assignments); await saveTeacher({ id:modal.id, name:form.name, email:form.email, ...derive(a), assignments:a, active:form.active, joined:form.joined }); setModal(null); }
     catch(e) { setErr("Error: "+e.message); }
     setSaving(false);
   }
@@ -2559,7 +2581,7 @@ function TeachersPage({ ctx }) {
   return (
     <div>
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:9,gap:8}}>
-        <Btn onClick={()=>{setForm({name:"",email:"",password:randomPassword(),subjects:[],forms:[],active:true,joined:todayStr()});setErr("");setModal("add");}}>+ Create Teacher Account</Btn>
+        <Btn onClick={()=>{setForm({name:"",email:"",password:randomPassword(),assignments:{},active:true,joined:todayStr()});setErr("");setModal("add");}}>+ Create Teacher Account</Btn>
       </div>
       {err && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"10px 12px",color:C.red,fontSize:11,marginBottom:11,wordBreak:"break-word",whiteSpace:"pre-wrap"}}>{err}</div>}
       {teachers.map(t => (
@@ -2572,10 +2594,14 @@ function TeachersPage({ ctx }) {
             </div>
             <Pill color={t.active?C.green:C.red}>{t.active?"Active":"Inactive"}</Pill>
           </div>
-          <div style={{marginTop:7,display:"flex",flexWrap:"wrap",gap:4}}>{(t.subjects||[]).map(s=><Pill key={s} color={C.navyMid}>{s}</Pill>)}</div>
-          <div style={{marginTop:5,display:"flex",flexWrap:"wrap",gap:4}}>{(t.forms||[]).map(f=><Pill key={f} color={C.gold}>{f}</Pill>)}</div>
+          {FORMS.filter(f=>teacherSubjectsIn(t,f).length).map(f=>(
+            <div key={f} style={{marginTop:6,display:"flex",flexWrap:"wrap",gap:4,alignItems:"center"}}>
+              <Pill color={C.gold}>{f}</Pill>
+              {teacherSubjectsIn(t,f).map(sb=><Pill key={sb} color={C.navyMid}>{sb}</Pill>)}
+            </div>
+          ))}
           <div style={{display:"flex",gap:7,marginTop:8,flexWrap:"wrap"}}>
-            <SmBtn onClick={()=>{setForm({...t,password:""});setErr("");setModal(t);}} color={C.green}>Edit</SmBtn>
+            <SmBtn onClick={()=>{setForm({...t,password:"",assignments:teacherAssignments(t)});setErr("");setModal(t);}} color={C.green}>Edit</SmBtn>
             <SmBtn onClick={()=>{setErr("");setReset({t,password:randomPassword(),done:false});}} color={C.navyMid}>Reset Password</SmBtn>
             <SmBtn onClick={()=>saveTeacher({...t,active:!t.active})} color={t.active?C.red:C.green}>{t.active?"Deactivate":"Activate"}</SmBtn>
             <SmBtn onClick={()=>deleteTeacherFully(t)} color={C.red}>Delete Account</SmBtn>
@@ -2640,20 +2666,22 @@ function TeachersPage({ ctx }) {
             </Fr>
           )}
           <div style={{marginTop:8}}>
-            <label style={lbl}>Subjects</label>
+            <label style={lbl}>Classes taught — tap a class, then tick only the subjects taught in it</label>
             <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:5}}>
-              {SUBJECTS_BY_FORM["Form 4"].map(s => (
-                <button key={s} onClick={()=>toggle("subjects",s)} style={{padding:"4px 8px",borderRadius:12,border:`1px solid ${form.subjects?.includes(s)?C.navy:C.grayLight}`,background:form.subjects?.includes(s)?C.navy:C.white,color:form.subjects?.includes(s)?C.white:C.gray,fontSize:11,cursor:"pointer"}}>{s}</button>
-              ))}
+              {FORMS.map(f => { const on = !!form.assignments?.[f]; return (
+                <button key={f} onClick={()=>toggleClass(f)} style={{padding:"5px 10px",borderRadius:12,border:`1px solid ${on?C.gold:C.grayLight}`,background:on?C.gold:C.white,color:on?C.white:C.gray,fontSize:12,fontWeight:700,cursor:"pointer"}}>{f}</button>
+              ); })}
             </div>
-          </div>
-          <div style={{marginTop:8}}>
-            <label style={lbl}>Assigned Forms</label>
-            <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:5}}>
-              {FORMS.map(f => (
-                <button key={f} onClick={()=>toggle("forms",f)} style={{padding:"4px 8px",borderRadius:12,border:`1px solid ${form.forms?.includes(f)?C.gold:C.grayLight}`,background:form.forms?.includes(f)?C.gold:C.white,color:form.forms?.includes(f)?C.white:C.gray,fontSize:11,cursor:"pointer"}}>{f}</button>
-              ))}
-            </div>
+            {FORMS.filter(f=>form.assignments?.[f]).map(f => (
+              <div key={f} style={{marginTop:9,padding:"8px 10px",background:C.grayBg,borderRadius:8}}>
+                <div style={{fontSize:11.5,fontWeight:800,color:C.navy,marginBottom:5}}>{f}</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                  {SUBJECTS_BY_FORM[f].map(sb => { const on = form.assignments[f].includes(sb); return (
+                    <button key={sb} onClick={()=>toggleSub(f,sb)} style={{padding:"4px 8px",borderRadius:12,border:`1px solid ${on?C.navy:C.grayLight}`,background:on?C.navy:C.white,color:on?C.white:C.gray,fontSize:11,cursor:"pointer"}}>{sb}</button>
+                  ); })}
+                </div>
+              </div>
+            ))}
           </div>
           {err && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"8px 12px",color:C.red,fontSize:12,marginTop:10}}>{err}</div>}
           <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:13}}>
@@ -2670,7 +2698,7 @@ function TeachersPage({ ctx }) {
 function TeacherSetupNotice({ teacher, email, needSubjects }) {
   let msg = "";
   if (!teacher) msg = `Your login (${email}) is not linked to a teacher profile. Ask the administrator to open Teachers and check that your email matches.`;
-  else if (!(teacher.forms||[]).length) msg = "No classes are assigned to your profile yet. Ask the administrator to open Teachers, edit your profile and tick your classes.";
+  else if (!(teacher.forms||[]).length) msg = "No classes are assigned to your profile yet. Ask the administrator to open Teachers, edit your profile and choose your classes and subjects.";
   else if (needSubjects && !(teacher.subjects||[]).length) msg = "No subjects are assigned to your profile yet. Ask the administrator to open Teachers, edit your profile and tick your subjects.";
   if (!msg) return null;
   return <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:10,padding:12,marginBottom:11,fontSize:12.5,color:"#78350f"}}><strong>⚠️ Setup needed.</strong> {msg}</div>;
@@ -2689,7 +2717,7 @@ function MarksPage({ ctx }) {
     if (isTeacher && availForms.length && !availForms.includes(filter.form)) setFilter(f => ({ ...f, form:availForms[0], subject:"" }));
   }, [availForms.join("|")]);
   const availSubs  = isTeacher
-    ? (teacher?.subjects||[]).filter(s=>SUBJECTS_BY_FORM[filter.form]?.includes(s))
+    ? teacherSubjectsIn(teacher, filter.form).filter(s=>SUBJECTS_BY_FORM[filter.form]?.includes(s))
     : (SUBJECTS_BY_FORM[filter.form]||[]);
   const subject    = filter.subject || availSubs[0] || "";
   const lock       = lockStatus(filter.form, filter.seq, filter.year, markDeadlines, markUnlocks);
@@ -2829,7 +2857,7 @@ function MarksControlPage({ ctx }) {
     const pool = students.filter(s=>s.active && s.reg_status==="registered" && s.form===form);
     const subs = (SUBJECTS_BY_FORM[form]||[]).map(sub => {
       const entered = pool.filter(s => marksMap[`${s.id}-${sub}-${seq}-${year}`]).length;
-      const tch = teachers.filter(t=>t.active && (t.subjects||[]).includes(sub) && (t.forms||[]).includes(form)).map(t=>t.name);
+      const tch = teachers.filter(t=>t.active && teacherSubjectsIn(t, form).includes(sub)).map(t=>t.name);
       const status = !pool.length ? "na" : entered>=pool.length ? "done" : entered>0 ? "partial" : "none";
       return { sub, entered, total:pool.length, teachers:tch, status };
     });
@@ -3195,7 +3223,7 @@ function computeReport(student, env, sel) {
   const isTerm   = sel.mode==="term";
   const getScore = (sub,seq) => marksMap[`${student.id}-${sub}-${seq}-${sel.year}`]?.score ?? null;
   const getC     = sub => marksMap[`${student.id}-${sub}-SEQ 1-${sel.year}`]?.coeff || getCoeff(sub);
-  const teacherFor = sub => teachers.find(t=>t.active&&(t.subjects||[]).includes(sub)&&(t.forms||[]).includes(student.form))?.name || "—";
+  const teacherFor = sub => teachers.find(t=>t.active&&teacherSubjectsIn(t, student.form).includes(sub))?.name || "—";
   const avg2 = arr => { const v=arr.filter(x=>x!==null); return v.length ? v.reduce((a,b)=>a+Number(b),0)/v.length : null; };
 
   const subjectRows = subjects.map(sub => {
