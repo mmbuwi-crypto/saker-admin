@@ -575,8 +575,8 @@ export default function App() {
   useEffect(() => {
     if (!userRole) return;
     const selected = navItems.find(n => n.key === page);
-    if (!selected || !selected.roles.includes(userRole)) setPage("dashboard");
-  }, [userRole, page]);
+    if (!selected || !selected.roles.includes(userRole) || (selected.key==="fees" && !(userRole==="admin" && userProfile?.can_manage_fees===true))) setPage("dashboard");
+  }, [userRole, userProfile, page]);
 
   // ── Load all data ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1060,10 +1060,12 @@ export default function App() {
     </div>
   );
 
-  const allowedNavItems = navItems.filter(n => n.roles.includes(userRole));
+  // Fees are limited to ONE administrator: the admin profile whose can_manage_fees flag is true (set in the database)
+  const canFees = userRole==="admin" && userProfile?.can_manage_fees===true;
+  const allowedNavItems = navItems.filter(n => n.roles.includes(userRole) && (n.key!=="fees" || canFees));
 
   const ctx = {
-    auth: { user: currentUser, role: userRole },
+    auth: { user: currentUser, role: userRole, canFees },
     students, teachers, marksMap, feesMap, notices, attendanceMap, calendarEvents,
     saveStudent, deleteStudent, saveTeacher, saveMark,
     remarksMap, saveRemarks,
@@ -1149,7 +1151,7 @@ export default function App() {
               <div style={{color:"rgba(255,255,255,0.5)",fontSize:10,textTransform:"capitalize"}}>{ctx.auth.role}</div>
             </div>
             <nav style={{flex:1,paddingTop:6}}>
-              {navItems.filter(n=>n.roles.includes(ctx.auth.role)).map(n => (
+              {navItems.filter(n=>n.roles.includes(ctx.auth.role) && (n.key!=="fees" || ctx.auth.canFees)).map(n => (
                 <button key={n.key} onClick={()=>{setPage(n.key);setMenuOpen(false);}} style={{display:"flex",alignItems:"center",gap:11,width:"100%",padding:"12px 18px",border:"none",cursor:"pointer",background:page===n.key?"rgba(201,150,42,0.15)":"transparent",borderLeft:page===n.key?`3px solid ${C.gold}`:"3px solid transparent",color:page===n.key?C.goldLight:"rgba(255,255,255,0.7)",fontWeight:page===n.key?700:400,fontSize:14}}>
                   <span>{n.icon}</span>{n.label}
                 </button>
@@ -1189,7 +1191,7 @@ export default function App() {
           {page==="performance"  && <PerformancePage  ctx={ctx}/>}
           {page==="subjres"      && <SubjectResultsPage ctx={ctx}/>}
           {page==="council"      && <ClassCouncilPage ctx={ctx}/>}
-          {page==="fees"         && ctx.auth.role==="admin" && <FeesPage        ctx={ctx}/>}
+          {page==="fees"         && ctx.auth.canFees && <FeesPage        ctx={ctx}/>}
           {page==="notices"      && <NoticesPage      ctx={ctx}/>}
           {page==="calendar"     && <CalendarPage     ctx={ctx}/>}
           {page==="profile"      && <ProfilePage      ctx={ctx}/>}
@@ -1840,12 +1842,12 @@ async function fetchAllRows(table, orderCols) {
   return out;
 }
 
-async function exportBackup() {
+async function exportBackup(canFees) {
   const [students, teachers, marks, fees, att, rem, dl] = await Promise.all([
     fetchAllRows("students", ["id"]),
     fetchAllRows("teachers", ["id"]),
     fetchAllRows("marks", ["student_id","subject","seq","acad_year"]),
-    fetchAllRows("fees", ["student_id"]),
+    canFees ? fetchAllRows("fees", ["student_id"]) : Promise.resolve([]),
     fetchAllRows("attendance", ["student_id","date"]),
     supabase.from("class_remarks").select("*").then(r => r.data || []),
     supabase.from("mark_deadlines").select("*").then(r => r.data || []),
@@ -1857,7 +1859,7 @@ async function exportBackup() {
   exportToExcelMultiSheet([
     { name:"Students", rows: students.map(s => ({ Matricule:s.id, Name:s.name, Form:s.form, Gender:s.gender||"", "Date of birth":s.dob||"", Parent:s.parent||"", Phone:s.phone||"", Address:s.address||"", Registration:s.reg_status||"", Active:s.active===false?"No":"Yes", Graduated:s.graduated?"Yes":"No" })) },
     { name:"Marks", rows: marks.filter(m => !isPaperSeq(m.seq)).map(m => ({ Matricule:m.student_id, Name:nm(m.student_id), Form:fm(m.student_id), Subject:m.subject, Sequence:m.seq, Year:m.acad_year, "Score /20":m.score, Coeff:m.coeff, Teacher:tn[m.teacher_id]||"" })) },
-    { name:"Fees", rows: fees.map(f => ({ Matricule:f.student_id, Name:nm(f.student_id), Form:fm(f.student_id), Paid:f.paid||0, Total:f.total||TOTAL_FEE, Balance:(f.total||TOTAL_FEE)-(f.paid||0) })) },
+    ...(canFees ? [{ name:"Fees", rows: fees.map(f => ({ Matricule:f.student_id, Name:nm(f.student_id), Form:fm(f.student_id), Paid:f.paid||0, Total:f.total||TOTAL_FEE, Balance:(f.total||TOTAL_FEE)-(f.paid||0) })) }] : []),
     { name:"Attendance", rows: att.map(a => ({ Matricule:a.student_id, Name:nm(a.student_id), Form:fm(a.student_id), Date:a.date, Status:a.status })) },
     { name:"Teachers", rows: teachers.map(t => ({ Name:t.name, Email:t.email, Active:t.active===false?"No":"Yes", "Class teacher of":t.class_teacher_of||"", Classes: FORMS.filter(f=>teacherSubjectsIn(t,f).length).map(f=>f+": "+teacherSubjectsIn(t,f).join(", ")).join(" | ") })) },
     { name:"Class remarks", rows: rem.map(r => ({ Matricule:r.student_id, Name:nm(r.student_id), Form:fm(r.student_id), Year:r.acad_year, Term:r.term, Conduct:r.conduct||"", Remark:r.remark||"" })) },
@@ -1876,7 +1878,7 @@ function DashboardPage({ ctx, setPage }) {
   const cards = [
     { label:"Registered",      value:regCount,                   icon:"✅", color:C.green,    page:"students" },
     { label:"Pending Reg.",     value:pendCount,                  icon:"⏳", color:C.red,      page:"registration" },
-    ...(auth.role==="admin" ? [{ label:"Fees Collected", value:`${Math.round(collected/1000)}k F`, icon:"💰", color:C.gold, page:"fees" }] : []),
+    ...(auth.canFees ? [{ label:"Fees Collected", value:`${Math.round(collected/1000)}k F`, icon:"💰", color:C.gold, page:"fees" }] : []),
   ];
 
   return (
@@ -1901,8 +1903,8 @@ function DashboardPage({ ctx, setPage }) {
       {auth.role==="admin" && (
         <div style={{marginBottom:11}}>
           <Card title="💾 Backup">
-            <div style={{fontSize:11.5,color:C.gray,marginBottom:8}}>One Excel file with students, marks, fees, attendance, teachers and class remarks. Photos are not included.</div>
-            <Btn disabled={backingUp} onClick={async()=>{ setBackingUp(true); try { await exportBackup(); } catch(e) { alert("Backup failed: "+e.message); } setBackingUp(false); }}>{backingUp?"Preparing…":"Download backup (Excel)"}</Btn>
+            <div style={{fontSize:11.5,color:C.gray,marginBottom:8}}>One Excel file with students, marks, {auth.canFees ? "fees, " : ""}attendance, teachers and class remarks. Photos are not included.</div>
+            <Btn disabled={backingUp} onClick={async()=>{ setBackingUp(true); try { await exportBackup(auth.canFees); } catch(e) { alert("Backup failed: "+e.message); } setBackingUp(false); }}>{backingUp?"Preparing…":"Download backup (Excel)"}</Btn>
           </Card>
         </div>
       )}
@@ -2464,9 +2466,7 @@ function StudentsPage({ ctx }) {
       "Address":      s.address||"",
       "Registration Status": s.reg_status==="registered"?"Registered":"Pending",
       "Registration Date":   fmtDate(s.reg_date),
-      "Fees Paid (FCFA)":    feesMap?.[s.id]?.paid ?? 0,
-      "Fees Total (FCFA)":   feesMap?.[s.id]?.total ?? TOTAL_FEE,
-      "Balance (FCFA)":      (feesMap?.[s.id]?.total ?? TOTAL_FEE) - (feesMap?.[s.id]?.paid ?? 0),
+      ...(auth.canFees ? { "Fees Paid (FCFA)":    feesMap?.[s.id]?.paid ?? 0, "Fees Total (FCFA)":   feesMap?.[s.id]?.total ?? TOTAL_FEE, "Balance (FCFA)":      (feesMap?.[s.id]?.total ?? TOTAL_FEE) - (feesMap?.[s.id]?.paid ?? 0) } : {}),
     };
   }
 
@@ -2640,7 +2640,7 @@ function StudentsPage({ ctx }) {
         </Modal>
       )}
 
-      {showPromote && <PromoteStudentsModal students={students} saveStudent={saveStudent} saveFee={ctx.saveFee} onClose={()=>setShowPromote(false)}/>}
+      {showPromote && <PromoteStudentsModal students={students} saveStudent={saveStudent} saveFee={ctx.saveFee} canFees={ctx.auth.canFees} onClose={()=>setShowPromote(false)}/>}
       {showRollover && <YearRolloverModal ctx={ctx} onClose={()=>setShowRollover(false)}/>}
       {showIdCards && <IdCardsModal students={students} onClose={()=>setShowIdCards(false)}/>}
     </div>
@@ -2648,12 +2648,12 @@ function StudentsPage({ ctx }) {
 }
 
 // ─── Promote Students (end-of-year bulk promotion) ──────────────────────────────
-function PromoteStudentsModal({ students, saveStudent, saveFee, onClose }) {
+function PromoteStudentsModal({ students, saveStudent, saveFee, canFees, onClose }) {
   const [fromForm, setFromForm] = useState("Form 1");
   const toFormOptions = FORMS.slice(FORMS.indexOf(fromForm)+1);
   const isGraduating = fromForm === "Form 5";
   const [toForm, setToForm] = useState(isGraduating ? "" : (FORMS[FORMS.indexOf(fromForm)+1]||""));
-  const [resetFees, setResetFees] = useState(true);
+  const [resetFees, setResetFees] = useState(!!canFees);
   const [excluded, setExcluded] = useState({}); // studentId → true if excluded from promotion
   const [step, setStep] = useState("select"); // "select" | "confirm" | "running" | "done"
   const [progress, setProgress] = useState({done:0,total:0});
@@ -2722,8 +2722,8 @@ function PromoteStudentsModal({ students, saveStudent, saveFee, onClose }) {
           )}
           {!isGraduating && (
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-              <input type="checkbox" id="resetFees" checked={resetFees} onChange={e=>setResetFees(e.target.checked)}/>
-              <label htmlFor="resetFees" style={{fontSize:12,color:C.navy}}>Reset fees to 0 paid for the new academic year</label>
+              <input type="checkbox" id="resetFees" disabled={!canFees} checked={resetFees} onChange={e=>setResetFees(e.target.checked)}/>
+              <label htmlFor="resetFees" style={{fontSize:12,color:C.navy}}>Reset fees to 0 paid for the new academic year{!canFees ? " (only the fee administrator can do this)" : ""}</label>
             </div>
           )}
 
@@ -2811,7 +2811,7 @@ function YearRolloverModal({ ctx, onClose }) {
   const [step, setStep]         = useState("plan"); // plan | confirm | running | done
   const [excluded, setExcluded] = useState({});     // student id → true = stays in the class (repeats)
   const [open, setOpen]         = useState("");
-  const [resetFees, setResetFees] = useState(true);
+  const [resetFees, setResetFees] = useState(!!ctx.auth.canFees);
   const [cutoff, setCutoff]     = useState(next ? `${next.slice(0,4)}-09-30` : "");
   const [typed, setTyped]       = useState("");
   const [ack, setAck]           = useState(false);
@@ -2922,7 +2922,7 @@ function YearRolloverModal({ ctx, onClose }) {
               </div>
             ))}
           </div>
-          <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:C.navy,marginBottom:10}}><input type="checkbox" checked={resetFees} onChange={e=>setResetFees(e.target.checked)}/>Reset fees to 0 paid for everyone who continues (moved up or repeating)</label>
+          <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:C.navy,marginBottom:10}}><input type="checkbox" disabled={!ctx.auth.canFees} checked={resetFees} onChange={e=>setResetFees(e.target.checked)}/>Reset fees to 0 paid for everyone who continues (moved up or repeating)</label>
           <Fr label={`Last day for normal registration in ${next} (later registrations pay the late fee)`}><input style={inp} type="date" value={cutoff} onChange={e=>setCutoff(e.target.value)}/></Fr>
           <div style={{...box,background:C.grayBg,color:C.navy,lineHeight:1.5}}>
             <b>What changes:</b> classes move up, Form 5 graduates, the app switches to {next} (First Term, SEQ 1), and the old "next term begins" date is cleared. Marks entry for {next} is open until you set deadlines in Marks Control.<br/>
@@ -4842,7 +4842,7 @@ function reportCardParts(student, env, sel, conduct) {
     const hasAnnual = !f5 && (sel.mode!=="term" || sel.term==="Third Term");
     const decision  = hasAnnual && annualOverall!==null ? (annualOverall>=PASS_MARK ? "Promoted" : "Repeat") : "";
     const owing     = TOTAL_FEE - (feesMap?.[student.id]?.paid || 0);
-    const owingTxt  = owing>0 ? owing.toLocaleString()+" FCFA" : "Nil";
+    const owingTxt  = env.showFees===false ? "" : owing>0 ? owing.toLocaleString()+" FCFA" : "Nil"; // no fee data for admins without fee access
     const nextBegin = settings?.next_term_begins ? fmtDate(settings.next_term_begins) : "";
     const fill = v => v ? "<b>"+escHtml(v)+"</b>" : "________";
 
@@ -5165,7 +5165,7 @@ function ReportsPageInner({ ctx }) {
     }));
   }, [student?.id]);
 
-  const env = { students, marksMap, teachers, feesMap, settings };
+  const env = { students, marksMap, teachers, feesMap, settings, showFees: !!ctx.auth.canFees };
   const curRem = student ? remarksMap?.[`${student.id}|${sel.year}|${remTerm(sel)}`] : null;
   useEffect(() => {
     if (!student) return;
@@ -6018,6 +6018,10 @@ function ClassCouncilPage({ ctx }) {
 
 // ─── Fees ──────────────────────────────────────────────────────────────────────
 function FeesPage({ ctx }) {
+  if (!ctx.auth.canFees) return <Empty text="Fees are managed by the fee administrator only."/>;
+  return <FeesPageInner ctx={ctx}/>;
+}
+function FeesPageInner({ ctx }) {
   const { students, feesMap, saveFee, auth, isOnline, setOfflineQueue } = ctx;
   const [filter,    setFilter]    = useState({ form:"", search:"", status:"" });
   const [threshold, setThreshold] = useState(50);
