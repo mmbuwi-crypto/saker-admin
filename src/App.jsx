@@ -5165,7 +5165,23 @@ function ReportsPageInner({ ctx }) {
     }));
   }, [student?.id]);
 
-  const env = { students, marksMap, teachers, feesMap, settings, showFees: !!ctx.auth.canFees };
+  // The fee administrator already has every fee row in feesMap. Other admins can't read the fees table,
+  // so they get just the balances needed for the report cards from a database function.
+  const [rcFees, setRcFees] = useState(null);
+  useEffect(() => {
+    if (ctx.auth.canFees) return;
+    let alive = true;
+    (async () => {
+      const { data, error } = await supabase.rpc("fee_balances_for_report_cards");
+      if (!alive || error) return;
+      const fm = {};
+      (data||[]).forEach(f => { fm[f.student_id] = { paid: f.paid||0, total: f.total||TOTAL_FEE }; });
+      setRcFees(fm);
+    })();
+    return () => { alive = false; };
+  }, [ctx.auth.canFees]);
+  const rcFeesMap = ctx.auth.canFees ? feesMap : rcFees;
+  const env = { students, marksMap, teachers, feesMap: rcFeesMap || {}, settings, showFees: !!(ctx.auth.canFees || rcFees) };
   const curRem = student ? remarksMap?.[`${student.id}|${sel.year}|${remTerm(sel)}`] : null;
   useEffect(() => {
     if (!student) return;
