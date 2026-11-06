@@ -82,10 +82,12 @@ const seqsForForm    = form => isF5(form) ? F5_ASSESSMENTS : SEQ_LABELS;
 const ALL_SEQ_LABELS = [...SEQ_LABELS, ...F5_ASSESSMENTS];
 const seqOrder       = q => ALL_SEQ_LABELS.indexOf(q);
 const ACAD_YEARS  = ["2026/2027","2027/2028","2028/2029"];
+// The year the school is working in. Set from app_settings.current_year after load; changed by the New Academic Year tool.
+let ACTIVE_YEAR = ACAD_YEARS[0];
 const TOTAL_FEE   = 35000;
 const REG_NORMAL  = 500;
 const REG_LATE    = 1000;
-const LATE_CUTOFF = "2026-09-30";
+let   LATE_CUTOFF = "2026-09-30"; // overridden by app_settings.late_cutoff (set by the New Academic Year tool)
 const MOMO_MERCHANT_NUMBER = "PASTE_YOUR_MOMO_NUMBER_HERE"; // e.g. "677123456" — the school's MTN Mobile Money receiving number
 
 const DEFAULT_COEFF = {
@@ -118,6 +120,14 @@ const findTeacher = (teachers, email) => teachers.find(t => normEmail(t.email) =
 const todayStr = () => new Date().toISOString().slice(0,10);
 const fmtDate  = d => { if(!d) return "—"; const [y,m,day]=d.split("-"); return `${day}/${m}/${y}`; };
 const isLate   = d => d && d > LATE_CUTOFF;
+// Next free matricule for a form = highest number already used with that form's prefix + 1.
+// (Counting the students currently in the form re-used IDs once students were promoted out of it.)
+function nextMatricule(form, ids, taken=0) {
+  const prefix = `SBCC0${form.replace("Form ","").padStart(2,"0")}`;
+  let max = 0;
+  (ids||[]).forEach(id => { if (typeof id==="string" && id.startsWith(prefix)) { const n = parseInt(id.slice(prefix.length),10); if (Number.isFinite(n) && n>max) max = n; } });
+  return `${prefix}${String(max+1+taken).padStart(3,"0")}`;
+}
 const localToday = () => new Date().toLocaleDateString("en-CA", { timeZone:"Africa/Douala" }); // YYYY-MM-DD in Cameroon time
 
 // Is this class's marks entry closed for teachers? (deadline passed and the admin hasn't unlocked the class)
@@ -367,7 +377,7 @@ function printPaymentSlip(sub, student) {
           <div style="font-size:10px;color:#6b7280;margin-top:2px">✓ Approved Payment</div>
         </div>
       </div>
-      <div style="text-align:center;font-size:9px;color:#9ca3af;border-top:1px dashed #e5e7eb;padding:8px 14px">This slip confirms a payment toward school fees for Academic Year 2026/2027.<br>Keep for your records.</div>
+      <div style="text-align:center;font-size:9px;color:#9ca3af;border-top:1px dashed #e5e7eb;padding:8px 14px">This slip confirms a payment toward school fees for Academic Year ${ACTIVE_YEAR}.<br>Keep for your records.</div>
     </div>
   </div>`;
   domPrint("sbc-payment-slip", html, "A5 portrait", "7mm");
@@ -385,6 +395,7 @@ const navItems = [
   { key:"attendance",   label:"Attendance",   icon:"🗓️", roles:["admin","teacher"] },
   { key:"reports",      label:"Report Cards", icon:"📄", roles:["admin"] },
   { key:"performance",  label:"Performance",  icon:"📈", roles:["admin","teacher"] },
+  { key:"subjres",      label:"Subject Results", icon:"🎯", roles:["admin","teacher"] },
   { key:"council",      label:"Class Council",icon:"🏛️", roles:["admin","teacher"] },
   { key:"fees",         label:"School Fees",  icon:"💰", roles:["admin"] },
   { key:"notices",      label:"Notices",      icon:"📢", roles:["admin","teacher"] },
@@ -595,7 +606,10 @@ export default function App() {
         supabase.from("class_remarks").select("*"),
       ]);
       setRemarksMap(Object.fromEntries((rm||[]).map(r => [`${r.student_id}|${r.acad_year}|${r.term}`, r])));
-      setSettings(Object.fromEntries((ss||[]).map(r => [r.key, r.value])));
+      const settingsObj = Object.fromEntries((ss||[]).map(r => [r.key, r.value]));
+      if (ACAD_YEARS.includes(settingsObj.current_year)) ACTIVE_YEAR = settingsObj.current_year;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(settingsObj.late_cutoff||"")) LATE_CUTOFF = settingsObj.late_cutoff;
+      setSettings(settingsObj);
       setMarkDeadlines(dl || []);
       setMarkUnlocks(ul || []);
       setDbError(null);
@@ -810,10 +824,9 @@ export default function App() {
       try {
         if (item.type === "register") {
           const fNum = item.data.form.replace("Form ","");
-          const { count } = await supabase
-            .from("students").select("*", { count:"exact", head:true })
-            .eq("form", item.data.form);
-          const realId = `SBCC0${fNum.padStart(2,"0")}${String((count||0)+1).padStart(3,"0")}`;
+          const { data: usedIds } = await supabase
+            .from("students").select("id").like("id", `SBCC0${fNum.padStart(2,"0")}%`);
+          const realId = nextMatricule(item.data.form, [...(usedIds||[]).map(r=>r.id), ...Object.values(tempIdMap)]);
           tempIdMap[item.tempId] = realId;
 
           const row = {
@@ -1129,6 +1142,7 @@ export default function App() {
           {page==="attendance"   && <AttendancePage   ctx={ctx}/>}
           {page==="reports"      && userRole==="admin" && <ReportsPage ctx={ctx}/>}
           {page==="performance"  && <PerformancePage  ctx={ctx}/>}
+          {page==="subjres"      && <SubjectResultsPage ctx={ctx}/>}
           {page==="council"      && <ClassCouncilPage ctx={ctx}/>}
           {page==="fees"         && ctx.auth.role==="admin" && <FeesPage        ctx={ctx}/>}
           {page==="notices"      && <NoticesPage      ctx={ctx}/>}
@@ -1227,7 +1241,7 @@ function LoginScreen({ onLogin, onRequestReset, onOpenPortal }) {
           <img src={SCHOOL_LOGO} alt="SBCC Bawe crest" style={{width:110,height:110,objectFit:"contain",display:"block",margin:"0 auto 10px",filter:"drop-shadow(0 3px 10px rgba(0,0,0,0.4))"}}/>
           <h1 style={{color:C.white,fontSize:20,fontWeight:900,margin:0}}>Saker Baptist Comprehensive College Bawe</h1>
           <p style={{color:C.goldLight,fontSize:11,margin:"4px 0 0",letterSpacing:1.5}}>NGEPTANG · NONI</p>
-          <p style={{color:"rgba(255,255,255,0.45)",fontSize:10,margin:"5px 0 0"}}>School Administrative Portal · 2026/2027</p>
+          <p style={{color:"rgba(255,255,255,0.45)",fontSize:10,margin:"5px 0 0"}}>School Administrative Portal · {ACTIVE_YEAR}</p>
         </div>
         <div style={{background:C.white,borderRadius:14,padding:22,boxShadow:"0 20px 60px rgba(0,0,0,0.35)"}}>
           <h2 style={{margin:"0 0 16px",fontSize:16,fontWeight:800,color:C.navy}}>Sign In</h2>
@@ -1826,7 +1840,7 @@ function DashboardPage({ ctx, setPage }) {
         <img src={SCHOOL_LOGO} alt="SBCC Bawe crest" style={{width:76,height:76,objectFit:"contain",flexShrink:0,filter:"drop-shadow(0 2px 6px rgba(0,0,0,0.35))"}}/>
         <div style={{minWidth:0}}>
           <h2 style={{margin:0,fontSize:17,fontWeight:800}}>Welcome, {auth.user.name.split(" ")[0]}! 👋</h2>
-          <p style={{margin:"4px 0 0",color:"rgba(255,255,255,0.6)",fontSize:12}}>Academic Year 2026/2027 · Saker Baptist Comprehensive College Bawe</p>
+          <p style={{margin:"4px 0 0",color:"rgba(255,255,255,0.6)",fontSize:12}}>Academic Year {ACTIVE_YEAR} · Saker Baptist Comprehensive College Bawe</p>
         </div>
       </div>
       <MissingMarksAlert ctx={ctx} setPage={setPage}/>
@@ -1926,8 +1940,7 @@ function RegistrationPage({ ctx }) {
       } else {
         // Online — register normally, exactly as before
         const fNum = form.form.replace("Form ","");
-        const n    = students.filter(s=>s.form===form.form).length + 1;
-        const id   = `SBCC0${fNum.padStart(2,"0")}${String(n).padStart(3,"0")}`;
+        const id   = nextMatricule(form.form, students.map(s=>s.id));
         const studentData = { ...baseData, id, active:true, reg_status:"registered" };
         await saveStudent(studentData);
         setReceipt({ ...studentData });
@@ -1949,7 +1962,7 @@ function RegistrationPage({ ctx }) {
       ["Gender",receipt.gender],["Date of Birth",fmtDate(receipt.dob)],
       ["Address",receipt.address||"—"],["Parent/Guardian",receipt.parent],
       ["Paid By",receipt.reg_paid_by],["Registration Date",fmtDate(receipt.reg_date)],
-      ["Cashier",receipt.reg_cashier],["Academic Year","2026/2027"],
+      ["Cashier",receipt.reg_cashier],["Academic Year",ACTIVE_YEAR],
     ].map(([l,v]) => `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f0f0;font-size:11.5px"><span style="color:#6B7280">${l}</span><span style="font-weight:600">${v||"—"}</span></div>`).join("");
 
     const amtCol = receipt.reg_fee===REG_LATE ? "#C9962A" : "#15803D";
@@ -1985,7 +1998,7 @@ function RegistrationPage({ ctx }) {
             <div style="border-top:1px solid #999;padding-top:3px;font-size:8px;color:#6b7280;margin-top:24px;text-align:center">Parent/Guardian Signature</div>
           </div>
         </div>
-        <div style="text-align:center;font-size:9px;color:#9ca3af;border-top:1px dashed #e5e7eb;padding:8px 14px">Academic Year 2026/2027 · Keep for your records.</div>
+        <div style="text-align:center;font-size:9px;color:#9ca3af;border-top:1px dashed #e5e7eb;padding:8px 14px">Academic Year ${ACTIVE_YEAR} · Keep for your records.</div>
       </div>
     </div>`;
     domPrint("sbc-receipt", html, "A5 portrait", "7mm");
@@ -2212,7 +2225,7 @@ function BulkImportPanel({ students, saveStudent, auth, onDone }) {
 
         // Track how many students already exist per form, to continue ID numbering correctly
         const formCounts = {};
-        FORMS.forEach(f => { formCounts[f] = students.filter(s=>s.form===f).length; });
+        FORMS.forEach(f => { formCounts[f] = 0; }); // rows of this file already given an ID, per form
 
         const parsed = raw.map((r, idx) => {
           // Case-insensitive column lookup
@@ -2241,7 +2254,7 @@ function BulkImportPanel({ students, saveStudent, auth, onDone }) {
           if (form && !errors.length) {
             formCounts[form] = (formCounts[form]||0) + 1;
             const fNum = form.replace("Form ","");
-            id = `SBCC0${fNum.padStart(2,"0")}${String(formCounts[form]).padStart(3,"0")}`;
+            id = nextMatricule(form, students.map(x=>x.id), formCounts[form]-1);
           }
 
           return { rowNum:idx+2, name, form, gender, dob, parent, phone, address, id, errors, valid: errors.length===0 };
@@ -2383,6 +2396,7 @@ function StudentsPage({ ctx }) {
   const [viewS,  setViewS]  = useState(null);
   const [saving, setSaving] = useState(false);
   const [showPromote, setShowPromote] = useState(false);
+  const [showRollover, setShowRollover] = useState(false);
   const blank = { name:"", form:"Form 1", gender:"Female", dob:"", parent:"", phone:"", address:"", photo_url:null };
   const [form, setForm] = useState(blank);
   const photoInputRef = useRef(null);
@@ -2424,7 +2438,7 @@ function StudentsPage({ ctx }) {
       exportToExcelMultiSheet(sheets, `SBCC-Students-AllForms-${sel_year_safe()}.xlsx`);
     }
   }
-  function sel_year_safe(){ return "2026-2027"; }
+  function sel_year_safe(){ return ACTIVE_YEAR.replace("/","-"); }
 
   async function save() {
     if (!form.name?.trim()) return;
@@ -2432,8 +2446,7 @@ function StudentsPage({ ctx }) {
     try {
       if (modal==="add") {
         const fNum = form.form.replace("Form ","");
-        const n    = students.filter(s=>s.form===form.form).length + 1;
-        const id   = `SBCC0${fNum.padStart(2,"0")}${String(n).padStart(3,"0")}`;
+        const id   = nextMatricule(form.form, students.map(s=>s.id));
         await saveStudent({ ...form, id, active:true, reg_status:"pending" });
       } else {
         await saveStudent({ ...form });
@@ -2466,6 +2479,7 @@ function StudentsPage({ ctx }) {
         </select>
         {auth.role==="admin" && <SmBtn onClick={exportStudents} color={C.green}>📊 Export Excel</SmBtn>}
         {auth.role==="admin" && <SmBtn onClick={()=>setShowPromote(true)} color={C.gold}>🎓 Promote Students</SmBtn>}
+        {auth.role==="admin" && <SmBtn onClick={()=>setShowRollover(true)} color={C.navy}>🔄 New Academic Year</SmBtn>}
         {auth.role==="admin" && missingPinCount>0 && <SmBtn onClick={generateMissingPins} color={C.navyMid}>📱 Generate {missingPinCount} Missing PIN{missingPinCount!==1?"s":""}</SmBtn>}
         {auth.role==="admin" && <Btn onClick={()=>{setForm(blank);setModal("add");}}>+ Add</Btn>}
       </div>
@@ -2580,6 +2594,7 @@ function StudentsPage({ ctx }) {
       )}
 
       {showPromote && <PromoteStudentsModal students={students} saveStudent={saveStudent} saveFee={ctx.saveFee} onClose={()=>setShowPromote(false)}/>}
+      {showRollover && <YearRolloverModal ctx={ctx} onClose={()=>setShowRollover(false)}/>}
     </div>
   );
 }
@@ -2727,6 +2742,188 @@ function PromoteStudentsModal({ students, saveStudent, saveFee, onClose }) {
               {results.failed.map(f=>(
                 <div key={f.id} style={{fontSize:11,color:C.gray,padding:"4px 0",borderBottom:`1px solid ${C.grayBg}`}}>{f.name}: {f.error}</div>
               ))}
+            </div>
+          )}
+          <Btn onClick={onClose}>Done</Btn>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+// ─── New academic year (rollover) ──────────────────────────────────────────────
+// One guided step: graduates Form 5, moves every other class up, resets fees, switches the app to the new year
+// and clears the old "next term begins" date. Marks, remarks and deadlines of the old year stay under that year.
+function YearRolloverModal({ ctx, onClose }) {
+  const { students, settings, loadAll } = ctx;
+  const cur  = ACAD_YEARS.includes(settings?.current_year) ? settings.current_year : ACAD_YEARS[0];
+  const next = ACAD_YEARS[ACAD_YEARS.indexOf(cur)+1] || "";
+  const prev = parseJSON(settings?.rollover_state, {});
+  const interrupted = prev.status==="running" && prev.to===next;
+  const [step, setStep]         = useState("plan"); // plan | confirm | running | done
+  const [excluded, setExcluded] = useState({});     // student id → true = stays in the class (repeats)
+  const [open, setOpen]         = useState("");
+  const [resetFees, setResetFees] = useState(true);
+  const [cutoff, setCutoff]     = useState(next ? `${next.slice(0,4)}-09-30` : "");
+  const [typed, setTyped]       = useState("");
+  const [ack, setAck]           = useState(false);
+  const [progress, setProgress] = useState({ done:0, total:1 });
+  const [result, setResult]     = useState(null);
+
+  const classes = [...FORMS].reverse().map(f => {
+    const mine = students.filter(s => s.active && s.form===f);
+    return { from:f, to: f==="Form 5" ? null : FORMS[FORMS.indexOf(f)+1],
+      list: mine.filter(s=>s.reg_status==="registered").sort((a,b)=>a.name.localeCompare(b.name)),
+      notReg: mine.filter(s=>s.reg_status!=="registered").length };
+  });
+  const goCount   = c => c.list.filter(s=>!excluded[s.id]).length;
+  const totalGo   = classes.reduce((a,c)=>a+goCount(c),0);
+  const totalStay = classes.reduce((a,c)=>a+c.list.length-goCount(c),0);
+  const validCutoff = /^\d{4}-\d{2}-\d{2}$/.test(cutoff);
+  const chunk = (a,n=80) => { const o=[]; for (let i=0;i<a.length;i+=n) o.push(a.slice(i,i+n)); return o; };
+  const put   = (key, value) => supabase.from("app_settings").upsert({ key, value }, { onConflict:"key" });
+
+  // Switches the app to the new year. Returns an error message, or "" when everything saved.
+  async function writeYear(status) {
+    try {
+      for (const [k,v] of [["current_year",next],["late_cutoff",cutoff],["next_term_begins",""],["rollover_state",JSON.stringify({ from:cur, to:next, status, at:new Date().toISOString() })]]) {
+        const { error } = await put(k, v); if (error) throw error;
+      }
+      await loadAll();
+      return "";
+    } catch(e) { return e.message || "unknown error"; }
+  }
+
+  async function run() {
+    setStep("running");
+    const failures = [];
+    let moved = 0, graduated = 0;
+    const continuing = [];
+    // Written first so an interrupted run is noticed next time (stops a second run from moving classes up twice)
+    try { const { error } = await put("rollover_state", JSON.stringify({ from:cur, to:next, status:"running", at:new Date().toISOString() })); if (error) throw error; }
+    catch(e) { alert("Could not start the rollover (nothing was changed): "+e.message); setStep("plan"); return; }
+    const jobs = classes.filter(c => c.list.length);
+    setProgress({ done:0, total:jobs.length+1 });
+    for (const c of jobs) {          // Form 5 first, then Form 4 → 5, … Form 1 → 2
+      const go   = c.list.filter(s=>!excluded[s.id]).map(s=>s.id);
+      const stay = c.list.filter(s=> excluded[s.id]).map(s=>s.id);
+      continuing.push(...stay);
+      try {
+        for (const ids of chunk(go)) {
+          const q = c.to ? supabase.from("students").update({ form:c.to }) : supabase.from("students").update({ active:false, graduated:true });
+          const { error } = await q.in("id", ids); if (error) throw error;
+        }
+        if (c.to) { continuing.push(...go); moved += go.length; } else graduated += go.length;
+      } catch(e) { failures.push(`${c.from} ${c.to?"promotion":"graduation"}: ${e.message}`); }
+      setProgress(p => ({ ...p, done:p.done+1 }));
+    }
+    if (resetFees && continuing.length) {
+      try { for (const ids of chunk(continuing)) { const { error } = await supabase.from("fees").update({ paid:0 }).in("student_id", ids); if (error) throw error; } }
+      catch(e) { failures.push("Fee reset: "+e.message); }
+    }
+    const yErr = await writeYear(failures.length ? "partial" : "done");
+    if (yErr) failures.push("Saving the new year: "+yErr);
+    await loadAll();
+    setProgress(p => ({ ...p, done:p.total }));
+    setResult({ moved, graduated, stayed:totalStay, failures, yearOk:!yErr });
+    setStep("done");
+  }
+  async function onlySetYear() {
+    const err = await writeYear("done");
+    if (err) alert("Could not save: "+err); else { alert(`The app is now on ${next}.`); onClose(); }
+  }
+
+  const box = { borderRadius:8, padding:"9px 12px", marginBottom:12, fontSize:12 };
+  return (
+    <Modal title={`🔄 New academic year${next?` ${next}`:""}`} onClose={step==="running"?()=>{}:onClose}>
+      {!next && <div style={{...box,background:"#fffbeb",border:"1px solid #fde68a",color:"#92400e"}}>The app is on {cur}, the last year in the list. Add the next year to ACAD_YEARS at the top of App.jsx first.</div>}
+
+      {next && step==="plan" && (
+        <div>
+          <div style={{fontSize:13,fontWeight:800,color:C.navy,marginBottom:8}}>{cur} → {next}</div>
+          {interrupted && (
+            <div style={{...box,background:"#fef2f2",border:"1px solid #fca5a5",color:C.red}}>
+              A rollover to {next} started on {fmtDate((prev.at||"").slice(0,10))} and did not finish. Some students may already have moved up. Check the Students page before running it again.
+              <div style={{marginTop:6}}><SmBtn onClick={onlySetYear} color={C.navyMid}>Students are already moved — just switch to {next}</SmBtn></div>
+              <label style={{display:"flex",alignItems:"center",gap:6,marginTop:8,color:C.navy}}><input type="checkbox" checked={ack} onChange={e=>setAck(e.target.checked)}/>I checked, run it again from the start</label>
+            </div>
+          )}
+          <div style={{fontSize:11,color:C.gray,marginBottom:6}}>Ticked students move up. Untick a student who is repeating the class. Form 5 students who stay are not graduated.</div>
+          <div style={{border:`1px solid ${C.grayLight}`,borderRadius:8,marginBottom:12}}>
+            {classes.map(c => (
+              <div key={c.from} style={{borderBottom:`1px solid ${C.grayBg}`}}>
+                <div onClick={()=>setOpen(open===c.from?"":c.from)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 10px",cursor:"pointer",gap:8}}>
+                  <div>
+                    <div style={{fontWeight:700,color:C.navy,fontSize:12.5}}>{c.from} → {c.to || "Graduate"}</div>
+                    {c.notReg>0 && <div style={{fontSize:10,color:C.gold}}>{c.notReg} not registered, left as they are</div>}
+                  </div>
+                  <div style={{fontSize:11.5,fontWeight:700,color:C.green,textAlign:"right"}}>{goCount(c)} {c.to?"move up":"graduate"}{c.list.length-goCount(c)>0 && <span style={{color:C.gold}}> · {c.list.length-goCount(c)} stay</span>}</div>
+                </div>
+                {open===c.from && (
+                  <div style={{maxHeight:200,overflowY:"auto",padding:"0 10px 8px"}}>
+                    {!c.list.length && <div style={{fontSize:12,color:C.gray}}>No registered students.</div>}
+                    {c.list.map(st => (
+                      <label key={st.id} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0",fontSize:12,color:excluded[st.id]?C.gray:C.navy}}>
+                        <input type="checkbox" checked={!excluded[st.id]} onChange={e=>setExcluded(x=>({...x,[st.id]:!e.target.checked}))}/>
+                        <span style={{flex:1,textDecoration:excluded[st.id]?"line-through":"none"}}>{st.name}</span>
+                        <span style={{fontSize:10,fontFamily:"monospace",color:C.gold}}>{st.id}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:C.navy,marginBottom:10}}><input type="checkbox" checked={resetFees} onChange={e=>setResetFees(e.target.checked)}/>Reset fees to 0 paid for everyone who continues (moved up or repeating)</label>
+          <Fr label={`Last day for normal registration in ${next} (later registrations pay the late fee)`}><input style={inp} type="date" value={cutoff} onChange={e=>setCutoff(e.target.value)}/></Fr>
+          <div style={{...box,background:C.grayBg,color:C.navy,lineHeight:1.5}}>
+            <b>What changes:</b> classes move up, Form 5 graduates, the app switches to {next} (First Term, SEQ 1), and the old "next term begins" date is cleared. Marks entry for {next} is open until you set deadlines in Marks Control.<br/>
+            <b>What stays:</b> all marks, remarks and attendance of {cur} under that year; teachers' classes, subjects and class teachers (they belong to the class); subject lists and candidate numbers of graduating Form 5 candidates, kept for their GCE records.<br/>
+            <b>After this:</b> set the subject list and candidate number of the new Form 5 in Marks Control → Form 5 → Setup, and register the new Form 1 intake in Registration.
+          </div>
+          <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+            <Btn onClick={onClose} outline>Cancel</Btn>
+            <Btn onClick={()=>setStep("confirm")} disabled={!validCutoff || (interrupted && !ack) || (!totalGo && !totalStay)} color={C.gold}>Review →</Btn>
+          </div>
+        </div>
+      )}
+
+      {next && step==="confirm" && (
+        <div>
+          <div style={{...box,background:"#fef2f2",border:"1px solid #fca5a5",textAlign:"center"}}>
+            <div style={{fontSize:26,marginBottom:4}}>⚠️</div>
+            <div style={{fontWeight:800,color:C.red,fontSize:14,marginBottom:4}}>This cannot be undone in one step</div>
+            <div style={{color:C.gray}}>{totalGo} student(s) move up or graduate{totalStay>0?`, ${totalStay} stay in their class`:""}{resetFees?", fees reset to 0":""}. The app switches to {next}.</div>
+          </div>
+          <Fr label={`Type ${next} to confirm`}><input style={inp} value={typed} onChange={e=>setTyped(e.target.value.trim())} placeholder={next}/></Fr>
+          <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:10}}>
+            <Btn onClick={()=>setStep("plan")} outline>← Back</Btn>
+            <Btn onClick={run} disabled={typed!==next} color={C.red}>Start {next}</Btn>
+          </div>
+        </div>
+      )}
+
+      {step==="running" && (
+        <div style={{textAlign:"center",padding:"20px 0"}}>
+          <div style={{background:C.grayBg,borderRadius:6,height:10,overflow:"hidden",marginBottom:10}}><div style={{width:`${progress.done/Math.max(progress.total,1)*100}%`,height:"100%",background:C.gold,transition:"width .3s"}}/></div>
+          <div style={{fontSize:13,color:C.gray}}>Working… keep this screen open ({progress.done}/{progress.total})</div>
+        </div>
+      )}
+
+      {step==="done" && result && (
+        <div>
+          <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+            <Pill color={C.green}>✓ {result.moved} moved up</Pill>
+            <Pill color={C.green}>🎓 {result.graduated} graduated</Pill>
+            {result.stayed>0 && <Pill color={C.gold}>{result.stayed} stayed</Pill>}
+            {result.yearOk && <Pill color={C.navyMid}>Now on {next}</Pill>}
+            {result.failures.length>0 && <Pill color={C.red}>✕ {result.failures.length} problem(s)</Pill>}
+          </div>
+          {result.failures.length>0 && (
+            <div style={{...box,background:"#fef2f2",border:"1px solid #fca5a5",color:C.red}}>
+              {result.failures.map((f,i)=><div key={i} style={{marginBottom:3}}>{f}</div>)}
+              <div style={{color:C.gray,marginTop:6}}>Do not run this again. Fix the classes listed above with 🎓 Promote Students, one class at a time.</div>
+              {!result.yearOk && <div style={{marginTop:8}}><SmBtn onClick={async()=>{ const err=await writeYear("done"); if(err) alert("Could not save: "+err); else { alert(`The app is now on ${next}.`); setResult(r=>({...r,yearOk:true})); } }} color={C.navyMid}>Retry switching to {next}</SmBtn></div>}
             </div>
           )}
           <Btn onClick={onClose}>Done</Btn>
@@ -2973,7 +3170,7 @@ function MarksPage({ ctx }) {
   const teacher    = findTeacher(teachers, auth.user.email);
   const availForms = isTeacher ? (teacher?.forms||[]) : FORMS;
 
-  const [filter, setFilter] = useState({ form:availForms[0]||(isTeacher?"":"Form 1"), seq:"SEQ 1", year:"2026/2027", subject:"" });
+  const [filter, setFilter] = useState({ form:availForms[0]||(isTeacher?"":"Form 1"), seq:"SEQ 1", year:ACTIVE_YEAR, subject:"" });
   // If the teacher profile loads after this page opened, or the chosen class is not theirs, jump to their first class
   useEffect(() => {
     if (isTeacher && availForms.length && !availForms.includes(filter.form)) setFilter(f => ({ ...f, form:availForms[0], subject:"" }));
@@ -3437,7 +3634,7 @@ function f5SlipDocs(ranked, year, settings) {
 
 function F5Summary({ ctx }) {
   const { settings } = ctx;
-  const [year, setYear]     = useState("2026/2027");
+  const [year, setYear]     = useState(ACTIVE_YEAR);
   const [assess, setAssess] = useState("Pre Mock");
   const [busy, setBusy]     = useState(false);
   const isG = assess===GCE_SEQ;
@@ -3519,7 +3716,7 @@ function F5Summary({ ctx }) {
 // GCE results: pass rates, grade spread and movement from the mocks
 function F5Gce({ ctx }) {
   const { students, settings, marksMap, teachers } = ctx;
-  const [year, setYear] = useState("2026/2027");
+  const [year, setYear] = useState(ACTIVE_YEAR);
   const env = { marksMap, teachers, settings };
   const pool = f5PoolFor(students, marksMap, year);
   const data = useMemo(() => {
@@ -3606,18 +3803,341 @@ function F5Gce({ ctx }) {
   );
 }
 
+// Exam cards: 6 per A4 page (2 × 3). Each card carries the photo, candidate number and the subjects the candidate writes.
+function f5CardDocs(list, year, settings) {
+  const card = st => {
+    const subs = f5SubjectsOf(settings, st);
+    const half = Math.ceil(subs.length/2);
+    const col  = (arr, off) => arr.map((x,i) => `<div class="s">${off+i+1}. ${escHtml(x)}</div>`).join("");
+    const photo = st.photo_url
+      ? `<img src="${st.photo_url}" alt="" style="width:22mm;height:28mm;object-fit:cover;border:0.4mm solid #0D2340;display:block">`
+      : `<div style="width:22mm;height:28mm;border:0.4mm dashed #999;box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-size:7pt;color:#888;text-align:center">Paste<br>photo</div>`;
+    const cn = f5CandNo(settings, st);
+    return `<div class="card">
+      <div class="hd"><img src="${SCHOOL_LOGO}" alt="" style="width:11mm;height:11mm;object-fit:contain"><div><div class="sc">Saker Baptist Comprehensive College Bawe</div><div class="tt">GCE Examination Card · ${escHtml(year)}</div></div></div>
+      <div class="id">${photo}<div class="info"><div class="nm">${escHtml(st.name)}</div><div class="ln"><b>Matricule:</b> ${escHtml(st.id)}</div><div class="ln"><b>Class:</b> Form 5</div><div class="cn"><span>Candidate No</span><b>${cn ? escHtml(cn) : "&nbsp;"}</b></div></div></div>
+      <div class="sh">Subjects written (${subs.length})</div>
+      <div class="subs"><div>${col(subs.slice(0,half),0)}</div><div>${col(subs.slice(half),half)}</div></div>
+      <div class="sg"><span>Candidate's signature</span><span>Principal</span></div>
+    </div>`;
+  };
+  const pages = [];
+  for (let i=0; i<list.length; i+=6) pages.push(list.slice(i,i+6));
+  return pages.map(group => `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    body{margin:0;padding:8mm 10mm;font-family:Arial,Helvetica,sans-serif;color:#111;background:#fff}
+    .grid{display:grid;grid-template-columns:93mm 93mm;grid-auto-rows:90mm;gap:3mm 4mm}
+    .card{border:0.4mm solid #0D2340;border-radius:2mm;padding:2.5mm 3mm;box-sizing:border-box;overflow:hidden;display:flex;flex-direction:column}
+    .hd{display:flex;gap:2mm;align-items:center;border-bottom:0.3mm solid #C9962A;padding-bottom:1.5mm}
+    .sc{font-weight:700;font-size:8pt;color:#0D2340} .tt{font-size:7.5pt;color:#555}
+    .id{display:flex;gap:3mm;margin-top:2mm} .info{flex:1;min-width:0}
+    .nm{font-weight:700;font-size:10pt;margin-bottom:1mm} .ln{font-size:8pt;margin-bottom:0.6mm}
+    .cn{margin-top:1.5mm;border:0.3mm solid #0D2340;padding:1mm 2mm;display:flex;justify-content:space-between;align-items:center;font-size:8pt} .cn b{font-size:11pt;letter-spacing:0.3mm}
+    .sh{font-weight:700;font-size:7.5pt;margin:2mm 0 0.8mm;color:#0D2340;border-bottom:0.2mm solid #ccc}
+    .subs{display:grid;grid-template-columns:1fr 1fr;gap:0 2mm;flex:1} .s{font-size:7.5pt;line-height:3.6mm;white-space:nowrap;overflow:hidden}
+    .sg{display:flex;justify-content:space-between;font-size:6.5pt;color:#555;padding-top:1mm} .sg span{border-top:0.2mm solid #555;width:40%;padding-top:0.5mm;text-align:center}
+  </style></head><body><div class="grid">${group.map(card).join("")}</div></body></html>`);
+}
+
+function F5Cards({ ctx }) {
+  const { students, settings } = ctx;
+  const [year, setYear] = useState(ACTIVE_YEAR);
+  const [skip, setSkip] = useState({});   // student id → true when left out of the print
+  const [busy, setBusy] = useState("");
+  const pool = students.filter(x => x.active && x.form==="Form 5" && x.reg_status==="registered").sort((a,b)=>a.name.localeCompare(b.name));
+  const cfg  = f5Students(settings);
+  const chosen = pool.filter(x => !skip[x.id]);
+  const issues = st => [!st.photo_url && "no photo", !f5CandNo(settings, st) && "no candidate number", !cfg[st.id]?.subjects?.length && "subjects not set"].filter(Boolean);
+  const noPhoto = chosen.filter(x=>!x.photo_url).length, noCand = chosen.filter(x=>!f5CandNo(settings,x)).length, noSubs = chosen.filter(x=>!cfg[x.id]?.subjects?.length).length;
+  async function print() {
+    if (!chosen.length) { alert("Select at least one candidate."); return; }
+    if ((noCand || noSubs) && !window.confirm(`${noCand} selected candidate(s) have no candidate number and ${noSubs} have no subject list yet (they print with every Form 5 subject). Print anyway?`)) return;
+    const docs = f5CardDocs(chosen, year, settings);
+    setBusy(`0/${docs.length}`);
+    try { downloadBlob(await htmlDocsToPdfBlob(docs, (d,t)=>setBusy(`${d}/${t}`), 1.5, 0.85), `Form5-Exam-Cards-${year.replace("/","-")}.pdf`); }
+    catch(e) { alert("Could not create the PDF: "+e.message); }
+    setBusy("");
+  }
+  const card = { background:C.white, borderRadius:10, padding:12, marginBottom:11, boxShadow:"0 1px 3px rgba(0,0,0,0.06)" };
+  return (
+    <div>
+      <div style={card}>
+        <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:4}}>Candidate exam cards</div>
+        <div style={{fontSize:11,color:C.gray,marginBottom:8}}>One card per candidate with photo, matricule, candidate number and the subjects they write. Six cards per A4 page. Photos come from Students; numbers and subjects from Setup.</div>
+        <select style={inp} value={year} onChange={e=>setYear(e.target.value)}>{ACAD_YEARS.map(y=><option key={y}>{y}</option>)}</select>
+        {(noPhoto>0 || noCand>0 || noSubs>0) && <div style={{fontSize:11,color:C.gold,marginTop:8}}>Among the selected: {noPhoto} without photo · {noCand} without candidate number · {noSubs} without a subject list</div>}
+        <div style={{marginTop:9}}><Btn onClick={print} disabled={!!busy}>{busy?`Making PDF… ${busy}`:`🪪 Exam cards PDF (${chosen.length})`}</Btn></div>
+      </div>
+      <div style={card}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+          <div style={{fontWeight:800,color:C.navy,fontSize:13}}>Candidates ({chosen.length}/{pool.length})</div>
+          <div style={{display:"flex",gap:6}}><SmBtn onClick={()=>setSkip({})} color={C.navyMid}>All</SmBtn><SmBtn onClick={()=>setSkip(Object.fromEntries(pool.map(x=>[x.id,true])))} color={C.gray}>None</SmBtn></div>
+        </div>
+        {!pool.length && <Empty text="No registered Form 5 students."/>}
+        {pool.map(st => {
+          const is = issues(st);
+          return (
+            <label key={st.id} style={{display:"flex",alignItems:"center",gap:8,borderTop:`1px solid ${C.grayBg}`,padding:"7px 0"}}>
+              <input type="checkbox" checked={!skip[st.id]} onChange={e=>setSkip(k=>({...k,[st.id]:!e.target.checked}))}/>
+              <PhotoBox photo={st.photo_url} size={[26,32]}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:700,color:C.navy,fontSize:12.5}}>{st.name}</div>
+                <div style={{fontSize:10,color:C.gray}}>{f5CandNo(settings, st) ? "Cand. No "+f5CandNo(settings, st) : "—"}{cfg[st.id]?.subjects?.length ? ` · ${cfg[st.id].subjects.length} subjects` : ""}</div>
+                {is.length>0 && <div style={{fontSize:10,color:C.red}}>{is.join(" · ")}</div>}
+              </div>
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function F5Tools({ ctx }) {
   const [sub, setSub] = useState("summary");
   return (
     <div>
       <div style={{display:"flex",gap:6,marginBottom:10}}>
-        {[["summary","Class summary"],["gce","GCE analysis"],["setup","Setup"]].map(([k,l])=>(
+        {[["summary","Class summary"],["gce","GCE analysis"],["cards","Exam cards"],["setup","Setup"]].map(([k,l])=>(
           <button key={k} onClick={()=>setSub(k)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:`2px solid ${sub===k?C.navy:C.grayLight}`,background:sub===k?C.navy:C.white,color:sub===k?C.white:C.gray,fontWeight:700,fontSize:11.5,cursor:"pointer"}}>{l}</button>
         ))}
       </div>
       {sub==="summary" && <F5Summary ctx={ctx}/>}
       {sub==="gce"     && <F5Gce ctx={ctx}/>}
+      {sub==="cards"   && <F5Cards ctx={ctx}/>}
       {sub==="setup"   && <F5SetupPanel ctx={ctx}/>}
+    </div>
+  );
+}
+
+// ─── Class summary (Forms 1–4) and Subject results ─────────────────────────────
+const PERIODS = [...SEQ_LABELS, ...TERMS, "Annual"];
+const GRADE_ORDER = ["A","B+","B","C+","C","D","F"];
+
+// A student's score in one subject for a period: a sequence, a term (avg of its 2 sequences) or the year (avg of the 3 terms)
+function subjectPeriodScore(marksMap, st, sub, year, period) {
+  const g = sq => { const v = marksMap[`${st.id}-${sub}-${sq}-${year}`]?.score; return v===null||v===undefined ? null : Number(v); };
+  const avg = a => { const v = a.filter(x=>x!==null); return v.length ? v.reduce((x,y)=>x+y,0)/v.length : null; };
+  if (SEQ_LABELS.includes(period)) return g(period);
+  if (TERMS.includes(period)) return avg(TERM_SEQS[period].map(g));
+  return avg(TERMS.map(t => avg(TERM_SEQS[t].map(g))));
+}
+
+function classSummaryRows(ctx, form, year, period) {
+  const { students, marksMap } = ctx;
+  const subs = SUBJECTS_BY_FORM[form] || [];
+  const pool = students.filter(x => x.active && x.reg_status==="registered" && x.form===form).sort((a,b)=>a.name.localeCompare(b.name));
+  const rows = pool.map(st => {
+    let tw=0, tc=0, passed=0; const failed=[], vals={};
+    subs.forEach(sub => {
+      const v = subjectPeriodScore(marksMap, st, sub, year, period);
+      if (v===null) return;
+      const c = marksMap[`${st.id}-${sub}-SEQ 1-${year}`]?.coeff || getCoeff(sub);
+      vals[sub] = v; tw += v*c; tc += c;
+      if (v>=PASS_MARK) passed++; else failed.push(sub);
+    });
+    const avg = tc ? tw/tc : null;
+    return { st, vals, entered:Object.keys(vals).length, avg, grade: avg!==null ? scoreToGrade(avg).grade : "—", passed, failed,
+             decision: period==="Annual" && avg!==null ? (avg>=PASS_MARK ? "Promoted" : "Repeat") : "" };
+  });
+  const ranked = rows.filter(r=>r.avg!==null).sort((a,b)=>b.avg-a.avg);
+  let last=null, pos=0;
+  ranked.forEach((r,i) => { if (r.avg!==last) { pos=i+1; last=r.avg; } r.rank=pos; });
+  return { rows, ranked, subs };
+}
+
+function classSummaryDocs(ranked, meta) {
+  const per = 26, pages = [];
+  for (let i=0; i<Math.max(ranked.length,1); i+=per) pages.push(ranked.slice(i, i+per));
+  const dec = meta.period==="Annual";
+  return pages.map((chunk, pi) => `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:14mm 11mm;color:#111;font-size:10pt}
+    h1{font-size:14pt;margin:0 0 1mm;text-align:center} h2{font-size:10.5pt;margin:0 0 4mm;text-align:center;font-weight:600;color:#333}
+    table{width:100%;border-collapse:collapse;font-size:8.5pt} th,td{border:1px solid #999;padding:1.4mm 1.6mm;text-align:center}
+    th{background:#E8EEF7} td.l{text-align:left} .bad{color:#B91C1C} .ok{color:#15803D;font-weight:700}
+    .foot{margin-top:4mm;font-size:8pt;color:#555;text-align:center}
+  </style></head><body>
+    <h1>Saker Baptist Comprehensive College Bawe</h1>
+    <h2>${escHtml(meta.form)} · ${escHtml(meta.period)} · ${escHtml(meta.year)} — Class Summary</h2>
+    <table><thead><tr><th>Rank</th><th>Name</th><th>Subj.</th><th>Average /20</th><th>Grade</th><th>Passed</th><th>Failed subjects</th>${dec?"<th>Decision</th>":""}</tr></thead><tbody>
+    ${chunk.map(r => `<tr><td>${r.rank}</td><td class="l">${escHtml(r.st.name)}</td><td>${r.entered}</td><td><b>${r.avg.toFixed(2)}</b></td><td><b>${escHtml(r.grade)}</b></td><td class="ok">${r.passed}/${r.entered}</td><td class="l bad">${escHtml(r.failed.join(", "))}</td>${dec?`<td class="${r.decision==="Promoted"?"ok":"bad"}"><b>${r.decision}</b></td>`:""}</tr>`).join("")}
+    </tbody></table>
+    <div class="foot">Pass mark ${PASS_MARK}/20 · Page ${pi+1} of ${pages.length} · Printed ${new Date().toLocaleDateString("en-GB")}</div>
+  </body></html>`);
+}
+
+function ClassSummaryPanel({ ctx }) {
+  const [form, setForm]     = useState("Form 1");
+  const [year, setYear]     = useState(ACTIVE_YEAR);
+  const [period, setPeriod] = useState("First Term");
+  const [busy, setBusy]     = useState(false);
+  const { rows, ranked, subs } = useMemo(() => classSummaryRows(ctx, form, year, period), [ctx.students, ctx.marksMap, form, year, period]);
+  const avgs = ranked.map(r=>r.avg);
+  const classAvg = avgs.length ? avgs.reduce((a,b)=>a+b,0)/avgs.length : null;
+  const passing = ranked.filter(r=>r.avg>=PASS_MARK).length;
+  const card = { background:C.white, borderRadius:10, padding:12, marginBottom:11, boxShadow:"0 1px 3px rgba(0,0,0,0.06)" };
+  function excel() {
+    const out = ranked.map(r => {
+      const o = { Rank:r.rank, Name:r.st.name, Matricule:r.st.id };
+      subs.forEach(sb => { o[sb] = r.vals[sb]!==undefined ? Number(r.vals[sb].toFixed(2)) : ""; });
+      o["Average /20"] = Number(r.avg.toFixed(2)); o["Grade"] = r.grade; o["Passed"] = r.passed; o["Failed subjects"] = r.failed.join(", ");
+      if (period==="Annual") o["Decision"] = r.decision;
+      return o;
+    });
+    exportToExcel(out, `SBCC-${form.replace(/\s+/g,"")}-${period.replace(/\s+/g,"")}-${year.replace("/","-")}.xlsx`, `${form} ${period}`.slice(0,31));
+  }
+  async function pdf() {
+    if (!ranked.length) { alert("No marks entered yet for this selection."); return; }
+    setBusy(true);
+    try { downloadBlob(await htmlDocsToPdfBlob(classSummaryDocs(ranked, { form, year, period }), null, 1.5, 0.85), `${form.replace(/\s+/g,"")}-${period.replace(/\s+/g,"")}-Summary.pdf`); }
+    catch(e) { alert("Could not create the PDF: "+e.message); }
+    setBusy(false);
+  }
+  return (
+    <div>
+      <div style={card}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          <div><label style={lbl}>Class</label><select style={inp} value={form} onChange={e=>setForm(e.target.value)}>{FORMS.filter(f=>!isF5(f)).map(f=><option key={f}>{f}</option>)}</select></div>
+          <div><label style={lbl}>Academic year</label><select style={inp} value={year} onChange={e=>setYear(e.target.value)}>{ACAD_YEARS.map(y=><option key={y}>{y}</option>)}</select></div>
+        </div>
+        <label style={{...lbl,marginTop:8}}>Period</label>
+        <select style={inp} value={period} onChange={e=>setPeriod(e.target.value)}>{PERIODS.map(x=><option key={x}>{x}</option>)}</select>
+        <div style={{fontSize:10.5,color:C.gray,marginTop:5}}>Form 5 has its own summary under the Form 5 tab.</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginTop:9,textAlign:"center"}}>
+          <div style={{background:C.grayBg,borderRadius:8,padding:"7px 2px"}}><div style={{fontSize:10,color:C.gray}}>Assessed</div><div style={{fontSize:17,fontWeight:900,color:C.navy}}>{ranked.length}/{rows.length}</div></div>
+          <div style={{background:C.grayBg,borderRadius:8,padding:"7px 2px"}}><div style={{fontSize:10,color:C.gray}}>Class average</div><div style={{fontSize:17,fontWeight:900,color:classAvg!==null?avgColor(classAvg):C.gray}}>{classAvg!==null?classAvg.toFixed(2):"—"}</div></div>
+          <div style={{background:C.grayBg,borderRadius:8,padding:"7px 2px"}}><div style={{fontSize:10,color:C.gray}}>Pass rate</div><div style={{fontSize:17,fontWeight:900,color:C.navy}}>{ranked.length ? Math.round(passing/ranked.length*100)+"%" : "—"}</div></div>
+        </div>
+        <div style={{display:"flex",gap:8,marginTop:10}}><Btn onClick={pdf} disabled={busy}>{busy?"Making PDF…":"📄 PDF"}</Btn><Btn onClick={excel} outline>📊 Excel (all subjects)</Btn></div>
+      </div>
+      {!ranked.length && <Empty text="No marks entered yet for this class and period."/>}
+      {ranked.map(r => (
+        <div key={r.st.id} style={{background:C.white,borderRadius:10,padding:"9px 12px",marginBottom:7,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{width:30,height:30,borderRadius:15,background:C.navy,color:C.white,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:12,flexShrink:0}}>{r.rank}</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:700,color:C.navy,fontSize:13}}>{r.st.name}</div>
+              <div style={{fontSize:10,color:C.gray}}>{r.entered}/{subs.length} subjects entered{r.decision ? " · " : ""}{r.decision && <b style={{color:r.decision==="Promoted"?C.green:C.red}}>{r.decision}</b>}</div>
+            </div>
+            <div style={{textAlign:"right"}}>
+              <div style={{fontWeight:900,fontSize:15,color:avgColor(r.avg)}}>{r.avg.toFixed(2)} · {r.grade}</div>
+              <div style={{fontSize:10.5,fontWeight:700,color:r.passed===r.entered?C.green:C.gold}}>{r.passed}/{r.entered} passed</div>
+            </div>
+          </div>
+          {r.failed.length>0 && <div style={{fontSize:10.5,color:C.red,marginTop:5}}>Below {PASS_MARK}: {r.failed.join(", ")}</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Subject results: a teacher (read-only) sees how a subject is doing in each class they teach it in. Admin sees every subject.
+function SubjectResultsPage({ ctx }) {
+  const { students, marksMap, teachers, auth, settings } = ctx;
+  const isTeacher = auth.role==="teacher";
+  const teacher   = findTeacher(teachers, auth.user.email);
+  const combos = useMemo(() => {
+    const out = [];
+    (isTeacher ? (teacher?.forms||[]) : FORMS).forEach(form => {
+      const have = SUBJECTS_BY_FORM[form] || [];
+      (isTeacher ? teacherSubjectsIn(teacher, form) : have).filter(sb => have.includes(sb)).forEach(sub => out.push({ form, sub }));
+    });
+    return out;
+  }, [teachers, auth.user.email, isTeacher]);
+  const subjectList = [...new Set(combos.map(c=>c.sub))].sort();
+  const [f, setF] = useState({ sub:"", form:"", year:ACTIVE_YEAR, period:"First Term" });
+  const subV  = subjectList.includes(f.sub) ? f.sub : subjectList[0];
+  const formOpts = combos.filter(c=>c.sub===subV).map(c=>c.form);
+  const formV = formOpts.includes(f.form) ? f.form : formOpts[0];
+  const f5 = isF5(formV);
+  const periodOpts = f5 ? F5_ASSESSMENTS : PERIODS;
+  const periodV = periodOpts.includes(f.period) ? f.period : periodOpts[0];
+  const isGce = f5 && periodV===GCE_SEQ;
+
+  const data = useMemo(() => {
+    if (!subV || !formV) return null;
+    const pool = students.filter(x => x.active && x.reg_status==="registered" && x.form===formV && f5Writes(settings, x, subV)).sort((a,b)=>a.name.localeCompare(b.name));
+    const rows = pool.map(st => {
+      let v = null, grade = "—", pass = false, note = "";
+      if (f5) {
+        const raw = marksMap[`${st.id}-${subV}-${periodV}-${f.year}`]?.score;
+        v = raw===null||raw===undefined ? null : Number(raw);
+        if (v!==null) {
+          if (isGce) { grade = gceFromPoints(v); pass = gcePassed(v); }
+          else { const g = f5Grade(settings, v); grade = g.grade; pass = g.pass;
+                 note = f5PapersFor(subV).map(pp => { const x = marksMap[`${st.id}-${subV}-${periodV} ${pp.k}-${f.year}`]?.score; return x!==undefined&&x!==null ? "P"+pp.k.slice(1)+" "+x : ""; }).filter(Boolean).join(" · "); }
+        }
+      } else {
+        v = subjectPeriodScore(marksMap, st, subV, f.year, periodV);
+        if (v!==null) { grade = scoreToGrade(v).grade; pass = v>=PASS_MARK; }
+      }
+      return { st, v, grade, pass, note };
+    });
+    const done = rows.filter(r=>r.v!==null).sort((a,b)=>b.v-a.v);
+    const missing = rows.filter(r=>r.v===null);
+    const dist = {}; done.forEach(r => { dist[r.grade] = (dist[r.grade]||0)+1; });
+    const nums = done.map(r=>r.v);
+    return { done, missing, dist, total:rows.length,
+      passed: done.filter(r=>r.pass).length,
+      avg: !isGce && nums.length ? nums.reduce((a,b)=>a+b,0)/nums.length : null,
+      hi: !isGce && nums.length ? Math.max(...nums) : null, lo: !isGce && nums.length ? Math.min(...nums) : null };
+  }, [students, marksMap, settings, subV, formV, f.year, periodV]);
+
+  if (isTeacher && !combos.length) return <TeacherSetupNotice teacher={teacher} email={auth.user.email} needSubjects/>;
+  if (!subV) return <Empty text="No subjects to show."/>;
+  const card = { background:C.white, borderRadius:10, padding:12, marginBottom:11, boxShadow:"0 1px 3px rgba(0,0,0,0.06)" };
+  const gradeKeys = f5 ? GCE_GRADES : GRADE_ORDER;
+  const passRate = data && data.done.length ? Math.round(data.passed/data.done.length*100) : null;
+  const weak = data ? data.done.filter(r=>!r.pass).slice().reverse() : [];
+  function excel() {
+    if (!data?.done.length) { alert("Nothing to export yet."); return; }
+    exportToExcel(data.done.map((r,i) => ({ Rank:i+1, Name:r.st.name, Matricule:r.st.id, [isGce?"Grade":"Score /20"]: isGce ? r.grade : Number(r.v.toFixed(2)), Grade:r.grade, Result:r.pass?"Pass":"Fail" })),
+      `SBCC-${subV.replace(/[^A-Za-z]/g,"")}-${formV.replace(/\s+/g,"")}-${periodV.replace(/\s+/g,"")}.xlsx`, subV.slice(0,31));
+  }
+  return (
+    <div>
+      <div style={card}>
+        <label style={lbl}>Subject</label>
+        <select style={inp} value={subV} onChange={e=>setF(x=>({...x,sub:e.target.value}))}>{subjectList.map(x=><option key={x}>{x}</option>)}</select>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:8}}>
+          <div><label style={lbl}>Class</label><select style={inp} value={formV} onChange={e=>setF(x=>({...x,form:e.target.value}))}>{formOpts.map(x=><option key={x}>{x}</option>)}</select></div>
+          <div><label style={lbl}>Academic year</label><select style={inp} value={f.year} onChange={e=>setF(x=>({...x,year:e.target.value}))}>{ACAD_YEARS.map(y=><option key={y}>{y}</option>)}</select></div>
+        </div>
+        <label style={{...lbl,marginTop:8}}>{f5?"Assessment":"Period"}</label>
+        <select style={inp} value={periodV} onChange={e=>setF(x=>({...x,period:e.target.value}))}>{periodOpts.map(x=><option key={x}>{x}</option>)}</select>
+      </div>
+
+      {!data || !data.done.length ? <div style={card}><Empty text={`No ${subV} marks entered yet for ${formV}, ${periodV}.`}/></div> : <>
+        <div style={card}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,textAlign:"center"}}>
+            <div style={{background:C.grayBg,borderRadius:8,padding:"7px 2px"}}><div style={{fontSize:10,color:C.gray}}>{isGce?"Passed (A–C)":"Class average"}</div><div style={{fontSize:17,fontWeight:900,color:isGce?C.navy:avgColor(data.avg)}}>{isGce ? `${data.passed}/${data.done.length}` : fmt2(data.avg)}</div></div>
+            <div style={{background:C.grayBg,borderRadius:8,padding:"7px 2px"}}><div style={{fontSize:10,color:C.gray}}>Pass rate</div><div style={{fontSize:17,fontWeight:900,color:passRate>=50?C.green:C.red}}>{passRate}%</div></div>
+            <div style={{background:C.grayBg,borderRadius:8,padding:"7px 2px"}}><div style={{fontSize:10,color:C.gray}}>Marks in</div><div style={{fontSize:17,fontWeight:900,color:C.navy}}>{data.done.length}/{data.total}</div></div>
+          </div>
+          {!isGce && <div style={{fontSize:11,color:C.gray,marginTop:8,textAlign:"center"}}>Highest <b style={{color:C.green}}>{fmt1(data.hi)}</b> · Lowest <b style={{color:C.red}}>{fmt1(data.lo)}</b> · Pass mark {f5 ? "grade C" : PASS_MARK+"/20"}</div>}
+          <div style={{fontSize:11,color:C.navyMid,marginTop:6,textAlign:"center"}}>{gradeKeys.filter(g=>data.dist[g]).map(g=>g+": "+data.dist[g]).join("  ·  ")}</div>
+          <div style={{marginTop:9}}><SmBtn onClick={excel} color={C.navyMid}>📊 Excel</SmBtn></div>
+        </div>
+
+        {weak.length>0 && <div style={{...card,borderLeft:`4px solid ${C.red}`}}>
+          <div style={{fontWeight:800,color:C.red,fontSize:13,marginBottom:6}}>Needs attention ({weak.length})</div>
+          {weak.map(r => <div key={r.st.id} style={{display:"flex",justifyContent:"space-between",fontSize:12.5,padding:"4px 0",borderTop:`1px solid ${C.grayBg}`}}><span style={{color:C.navy,fontWeight:600}}>{r.st.name}</span><span style={{color:C.red,fontWeight:800}}>{isGce ? r.grade : r.v.toFixed(1)+" · "+r.grade}</span></div>)}
+        </div>}
+
+        <div style={card}>
+          <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:6}}>All students (highest first)</div>
+          {data.done.map((r,i) => (
+            <div key={r.st.id} style={{display:"flex",alignItems:"center",gap:10,borderTop:`1px solid ${C.grayBg}`,padding:"6px 0"}}>
+              <div style={{width:22,fontSize:11,color:C.gray,fontWeight:700}}>{i+1}</div>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.navy}}>{r.st.name}</div>{r.note && <div style={{fontSize:9.5,color:C.gray}}>{r.note}</div>}</div>
+              <div style={{fontWeight:800,fontSize:13,color:r.pass?C.green:C.red}}>{isGce ? r.grade : r.v.toFixed(1)+" · "+r.grade}</div>
+            </div>
+          ))}
+        </div>
+        {data.missing.length>0 && <div style={card}>
+          <div style={{fontWeight:800,color:C.gold,fontSize:13,marginBottom:4}}>No mark yet ({data.missing.length})</div>
+          <div style={{fontSize:12,color:C.gray}}>{data.missing.map(r=>r.st.name).join(", ")}</div>
+        </div>}
+      </>}
     </div>
   );
 }
@@ -3625,7 +4145,7 @@ function F5Tools({ ctx }) {
 function MarksControlPage({ ctx }) {
   const { students, teachers, marksMap, markDeadlines, markUnlocks, saveDeadline, setClassUnlocked } = ctx;
   const [tab,  setTab]  = useState("progress"); // progress | lock | history
-  const [year, setYear] = useState("2026/2027");
+  const [year, setYear] = useState(ACTIVE_YEAR);
   const [seq,  setSeq]  = useState("SEQ 1");
   const [open, setOpen] = useState({});
   const [dlInput, setDlInput] = useState("");
@@ -3687,13 +4207,14 @@ function MarksControlPage({ ctx }) {
           <div><label style={lbl}>Sequence</label><select style={inp} value={seq} onChange={e=>setSeq(e.target.value)}>{ALL_SEQ_LABELS.map(x=><option key={x}>{x}</option>)}</select></div>
         </div>
         <div style={{display:"flex",gap:6,marginTop:10}}>
-          {[["progress","Progress"],["lock","Locks"],["history","History"],["f5","Form 5"]].map(([k,l])=>(
+          {[["progress","Progress"],["lock","Locks"],["history","History"],["class","Class"],["f5","Form 5"]].map(([k,l])=>(
             <button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:`2px solid ${tab===k?C.navy:C.grayLight}`,background:tab===k?C.navy:C.white,color:tab===k?C.white:C.gray,fontWeight:700,fontSize:11.5,cursor:"pointer"}}>{l}</button>
           ))}
         </div>
       </div>
 
       {tab==="f5" && <F5Tools ctx={ctx}/>}
+      {tab==="class" && <ClassSummaryPanel ctx={ctx}/>}
 
       {tab==="progress" && <>
         <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><SmBtn onClick={copyMissing} color={C.navyMid}>📋 Copy missing list</SmBtn></div>
@@ -3780,7 +4301,7 @@ function ClassRemarksPage({ ctx }) {
   const isTeacher = auth.role==="teacher";
   const teacher   = findTeacher(teachers, auth.user.email);
   const myForms   = isTeacher ? (teacher?.class_teacher_of ? [teacher.class_teacher_of] : []) : FORMS;
-  const [sel, setSel] = useState({ form:myForms[0]||"Form 1", year:"2026/2027", term:"First Term" });
+  const [sel, setSel] = useState({ form:myForms[0]||"Form 1", year:ACTIVE_YEAR, term:"First Term" });
   const [local, setLocal] = useState({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -4428,7 +4949,7 @@ async function htmlDocsToPdfBlob(docs, onProgress, scale=2, quality=0.92) {
 function ReportsPageInner({ ctx }) {
   const { students, marksMap, teachers, attendanceMap, feesMap, settings, saveSetting, remarksMap } = ctx;
   const remTerm = sel0 => sel0.mode==="term" ? sel0.term : "Third Term";
-  const [sel,     setSel]     = useState({ studentId:"", year:"2026/2027", mode:"term", term:"First Term", f5Assess:"Pre Mock" });
+  const [sel,     setSel]     = useState({ studentId:"", year:ACTIVE_YEAR, mode:"term", term:"First Term", f5Assess:"Pre Mock" });
   const [conduct, setConduct] = useState({ present:"", absent:"", late:"", conduct:"Very Good", classTeacherRemark:"", principalRemark:"" });
   const [showC,   setShowC]   = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -4777,7 +5298,7 @@ function PerformancePage({ ctx }) {
   const teacher    = findTeacher(teachers, auth.user.email);
   const availForms = isTeacher ? (teacher?.forms||[]) : FORMS;
 
-  const [f, setF] = useState({ cls: availForms.length===1 ? availForms[0] : "all", year:"2026/2027", term:"First Term" });
+  const [f, setF] = useState({ cls: availForms.length===1 ? availForms[0] : "all", year:ACTIVE_YEAR, term:"First Term" });
   const [showAllRisk, setShowAllRisk] = useState(false);
   useEffect(() => { if (f.cls!=="all" && !availForms.includes(f.cls)) setF(x => ({ ...x, cls: availForms.length===1 ? availForms[0] : "all" })); }, [availForms.join("|")]);
 
@@ -5010,7 +5531,7 @@ function ClassCouncilPage({ ctx }) {
   const teacher    = findTeacher(teachers, auth.user.email);
   const availForms = isTeacher ? (teacher?.forms||[]) : FORMS;
 
-  const [sel, setSel]       = useState({ form:availForms[0]||"Form 1", year:"2026/2027", term:"First Term" });
+  const [sel, setSel]       = useState({ form:availForms[0]||"Form 1", year:ACTIVE_YEAR, term:"First Term" });
   useEffect(() => { if (availForms.length && !availForms.includes(sel.form)) setSel(x => ({ ...x, form:availForms[0] })); }, [availForms.join("|")]);
   const [tab, setTab]       = useState("rank"); // rank | meetings | actions
   const [showFull, setShowFull] = useState(false);
@@ -5473,7 +5994,7 @@ function FeesPage({ ctx }) {
         <h2 style="font-size:15px;font-weight:900;margin:3px 0">SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE</h2>
         <p style="font-size:9px;color:#6B7280;margin:0">NGEPTANG · NONI · NW REGION</p>
         <div style="margin-top:7px;background:#B91C1C;display:inline-block;padding:3px 16px;border-radius:10px;color:#fff;font-size:11px;font-weight:800">SCHOOL FEES DEFAULTER LIST</div>
-        <p style="font-size:9.5px;color:#374151;margin-top:5px">Below <strong>${threshold}%</strong> · Total fee: <strong>${TOTAL_FEE.toLocaleString()} FCFA</strong> · Academic Year 2026/2027 · ${new Date().toLocaleDateString("en-GB")}</p>
+        <p style="font-size:9.5px;color:#374151;margin-top:5px">Below <strong>${threshold}%</strong> · Total fee: <strong>${TOTAL_FEE.toLocaleString()} FCFA</strong> · Academic Year ${ACTIVE_YEAR} · ${new Date().toLocaleDateString("en-GB")}</p>
       </div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;text-align:center">
         <div style="background:#EEF2FF;border-radius:6px;padding:8px;border-left:3px solid #0D2340"><div style="font-size:17px;font-weight:900">${debtors.length}</div><div style="font-size:9px;color:#6B7280">Defaulters</div></div>
