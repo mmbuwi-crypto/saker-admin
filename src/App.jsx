@@ -219,6 +219,24 @@ function addToOfflineQueue(item) {
   return queue;
 }
 
+// ── Marks written offline: queued on the phone, uploaded when the connection returns ──
+const markKey = r => `${r.student_id}-${r.subject}-${r.seq}-${r.acad_year}`;
+async function pushMarkRows(rows, oldScores, who) {
+  const { error } = await supabase.from("marks").upsert(rows, { onConflict:"student_id,subject,seq,acad_year" });
+  if (error) throw error;
+}
+async function writeMarkRows(rows, online, who, oldScores) {
+  if (!rows.length) return { queued:false };
+  const queue = () => { addToOfflineQueue({ type:"marks", data:{ rows, who, oldScores } }); return { queued:true }; };
+  if (!online) return queue();
+  try { await pushMarkRows(rows, oldScores, who); return { queued:false }; }
+  catch(e) { if (/fetch|network|failed to send|load failed/i.test(e?.message||"")) return queue(); throw e; }
+}
+// Last data loaded online, kept on the phone so the app can open and take marks without internet (photos left out to save space)
+const SNAP_KEY = "sbcc_snapshot_v1";
+function writeSnapshot(o) { try { localStorage.setItem(SNAP_KEY, JSON.stringify(o)); } catch(e) { console.warn("Snapshot not saved:", e); } }
+function readSnapshot()   { try { const r = localStorage.getItem(SNAP_KEY); return r ? JSON.parse(r) : null; } catch { return null; } }
+
 function removeFromOfflineQueue(queueItemId) {
   const queue = loadOfflineQueue().filter(q => q.id !== queueItemId);
   saveOfflineQueue(queue);
@@ -529,13 +547,18 @@ export default function App() {
         if (!["admin", "teacher"].includes(data.role)) {
           throw new Error("This account has an unsupported or missing profile role. Access has been blocked.");
         }
+        try { localStorage.setItem("sbcc_profile_"+session.user.id, JSON.stringify(data)); } catch {}
         if (!cancelled) {
           setUserProfile(data);
           setUserRole(data.role);
         }
       } catch (error) {
         console.error("Unable to load authenticated profile:", error);
-        if (!cancelled) {
+        let cached = null;
+        if (/fetch|network|load failed/i.test(error?.message||"")) { try { cached = JSON.parse(localStorage.getItem("sbcc_profile_"+session.user.id)||"null"); } catch {} }
+        if (cached && ["admin","teacher"].includes(cached.role)) {
+          if (!cancelled) { setUserProfile(cached); setUserRole(cached.role); }
+        } else if (!cancelled) {
           setUserRole(null);
           setUserProfile(null);
           setRoleError(error?.message || "Could not verify your account role. Please try again.");
@@ -565,7 +588,7 @@ export default function App() {
     setLoading(true);
     try {
       const [
-        { data: st }, { data: tc }, { data: mk },
+        { data: st, error: stErr }, { data: tc }, { data: mk },
         { data: fe }, { data: nt }, { data: at }, { data: cal },
         { data: cm, error: cmErr }, { data: cd, error: cdErr }
       ] = await Promise.all([
@@ -579,6 +602,7 @@ export default function App() {
         supabase.from("council_meetings").select("*").order("meeting_date", { ascending: false }),
         supabase.from("council_decisions").select("*"),
       ]);
+      if (stErr) throw stErr;
       setStudents(st || []);
       setTeachers(tc || []);
       // Build marks map: "studentId-subject-seq-year" → record
@@ -613,11 +637,26 @@ export default function App() {
       setMarkDeadlines(dl || []);
       setMarkUnlocks(ul || []);
       setDbError(null);
+      writeSnapshot({ students:(st||[]).map(({ photo_url, ...r }) => r), teachers:tc||[], marks:mk||[], fees:fe||[], settings:settingsObj, deadlines:dl||[], unlocks:ul||[] });
     } catch(e) {
-      setDbError(e.message);
+      const snap = readSnapshot();
+      if (snap && /fetch|network|load failed/i.test(e?.message||"")) {
+        // No connection: open with the last data seen online. Marks entered now go into the offline queue.
+        setStudents(snap.students||[]); setTeachers(snap.teachers||[]);
+        const mm = {}; (snap.marks||[]).forEach(m => { mm[`${m.student_id}-${m.subject}-${m.seq}-${m.acad_year}`] = m; }); setMarksMap(mm);
+        const fm = {}; (snap.fees||[]).forEach(f => { fm[f.student_id] = { paid:f.paid||0, total:f.total||TOTAL_FEE }; }); setFeesMap(fm);
+        setSettings(snap.settings||{}); setMarkDeadlines(snap.deadlines||[]); setMarkUnlocks(snap.unlocks||[]);
+        setIsOnline(false); setDbError(null);
+      } else setDbError(e.message);
     }
     setLoading(false);
   }
+
+  // ── Install on the phone + offline shell (needs public/manifest.webmanifest and public/sw.js) ──
+  useEffect(() => {
+    if (!document.querySelector('link[rel="manifest"]')) { const l = document.createElement("link"); l.rel = "manifest"; l.href = "/manifest.webmanifest"; document.head.appendChild(l); }
+    if ("serviceWorker" in navigator && window.location.protocol==="https:") navigator.serviceWorker.register("/sw.js").catch(() => {});
+  }, []);
 
   // ── Real-time subscriptions ─────────────────────────────────────────────────
   useEffect(() => {
@@ -856,6 +895,10 @@ export default function App() {
           );
           if (error) throw error;
           success.push(item);
+
+        } else if (item.type === "marks") {
+          await pushMarkRows(item.data.rows, item.data.oldScores||{}, item.data.who);
+          success.push(item);
         }
         removeFromOfflineQueue(item.id);
       } catch(e) {
@@ -872,7 +915,7 @@ export default function App() {
 
   // Watch for connectivity changes and auto-sync when we come back online
   useEffect(() => {
-    function handleOnline() { setIsOnline(true); syncOfflineQueue(); }
+    function handleOnline() { setIsOnline(true); loadAll(); syncOfflineQueue(); }
     function handleOffline() { setIsOnline(false); }
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
@@ -1074,6 +1117,8 @@ export default function App() {
                 <div key={item.id} style={{background:"rgba(255,255,255,0.6)",borderRadius:6,padding:"6px 10px",marginBottom:5,fontSize:11,color:"#78350f"}}>
                   {item.type==="register"
                     ? `📋 Registration: ${item.data.name} (${item.data.form})`
+                    : item.type==="marks"
+                    ? `✏️ Marks: ${item.data.rows.length} mark(s) — ${item.data.rows[0]?.subject||""} ${item.data.rows[0]?.seq||""}`
                     : `💰 Payment: ${item.data.amount.toLocaleString()} FCFA for ${item.data.studentId}`
                   }
                   <span style={{opacity:.7,marginLeft:6}}>· queued {fmtDate(item.queuedAt?.slice(0,10))}</span>
@@ -2397,6 +2442,7 @@ function StudentsPage({ ctx }) {
   const [saving, setSaving] = useState(false);
   const [showPromote, setShowPromote] = useState(false);
   const [showRollover, setShowRollover] = useState(false);
+  const [showIdCards, setShowIdCards] = useState(false);
   const blank = { name:"", form:"Form 1", gender:"Female", dob:"", parent:"", phone:"", address:"", photo_url:null };
   const [form, setForm] = useState(blank);
   const photoInputRef = useRef(null);
@@ -2480,6 +2526,7 @@ function StudentsPage({ ctx }) {
         {auth.role==="admin" && <SmBtn onClick={exportStudents} color={C.green}>📊 Export Excel</SmBtn>}
         {auth.role==="admin" && <SmBtn onClick={()=>setShowPromote(true)} color={C.gold}>🎓 Promote Students</SmBtn>}
         {auth.role==="admin" && <SmBtn onClick={()=>setShowRollover(true)} color={C.navy}>🔄 New Academic Year</SmBtn>}
+        {auth.role==="admin" && <SmBtn onClick={()=>setShowIdCards(true)} color={C.navyMid}>🪪 ID Cards</SmBtn>}
         {auth.role==="admin" && missingPinCount>0 && <SmBtn onClick={generateMissingPins} color={C.navyMid}>📱 Generate {missingPinCount} Missing PIN{missingPinCount!==1?"s":""}</SmBtn>}
         {auth.role==="admin" && <Btn onClick={()=>{setForm(blank);setModal("add");}}>+ Add</Btn>}
       </div>
@@ -2595,6 +2642,7 @@ function StudentsPage({ ctx }) {
 
       {showPromote && <PromoteStudentsModal students={students} saveStudent={saveStudent} saveFee={ctx.saveFee} onClose={()=>setShowPromote(false)}/>}
       {showRollover && <YearRolloverModal ctx={ctx} onClose={()=>setShowRollover(false)}/>}
+      {showIdCards && <IdCardsModal students={students} onClose={()=>setShowIdCards(false)}/>}
     </div>
   );
 }
@@ -2933,6 +2981,61 @@ function YearRolloverModal({ ctx, onClose }) {
   );
 }
 
+// ─── Student ID cards: 10 per A4 page (credit-card size) ───────────────────────
+function idCardDocs(list, year) {
+  const card = st => {
+    const photo = st.photo_url
+      ? `<img src="${st.photo_url}" alt="" style="width:20mm;height:25mm;object-fit:cover;border:0.3mm solid #0D2340;display:block">`
+      : `<div style="width:20mm;height:25mm;border:0.3mm dashed #999;box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-size:6pt;color:#888;text-align:center">Photo</div>`;
+    return `<div class="c">
+      <div class="top"><img src="${SCHOOL_LOGO}" alt="" style="width:9mm;height:9mm;object-fit:contain"><div><div class="sc">SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE</div><div class="tt">Student ID Card · ${escHtml(year)}</div></div></div>
+      <div class="bd">${photo}<div class="in"><div class="nm">${escHtml(st.name)}</div><div class="ln"><b>Matricule:</b> ${escHtml(st.id)}</div><div class="ln"><b>Class:</b> ${escHtml(st.form)}</div>${st.gender?`<div class="ln"><b>Sex:</b> ${escHtml(st.gender)}</div>`:""}</div></div>
+      <div class="ft"><span>Holder's signature</span><span>Principal</span></div>
+    </div>`;
+  };
+  const pages = [];
+  for (let i=0; i<list.length; i+=10) pages.push(list.slice(i,i+10));
+  return pages.map(g => `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    body{margin:0;padding:8mm 15mm;font-family:Arial,Helvetica,sans-serif;color:#111;background:#fff}
+    .grid{display:grid;grid-template-columns:85.6mm 85.6mm;grid-auto-rows:54mm;gap:2.5mm 4mm}
+    .c{border:0.3mm solid #0D2340;border-radius:2.5mm;box-sizing:border-box;overflow:hidden;display:flex;flex-direction:column}
+    .top{background:#0D2340;color:#fff;display:flex;align-items:center;gap:2mm;padding:1mm 2.5mm;height:11mm;box-sizing:border-box;border-bottom:0.8mm solid #C9962A}
+    .top img{background:#fff;border-radius:50%} .sc{font-size:6.3pt;font-weight:700} .tt{font-size:6pt;color:#F0C050}
+    .bd{display:flex;gap:3mm;padding:2.5mm 3mm;flex:1} .in{flex:1;min-width:0}
+    .nm{font-weight:700;font-size:9.5pt;margin-bottom:1.5mm;line-height:4.2mm} .ln{font-size:7.5pt;margin-bottom:0.8mm}
+    .ft{display:flex;justify-content:space-between;padding:0 3mm 2mm;font-size:5.5pt;color:#555} .ft span{border-top:0.2mm solid #555;width:38%;text-align:center;padding-top:0.4mm}
+  </style></head><body><div class="grid">${g.map(card).join("")}</div></body></html>`);
+}
+
+function IdCardsModal({ students, onClose }) {
+  const [form, setForm] = useState("");
+  const [busy, setBusy] = useState("");
+  const list = students.filter(s => s.active && s.reg_status==="registered" && (!form || s.form===form))
+    .sort((a,b)=>FORMS.indexOf(a.form)-FORMS.indexOf(b.form) || a.name.localeCompare(b.name));
+  const noPhoto = list.filter(s=>!s.photo_url).length;
+  async function print() {
+    if (!list.length) { alert("No students to print."); return; }
+    const docs = idCardDocs(list, ACTIVE_YEAR);
+    setBusy(`0/${docs.length}`);
+    try { downloadBlob(await htmlDocsToPdfBlob(docs, (d,t)=>setBusy(`${d}/${t}`), 1.5, 0.85), `ID-Cards-${(form||"All-classes").replace(/\s+/g,"")}-${ACTIVE_YEAR.replace("/","-")}.pdf`); }
+    catch(e) { alert("Could not create the PDF: "+e.message); }
+    setBusy("");
+  }
+  return (
+    <Modal title="🪪 Student ID cards" onClose={onClose}>
+      <Fr label="Class">
+        <select style={inp} value={form} onChange={e=>setForm(e.target.value)}><option value="">All classes</option>{FORMS.map(f=><option key={f}>{f}</option>)}</select>
+      </Fr>
+      <div style={{fontSize:12,color:C.navy,marginBottom:4}}>{list.length} card(s) · {Math.ceil(list.length/10)} page(s) · year {ACTIVE_YEAR}</div>
+      {noPhoto>0 && <div style={{fontSize:11,color:C.gold,marginBottom:8}}>{noPhoto} student(s) have no photo yet. Their card prints with an empty photo box.</div>}
+      <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:10}}>
+        <Btn onClick={onClose} outline>Close</Btn>
+        <Btn onClick={print} disabled={!!busy}>{busy?`Making PDF… ${busy}`:"Print ID cards PDF"}</Btn>
+      </div>
+    </Modal>
+  );
+}
+
 // ─── Teachers ──────────────────────────────────────────────────────────────────
 // Name of the Supabase Edge Function that creates / resets / deletes teacher logins
 const TEACHER_FUNCTION = "manage-teacher-v2";
@@ -3217,7 +3320,8 @@ function MarksPage({ ctx }) {
     if (blocked) return;
     setSaving(true);
     try {
-      // Save all marks one by one
+      const rows = [];
+      const mk = (sid, sq, score) => rows.push({ student_id:sid, subject, seq:sq, acad_year:filter.year, score, coeff:Number(coeff)||1, teacher_id:teacher?.id||null });
       for (const s of formStudents) {
         if (paperMode) {
           const pv = paperLocal[s.id] || {};
@@ -3225,33 +3329,19 @@ function MarksPage({ ctx }) {
             const x = pv[pp.k];
             if (x===""||x===undefined) continue;
             if (Number(x)<0 || Number(x)>pp.max) throw new Error(`${s.name}: Paper ${pp.k.slice(1)} must be between 0 and ${pp.max}`);
-            const { error: pe } = await supabase.from("marks").upsert({
-              student_id: s.id, subject, seq: `${seqV} ${pp.k}`,
-              acad_year: filter.year, score: Number(x), coeff: Number(coeff)||1, teacher_id: teacher?.id||null,
-            }, { onConflict:"student_id,subject,seq,acad_year" });
-            if (pe) throw pe;
+            mk(s.id, `${seqV} ${pp.k}`, Number(x));
           }
           const comb = f5Combine(subject, pv); // only once every paper is entered
-          if (comb!==null) {
-            const { error: ce } = await supabase.from("marks").upsert({
-              student_id: s.id, subject, seq: seqV,
-              acad_year: filter.year, score: comb, coeff: Number(coeff)||1, teacher_id: teacher?.id||null,
-            }, { onConflict:"student_id,subject,seq,acad_year" });
-            if (ce) throw ce;
-          }
+          if (comb!==null) mk(s.id, seqV, comb);
           continue;
         }
         const v = local[s.id];
         if (v===""||v===undefined) continue;
-        const { error } = await supabase.from("marks").upsert({
-          student_id: s.id, subject, seq: seqV,
-          acad_year: filter.year, score: Number(v),
-          coeff: Number(coeff)||1,
-          teacher_id: teacher?.id||null,
-        }, { onConflict:"student_id,subject,seq,acad_year" });
-        if (error) throw error;
+        mk(s.id, seqV, Number(v));
       }
-      await ctx.loadAll(); // refresh all data
+      const res = await writeMarkRows(rows, ctx.isOnline, auth.user.name, {});
+      if (res.queued) { ctx.setOfflineQueue(loadOfflineQueue()); alert("No internet. The marks are saved on this phone and will upload by themselves when you are back online."); }
+      else await ctx.loadAll(); // refresh all data
       setSaved(true);
     } catch(e) { alert("Save error: "+e.message); }
     setSaving(false);
@@ -3909,6 +3999,103 @@ function F5Tools({ ctx }) {
   );
 }
 
+// ─── Honour roll and certificates (Forms 1–4) ──────────────────────────────────
+const ordinal = n => n+(["th","st","nd","rd"][(n%100>10&&n%100<14)?0:Math.min(n%10,4)%4]||"th");
+// Best overall student and best score per subject in each class for a period. Ties share the award.
+function honourData(ctx, forms, year, period) {
+  return forms.map(form => {
+    const { ranked, subs } = classSummaryRows(ctx, form, year, period);
+    const top = ranked.length ? ranked.filter(r => r.rank===1) : [];
+    const subjects = [];
+    subs.forEach(sub => {
+      let best = -1, winners = [];
+      ranked.forEach(r => { const v = r.vals[sub]; if (v===undefined) return; if (v>best+1e-9) { best=v; winners=[r]; } else if (Math.abs(v-best)<=1e-9) winners.push(r); });
+      if (winners.length) subjects.push({ sub, score:best, winners:winners.map(w=>w.st) });
+    });
+    return { form, top, subjects };
+  });
+}
+function certificateDocs(items, year, period) {
+  return items.map(it => `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    body{margin:0;padding:12mm;font-family:Georgia,'Times New Roman',serif;color:#111;background:#fff}
+    .b{border:2mm double #0D2340;height:271mm;box-sizing:border-box;padding:14mm 16mm;text-align:center;position:relative}
+    .in{border:0.4mm solid #C9962A;position:absolute;inset:3mm}
+    .c{position:relative}
+    h1{font-size:19pt;margin:4mm 0 0;color:#0D2340;letter-spacing:0.3mm} .sub{font-size:11pt;color:#555;margin-top:1mm}
+    h2{font-size:30pt;margin:16mm 0 4mm;color:#C9962A;font-weight:normal} .t{font-size:13pt;margin:5mm 0} .nm{font-size:25pt;font-weight:bold;color:#0D2340;margin:6mm 0;border-bottom:0.4mm solid #999;display:inline-block;padding:0 10mm 1mm}
+    .what{font-size:15pt;line-height:1.6;margin:6mm 10mm} .sg{display:flex;justify-content:space-around;margin-top:38mm;font-size:11pt} .sg span{border-top:0.3mm solid #111;width:60mm;padding-top:1.5mm}
+  </style></head><body><div class="b"><div class="in"></div><div class="c">
+    <img src="${SCHOOL_LOGO}" alt="" style="width:30mm;height:30mm;object-fit:contain">
+    <h1>SAKER BAPTIST COMPREHENSIVE COLLEGE BAWE</h1>
+    <h2>Certificate of Excellence</h2>
+    <div class="t">This certificate is proudly awarded to</div>
+    <div class="nm">${escHtml(it.st.name)}</div>
+    <div class="t">${escHtml(it.st.form)} · Matricule ${escHtml(it.st.id)}</div>
+    <div class="what">${it.kind==="class"
+      ? `for ranking <b>${ordinal(1)}</b> in ${escHtml(it.st.form)} with an average of <b>${it.score.toFixed(2)}/20</b> in ${escHtml(period)}, ${escHtml(year)}.`
+      : `for the best performance in <b>${escHtml(it.sub)}</b> in ${escHtml(it.st.form)} with <b>${it.score.toFixed(2)}/20</b> in ${escHtml(period)}, ${escHtml(year)}.`}</div>
+    <div class="sg"><span>Class Teacher</span><span>Principal</span></div>
+    <div class="t" style="margin-top:12mm;font-size:10pt;color:#555">Date: ${new Date().toLocaleDateString("en-GB")}</div>
+  </div></div></body></html>`);
+}
+
+function HonourRoll({ ctx }) {
+  const [year, setYear]     = useState(ACTIVE_YEAR);
+  const [period, setPeriod] = useState("Annual");
+  const [form, setForm]     = useState("");
+  const [busy, setBusy]     = useState("");
+  const forms = FORMS.filter(f => !isF5(f) && (!form || f===form));
+  const data = useMemo(() => honourData(ctx, forms, year, period), [ctx.students, ctx.marksMap, year, period, form]);
+  async function make(kind) {
+    const items = [];
+    data.forEach(d => {
+      if (kind==="class") d.top.forEach(r => items.push({ kind:"class", st:r.st, score:r.avg }));
+      else d.subjects.forEach(x => x.winners.forEach(st => items.push({ kind:"subject", st, sub:x.sub, score:x.score })));
+    });
+    if (!items.length) { alert("No marks entered for this selection."); return; }
+    if (items.length>40 && !window.confirm(`${items.length} certificates will be made. This can be slow on a phone. Choose one class to make fewer. Continue?`)) return;
+    setBusy(kind);
+    try { downloadBlob(await htmlDocsToPdfBlob(certificateDocs(items, year, period), null, 1.2, 0.8), `Certificates-${kind==="class"?"Best-student":"Best-in-subject"}-${(form||"All").replace(/\s+/g,"")}-${period.replace(/\s+/g,"")}.pdf`); }
+    catch(e) { alert("Could not create the PDF: "+e.message); }
+    setBusy("");
+  }
+  const card = { background:C.white, borderRadius:10, padding:12, marginBottom:11, boxShadow:"0 1px 3px rgba(0,0,0,0.06)" };
+  return (
+    <div>
+      <div style={card}>
+        <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:4}}>Honour roll and certificates</div>
+        <div style={{fontSize:11,color:C.gray,marginBottom:8}}>Best student per class and best score per subject, for Forms 1 to 4. A tie shares the award.</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          <div><label style={lbl}>Academic year</label><select style={inp} value={year} onChange={e=>setYear(e.target.value)}>{ACAD_YEARS.map(y=><option key={y}>{y}</option>)}</select></div>
+          <div><label style={lbl}>Period</label><select style={inp} value={period} onChange={e=>setPeriod(e.target.value)}>{PERIODS.map(x=><option key={x}>{x}</option>)}</select></div>
+        </div>
+        <label style={{...lbl,marginTop:8}}>Class</label>
+        <select style={inp} value={form} onChange={e=>setForm(e.target.value)}><option value="">All classes (Forms 1–4)</option>{FORMS.filter(f=>!isF5(f)).map(f=><option key={f}>{f}</option>)}</select>
+        <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}>
+          <Btn onClick={()=>make("class")} disabled={!!busy}>{busy==="class"?"Making PDF…":"🏅 Best student certificates"}</Btn>
+          <Btn onClick={()=>make("subject")} outline disabled={!!busy}>{busy==="subject"?"Making PDF…":"🎖 Best in subject certificates"}</Btn>
+        </div>
+      </div>
+      {data.map(d => (
+        <div key={d.form} style={card}>
+          <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:6}}>{d.form}</div>
+          {!d.top.length ? <div style={{fontSize:12,color:C.gray}}>No marks entered for this period.</div> : <>
+            <div style={{fontSize:12.5,color:C.navy}}>🏅 <b>{d.top.map(r=>r.st.name).join(" & ")}</b> — {d.top[0].avg.toFixed(2)}/20</div>
+            <div style={{marginTop:7}}>
+              {d.subjects.map(x => (
+                <div key={x.sub} style={{display:"flex",justifyContent:"space-between",gap:8,borderTop:`1px solid ${C.grayBg}`,padding:"4px 0",fontSize:11.5}}>
+                  <span style={{color:C.gray}}>{x.sub}</span>
+                  <span style={{color:C.navy,fontWeight:600,textAlign:"right"}}>{x.winners.map(w=>w.name).join(", ")} <span style={{color:C.gold}}>{x.score.toFixed(1)}</span></span>
+                </div>
+              ))}
+            </div>
+          </>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Class summary (Forms 1–4) and Subject results ─────────────────────────────
 const PERIODS = [...SEQ_LABELS, ...TERMS, "Annual"];
 const GRADE_ORDER = ["A","B+","B","C+","C","D","F"];
@@ -4207,7 +4394,7 @@ function MarksControlPage({ ctx }) {
           <div><label style={lbl}>Sequence</label><select style={inp} value={seq} onChange={e=>setSeq(e.target.value)}>{ALL_SEQ_LABELS.map(x=><option key={x}>{x}</option>)}</select></div>
         </div>
         <div style={{display:"flex",gap:6,marginTop:10}}>
-          {[["progress","Progress"],["lock","Locks"],["history","History"],["class","Class"],["f5","Form 5"]].map(([k,l])=>(
+          {[["progress","Progress"],["lock","Locks"],["history","History"],["class","Class"],["honour","Honours"],["f5","Form 5"]].map(([k,l])=>(
             <button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:`2px solid ${tab===k?C.navy:C.grayLight}`,background:tab===k?C.navy:C.white,color:tab===k?C.white:C.gray,fontWeight:700,fontSize:11.5,cursor:"pointer"}}>{l}</button>
           ))}
         </div>
@@ -4215,6 +4402,7 @@ function MarksControlPage({ ctx }) {
 
       {tab==="f5" && <F5Tools ctx={ctx}/>}
       {tab==="class" && <ClassSummaryPanel ctx={ctx}/>}
+      {tab==="honour" && <HonourRoll ctx={ctx}/>}
 
       {tab==="progress" && <>
         <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><SmBtn onClick={copyMissing} color={C.navyMid}>📋 Copy missing list</SmBtn></div>
@@ -5839,6 +6027,7 @@ function FeesPage({ ctx }) {
   const [pendingPayments, setPendingPayments] = useState([]);
   const [loadingPending,  setLoadingPending]  = useState(true);
   const [reviewing,       setReviewing]       = useState(null); // submission being viewed full-size
+  const [showStmt,        setShowStmt]        = useState(false);
 
   async function loadPendingPayments() {
     setLoadingPending(true);
@@ -6060,6 +6249,10 @@ function FeesPage({ ctx }) {
         <button onClick={exportFeesExcel} style={{width:"100%",padding:"10px",marginTop:8,background:C.green,color:C.white,border:"none",borderRadius:8,fontWeight:800,fontSize:13,cursor:"pointer"}}>
           📊 Export Full Fees Report — Excel {filter.form?`(${filter.form})`:"(All Forms)"}
         </button>
+        <button onClick={()=>setShowStmt(true)} style={{width:"100%",padding:"10px",marginTop:8,background:C.navy,color:C.white,border:"none",borderRadius:8,fontWeight:800,fontSize:13,cursor:"pointer"}}>
+          🧾 Fee statements and instalments
+        </button>
+        {showStmt && <FeeStatementsModal ctx={ctx} onClose={()=>setShowStmt(false)}/>}
       </div>
 
       {/* Filters */}
@@ -6151,6 +6344,128 @@ function FeesPage({ ctx }) {
 }
 
 // ─── Payment Screenshot Review Modal ─────────────────────────────────────────────
+// ─── Fee statements and instalments ────────────────────────────────────────────
+// Plan kept in app_settings.fee_instalments → [{amt, due}] (amounts must add up to TOTAL_FEE)
+function feePlan(settings) {
+  const p = parseJSON(settings?.fee_instalments, null);
+  if (Array.isArray(p) && p.length && p.reduce((a,x)=>a+Number(x.amt||0),0)===TOTAL_FEE) return p.map(x => ({ amt:Number(x.amt), due:x.due }));
+  const y = Number(ACTIVE_YEAR.slice(0,4));
+  return [ { amt:15000, due:`${y}-09-30` }, { amt:10000, due:`${y+1}-01-31` }, { amt:10000, due:`${y+1}-04-30` } ];
+}
+// Money paid fills the instalments in order
+function feeStatus(plan, paid) {
+  let rem = paid; const today = localToday();
+  const rows = plan.map(p => { const got = Math.min(rem, p.amt); rem -= got; const owing = p.amt - got;
+    return { ...p, got, owing, status: owing===0 ? "Paid" : p.due < today ? "Overdue" : got>0 ? "Part paid" : "Upcoming" }; });
+  return { rows, paid, balance: Math.max(0, TOTAL_FEE-paid),
+    overdue: rows.filter(r=>r.due<today).reduce((a,r)=>a+r.owing,0),
+    nextDue: rows.find(r=>r.owing>0 && r.due>=today)?.due || "" };
+}
+function feeStatementDocs(list, feesMap, plan, paysByStudent) {
+  const money = n => Number(n).toLocaleString("en-GB")+" FCFA";
+  const one = st => {
+    const fs = feeStatus(plan, feesMap[st.id]?.paid||0);
+    const col = { Paid:"#15803D", Overdue:"#B91C1C", "Part paid":"#C9962A", Upcoming:"#555" };
+    const pays = (paysByStudent[st.id]||[]);
+    return `<div class="st">
+      <div class="hd"><img src="${SCHOOL_LOGO}" alt="" style="width:15mm;height:15mm;object-fit:contain"><div><div class="sc">Saker Baptist Comprehensive College Bawe</div><div class="tt">Fee statement · ${escHtml(ACTIVE_YEAR)} · printed ${new Date().toLocaleDateString("en-GB")}</div></div></div>
+      <table class="m"><tr><td><b>Name:</b> ${escHtml(st.name)}</td><td><b>Matricule:</b> ${escHtml(st.id)}</td></tr><tr><td><b>Class:</b> ${escHtml(st.form)}</td><td><b>Parent/Guardian:</b> ${escHtml(st.parent||"—")}</td></tr></table>
+      <table class="t"><thead><tr><th>Instalment</th><th>Due date</th><th>Amount</th><th>Paid</th><th>Owing</th><th>Status</th></tr></thead><tbody>
+      ${fs.rows.map((r,i)=>`<tr><td>${i+1}</td><td>${fmtDate(r.due)}</td><td>${r.amt.toLocaleString("en-GB")}</td><td>${r.got.toLocaleString("en-GB")}</td><td>${r.owing.toLocaleString("en-GB")}</td><td style="color:${col[r.status]};font-weight:700">${r.status}</td></tr>`).join("")}
+      <tr class="tot"><td colspan="2">Total</td><td>${TOTAL_FEE.toLocaleString("en-GB")}</td><td>${fs.paid.toLocaleString("en-GB")}</td><td>${fs.balance.toLocaleString("en-GB")}</td><td></td></tr></tbody></table>
+      <div class="sum">Balance: <b>${money(fs.balance)}</b>${fs.overdue>0?` · <span style="color:#B91C1C"><b>Overdue now: ${money(fs.overdue)}</b></span>`:""}${fs.nextDue?` · Next due: <b>${fmtDate(fs.nextDue)}</b>`:""}</div>
+      ${pays.length?`<div class="pl">Mobile Money payments confirmed: ${pays.map(x=>`${fmtDate((x.reviewed_at||x.submitted_at||"").slice(0,10))} — ${Number(x.amount).toLocaleString("en-GB")} FCFA`).join(" · ")}</div>`:""}
+    </div>`;
+  };
+  const pages = [];
+  for (let i=0; i<list.length; i+=2) pages.push(list.slice(i,i+2));
+  return pages.map(g => `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    body{margin:0;padding:8mm 14mm;font-family:Arial,Helvetica,sans-serif;color:#111;font-size:10pt;background:#fff}
+    .st{height:136mm;box-sizing:border-box;border-bottom:0.3mm dashed #999;padding:4mm 0;overflow:hidden}
+    .hd{display:flex;gap:4mm;align-items:center;border-bottom:0.5mm solid #C9962A;padding-bottom:2mm;margin-bottom:3mm} .sc{font-weight:700;font-size:12pt;color:#0D2340} .tt{font-size:9pt;color:#555}
+    table{width:100%;border-collapse:collapse} .m td{padding:1mm 0;font-size:9.5pt} .t{margin-top:3mm} .t th,.t td{border:1px solid #888;padding:1.6mm 2mm;text-align:center;font-size:9pt} .t th{background:#E8EEF7} .tot td{font-weight:700;background:#F3F4F6}
+    .sum{margin-top:3mm;font-size:10pt} .pl{margin-top:2mm;font-size:8pt;color:#555}
+  </style></head><body>${g.map(one).join("")}</body></html>`);
+}
+
+function FeeStatementsModal({ ctx, onClose }) {
+  const { students, feesMap, settings, saveSetting } = ctx;
+  const [form, setForm] = useState("");
+  const [plan, setPlan] = useState(() => feePlan(settings).map(x => ({ amt:String(x.amt), due:x.due })));
+  const [busy, setBusy] = useState("");
+  const list = students.filter(s => s.active && s.reg_status==="registered" && (!form || s.form===form))
+    .sort((a,b)=>FORMS.indexOf(a.form)-FORMS.indexOf(b.form) || a.name.localeCompare(b.name));
+  const planNum   = plan.map(x => ({ amt:Number(x.amt)||0, due:x.due }));
+  const planTotal = planNum.reduce((a,x)=>a+x.amt,0);
+  const planOk    = planTotal===TOTAL_FEE && planNum.every(x=>x.amt>0 && /^\d{4}-\d{2}-\d{2}$/.test(x.due||""));
+  const owing = list.map(st => ({ st, fs: feeStatus(planNum, feesMap[st.id]?.paid||0) })).filter(x=>x.fs.overdue>0).sort((a,b)=>b.fs.overdue-a.fs.overdue);
+
+  async function savePlan() {
+    if (!planOk) { alert(`Amounts must add up to ${TOTAL_FEE.toLocaleString()} FCFA and every instalment needs a date.`); return; }
+    setBusy("plan");
+    try { await saveSetting("fee_instalments", JSON.stringify(planNum)); alert("Instalment plan saved."); }
+    catch(e) { alert("Error: "+e.message); }
+    setBusy("");
+  }
+  async function statements() {
+    if (!planOk) { alert("Fix the instalment plan first."); return; }
+    if (!list.length) { alert("No students."); return; }
+    setBusy("pdf");
+    try {
+      const paysBy = {};
+      const { data } = await supabase.from("payment_submissions").select("student_id,amount,submitted_at,reviewed_at").eq("status","approved");
+      (data||[]).forEach(x => { (paysBy[x.student_id] = paysBy[x.student_id]||[]).push(x); });
+      downloadBlob(await htmlDocsToPdfBlob(feeStatementDocs(list, feesMap, planNum, paysBy), null, 1.5, 0.85), `Fee-Statements-${(form||"All-classes").replace(/\s+/g,"")}.pdf`);
+    } catch(e) { alert("Could not create the PDF: "+e.message); }
+    setBusy("");
+  }
+  async function overduePdf() {
+    if (!owing.length) { alert("Nobody is overdue."); return; }
+    setBusy("pdf2");
+    try {
+      const per = 30, pages = [];
+      for (let i=0;i<owing.length;i+=per) pages.push(owing.slice(i,i+per));
+      const docs = pages.map((chunk,pi) => `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+        body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:12mm 10mm;color:#111;font-size:9.5pt} h1{font-size:14pt;margin:0;text-align:center} h2{font-size:10.5pt;margin:1mm 0 4mm;text-align:center;font-weight:600;color:#333}
+        table{width:100%;border-collapse:collapse} th,td{border:1px solid #999;padding:1.3mm 1.6mm;font-size:8.5pt;text-align:center} th{background:#E8EEF7} td.l{text-align:left} .bad{color:#B91C1C;font-weight:700} .foot{margin-top:4mm;font-size:8pt;color:#555;text-align:center}
+      </style></head><body><h1>Saker Baptist Comprehensive College Bawe</h1><h2>Fees overdue on ${fmtDate(localToday())}${form?` · ${escHtml(form)}`:""}</h2>
+      <table><thead><tr><th>#</th><th>Name</th><th>Class</th><th>Paid</th><th>Overdue</th><th>Balance</th><th>Next due</th><th>Parent phone</th></tr></thead><tbody>
+      ${chunk.map((x,i)=>`<tr><td>${pi*per+i+1}</td><td class="l">${escHtml(x.st.name)}</td><td>${escHtml(x.st.form)}</td><td>${x.fs.paid.toLocaleString("en-GB")}</td><td class="bad">${x.fs.overdue.toLocaleString("en-GB")}</td><td>${x.fs.balance.toLocaleString("en-GB")}</td><td>${fmtDate(x.fs.nextDue)}</td><td>${escHtml(x.st.phone||"")}</td></tr>`).join("")}
+      </tbody></table><div class="foot">${owing.length} student(s) · total overdue ${owing.reduce((a,x)=>a+x.fs.overdue,0).toLocaleString("en-GB")} FCFA · Page ${pi+1} of ${pages.length}</div></body></html>`);
+      downloadBlob(await htmlDocsToPdfBlob(docs, null, 1.5, 0.85), `Fees-Overdue-${(form||"All-classes").replace(/\s+/g,"")}.pdf`);
+    } catch(e) { alert("Could not create the PDF: "+e.message); }
+    setBusy("");
+  }
+  function overdueExcel() {
+    if (!owing.length) { alert("Nobody is overdue."); return; }
+    exportToExcel(owing.map(x => ({ Matricule:x.st.id, Name:x.st.name, Class:x.st.form, "Parent/Guardian":x.st.parent||"", Phone:x.st.phone||"", "Paid (FCFA)":x.fs.paid, "Overdue (FCFA)":x.fs.overdue, "Balance (FCFA)":x.fs.balance, "Next due":x.fs.nextDue })), `SBCC-Fees-Overdue-${(form||"All").replace(/\s+/g,"")}.xlsx`, "Overdue");
+  }
+  return (
+    <Modal title="🧾 Fee statements" onClose={onClose}>
+      <div style={{fontSize:12,fontWeight:800,color:C.navy,marginBottom:4}}>Instalment plan ({TOTAL_FEE.toLocaleString()} FCFA)</div>
+      {plan.map((x,i) => (
+        <div key={i} style={{display:"grid",gridTemplateColumns:"auto 1fr 1.2fr",gap:6,alignItems:"center",marginBottom:6}}>
+          <span style={{fontSize:12,color:C.gray}}>{i+1}.</span>
+          <input style={inp} type="number" min={0} value={x.amt} onChange={e=>setPlan(p=>p.map((y,j)=>j===i?{...y,amt:e.target.value}:y))}/>
+          <input style={inp} type="date" value={x.due} onChange={e=>setPlan(p=>p.map((y,j)=>j===i?{...y,due:e.target.value}:y))}/>
+        </div>
+      ))}
+      <div style={{fontSize:11,color:planTotal===TOTAL_FEE?C.green:C.red,marginBottom:6}}>Total {planTotal.toLocaleString()} / {TOTAL_FEE.toLocaleString()} FCFA</div>
+      <SmBtn onClick={savePlan} color={C.navyMid}>{busy==="plan"?"Saving…":"Save plan"}</SmBtn>
+      <div style={{marginTop:12}}><Fr label="Class">
+        <select style={inp} value={form} onChange={e=>setForm(e.target.value)}><option value="">All classes</option>{FORMS.map(f=><option key={f}>{f}</option>)}</select>
+      </Fr></div>
+      <div style={{fontSize:12,color:C.navy,marginBottom:8}}>{list.length} student(s) · {owing.length} overdue today</div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <Btn onClick={statements} disabled={!!busy}>{busy==="pdf"?"Making PDF…":"📄 Statements PDF"}</Btn>
+        <Btn onClick={overduePdf} outline disabled={!!busy}>{busy==="pdf2"?"Making PDF…":"Overdue list PDF"}</Btn>
+        <Btn onClick={overdueExcel} outline>📊 Overdue Excel</Btn>
+      </div>
+      <div style={{fontSize:10.5,color:C.gray,marginTop:10}}>Money paid fills the instalments in order. A statement lists Mobile Money payments approved online; cash payments count in the totals.</div>
+    </Modal>
+  );
+}
+
 function PaymentReviewModal({ submission, onApprove, onReject, onClose }) {
   const [showReject, setShowReject] = useState(false);
   const [reason, setReason] = useState("");
