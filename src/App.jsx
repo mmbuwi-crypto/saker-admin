@@ -15,12 +15,18 @@ const C = {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const FORMS = ["Form 1","Form 2","Form 3","Form 4","Form 5"];
+// One master list: every subject printed on the report card. Every form, the teacher setup,
+// Form 5 student subjects and the marks pages all draw from it, so they always match.
+const ALL_SUBJECTS = [
+  "English language","French/ Français","Mathematics","Health science",
+  "Home management","Citizenship","Food and Nutrition","Chemistry",
+  "History","Economics","Geography","Biology","Human Biology","Physics",
+  "Literature in English","Computer Studies","Religious Studies",
+  "Commerce","Accounts","Hygiene","Sport/Physical education","Manual Labour"
+];
 const SUBJECTS_BY_FORM = {
-  "Form 1":["English language","French/ Français","Mathematics","Health science","Home management","Citizenship","Food and Nutrition","Chemistry","History","Economics","Geography","Biology","Human Biology","Physics","Computer Studies","Religious Studies","Hygiene","Sport/Physical education","Manual Labour"],
-  "Form 2":["English language","French/ Français","Mathematics","Health science","Home management","Citizenship","Food and Nutrition","Chemistry","History","Economics","Geography","Biology","Human Biology","Physics","Computer Studies","Religious Studies","Hygiene","Sport/Physical education","Manual Labour"],
-  "Form 3":["English language","French/ Français","Mathematics","Health science","Home management","Citizenship","Food and Nutrition","Chemistry","History","Economics","Geography","Biology","Human Biology","Physics","Computer Studies","Religious Studies","Hygiene","Sport/Physical education","Manual Labour"],
-  "Form 4":["English language","French/ Français","Mathematics","Chemistry","History","Economics","Geography","Biology","Physics","Literature in English","Computer Studies","Religious Studies","Commerce","Accounts","Hygiene","Sport/Physical education"],
-  "Form 5":["English language","French/ Français","Mathematics","Chemistry","History","Economics","Geography","Biology","Physics","Literature in English","Computer Studies","Religious Studies","Commerce","Accounts","Hygiene","Sport/Physical education"],
+  "Form 1":[...ALL_SUBJECTS], "Form 2":[...ALL_SUBJECTS], "Form 3":[...ALL_SUBJECTS],
+  "Form 4":[...ALL_SUBJECTS], "Form 5":[...ALL_SUBJECTS],
 };
 const SEQ_LABELS  = ["SEQ 1","SEQ 2","SEQ 3","SEQ 4","SEQ 5","SEQ 6"];
 const TERM_SEQS   = {"First Term":["SEQ 1","SEQ 2"],"Second Term":["SEQ 3","SEQ 4"],"Third Term":["SEQ 5","SEQ 6"]};
@@ -4770,13 +4776,7 @@ function ReportsPage({ ctx }) {
 
 
 // ─── Report-card engine (shared by single print, whole-class print and WhatsApp PDF) ───
-const SBC_SUBJECTS_LIST = [
-  "English language","French/ Français","Mathematics","Health science",
-  "Home management","Citizenship","Food and Nutrition","Chemistry",
-  "History","Economics","Geography","Biology","Human Biology","Physics",
-  "Literature in English","Computer Studies","Religious Studies",
-  "Commerce","Accounts","Hygiene","Sport/Physical education","Manual Labour"
-];
+const SBC_SUBJECTS_LIST = ALL_SUBJECTS; // same master list as everywhere else
 
 function attendanceTotals(student, attendanceMap) {
   let present=0, absent=0, late=0;
