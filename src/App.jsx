@@ -432,7 +432,7 @@ const navItems = [
   { key:"reports",      label:"Report Cards", icon:"📄", roles:["admin"] },
   { key:"performance",  label:"Performance",  icon:"📈", roles:["admin","teacher"] },
   { key:"subjres",      label:"Subject Results", icon:"🎯", roles:["admin","teacher"] },
-  { key:"council",      label:"Class Council",icon:"🏛️", roles:["admin","teacher"] },
+  { key:"council",      label:"Class Council",icon:"🏛️", roles:["admin"] },
   { key:"fees",         label:"School Fees",  icon:"💰", roles:["admin"] },
   { key:"notices",      label:"Notices",      icon:"📢", roles:["admin","teacher"] },
   { key:"calendar",     label:"Calendar",     icon:"📅", roles:["admin","teacher"] },
@@ -1208,7 +1208,7 @@ export default function App() {
           {page==="reports"      && userRole==="admin" && <ReportsPage ctx={ctx}/>}
           {page==="performance"  && <PerformancePage  ctx={ctx}/>}
           {page==="subjres"      && <SubjectResultsPage ctx={ctx}/>}
-          {page==="council"      && <ClassCouncilPage ctx={ctx}/>}
+          {page==="council"      && ctx.auth.role==="admin" && <ClassCouncilPage ctx={ctx}/>}
           {page==="fees"         && ctx.auth.canFees && <FeesPage        ctx={ctx}/>}
           {page==="notices"      && <NoticesPage      ctx={ctx}/>}
           {page==="calendar"     && <CalendarPage     ctx={ctx}/>}
