@@ -6042,7 +6042,7 @@ function FeesPageInner({ ctx }) {
   const [filter,    setFilter]    = useState({ form:"", search:"", status:"" });
   const [rcForm,    setRcForm]    = useState("");      // class for the receipt batch ("" = all classes)
   const [rcCopies,  setRcCopies]  = useState(1);       // 1 copy, or 2 (parent + school)
-  const [rcOnlyPaid,setRcOnlyPaid]= useState(true);    // skip students who have paid nothing
+  const [rcWho,     setRcWho]     = useState("paid"); // which students: paid (paid something) | full (fully paid) | part | all
   const [rcBusy,    setRcBusy]    = useState("");      // "" or "done/total" while a PDF is being made
   const [threshold, setThreshold] = useState(50);
   const [modal,     setModal]     = useState(null);
@@ -6102,8 +6102,13 @@ function FeesPageInner({ ctx }) {
   const allActive       = students.filter(s=>s.active);
 
   // ── Fee receipts (4 per A4) ──
-  const rcList = allActive
-    .filter(s => (!rcForm || s.form===rcForm) && (!rcOnlyPaid || (feesMap[s.id]?.paid||0)>0))
+  const rcClass  = allActive.filter(s => !rcForm || s.form===rcForm);
+  const rcPaidOf = s => feesMap[s.id]?.paid||0;
+  const rcMatch  = { all:()=>true, paid:s=>rcPaidOf(s)>0, full:s=>rcPaidOf(s)>=TOTAL_FEE, part:s=>rcPaidOf(s)>0 && rcPaidOf(s)<TOTAL_FEE };
+  const rcCount  = k => rcClass.filter(rcMatch[k]).length;
+  const rcTag    = { all:"Everyone", paid:"Paid", full:"Fully-paid", part:"Part-paid" }[rcWho];
+  const rcList = rcClass
+    .filter(rcMatch[rcWho])
     .sort((a,b)=>FORMS.indexOf(a.form)-FORMS.indexOf(b.form) || a.name.localeCompare(b.name));
   const rcItems = rcList.map(s => ({ student:s, paid:feesMap[s.id]?.paid||0 }));
   function runReceiptPrint(items) {
@@ -6309,13 +6314,16 @@ function FeesPageInner({ ctx }) {
             <option value={1}>1 copy per student</option><option value={2}>2 copies (parent + school)</option>
           </select>
         </div>
-        <label style={{display:"flex",gap:6,alignItems:"center",fontSize:12,color:C.gray,marginBottom:8}}>
-          <input type="checkbox" checked={rcOnlyPaid} onChange={e=>setRcOnlyPaid(e.target.checked)}/> Only students who have paid something
-        </label>
+        <select style={{...inp,marginBottom:8}} value={rcWho} onChange={e=>setRcWho(e.target.value)}>
+          <option value="paid">Paid something ({rcCount("paid")})</option>
+          <option value="full">Fully paid only ({rcCount("full")})</option>
+          <option value="part">Part paid only ({rcCount("part")})</option>
+          <option value="all">Everyone ({rcCount("all")})</option>
+        </select>
         <div style={{fontSize:12,color:C.navy,marginBottom:8}}>{rcList.length} student(s) → {Math.ceil(rcList.length*rcCopies/4)} A4 page(s)</div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
           <Btn onClick={()=>runReceiptPrint(rcItems)} disabled={!!rcBusy}>🖨 Print</Btn>
-          <Btn onClick={()=>runReceiptPdf(rcItems, `Fee-Receipts-${(rcForm||"All-classes").replace(/\s+/g,"")}.pdf`)} outline disabled={!!rcBusy}>{rcBusy?`Making PDF… ${rcBusy}`:"📄 Download PDF"}</Btn>
+          <Btn onClick={()=>runReceiptPdf(rcItems, `Fee-Receipts-${(rcForm||"All-classes").replace(/\s+/g,"")}-${rcTag}.pdf`)} outline disabled={!!rcBusy}>{rcBusy?`Making PDF… ${rcBusy}`:"📄 Download PDF"}</Btn>
         </div>
         <div style={{fontSize:10.5,color:C.gray,marginTop:8}}>Each student's card below also has its own Receipt and PDF buttons (same copies setting).</div>
       </div>
@@ -6476,7 +6484,10 @@ function feeReceiptCss() {
   .cp{text-align:center;font-size:7.5pt;font-weight:700;color:#555;margin-bottom:1.5mm}
   .no{display:flex;justify-content:space-between;font-size:8pt;color:#333;margin-bottom:2mm}
   table{width:100%;border-collapse:collapse}
-  .m td{padding:0.9mm 0;font-size:9pt;vertical-align:top} .m td.k{width:30mm;color:#555}
+  .who{display:flex;gap:3mm;align-items:flex-start} .who .m{flex:1;min-width:0}
+  .m td{padding:0.9mm 0;font-size:9pt;vertical-align:top} .m td.k{width:23mm;color:#555}
+  .ph{width:20mm;height:25mm;object-fit:cover;border:0.3mm solid #0D2340;display:block;flex:none;margin-top:1mm}
+  .ph0{width:20mm;height:25mm;border:0.3mm dashed #999;flex:none;margin-top:1mm;display:flex;align-items:center;justify-content:center;font-size:6.5pt;color:#888;text-align:center}
   .rcv{margin:2.5mm 0 1.5mm;border:0.4mm solid #15803D;background:#F0FDF4;border-radius:1.5mm;padding:2mm 3mm;text-align:center;font-size:8.5pt}
   .rcv b{display:block;font-size:14pt;color:#15803D}
   .amt{margin-top:2mm} .amt td{border:0.3mm solid #999;padding:1.5mm 2.5mm;font-size:9.5pt} .amt td.r{text-align:right;font-weight:700}
@@ -6503,13 +6514,16 @@ function feeReceiptCell(it, cashier, plan) {
     <div class="ttl">FEE RECEIPT</div>
     ${it.copy ? `<div class="cp">${escHtml(it.copy)}</div>` : ""}
     <div class="no"><span>Receipt No: <b>${escHtml(recNo)}</b></span><span>Date: <b>${date}</b></span></div>
-    <table class="m">
-      <tr><td class="k">Student</td><td><b>${escHtml(st.name)}</b></td></tr>
-      <tr><td class="k">Matricule</td><td>${escHtml(st.id)}</td></tr>
-      <tr><td class="k">Class</td><td>${escHtml(st.form)}</td></tr>
-      <tr><td class="k">Academic year</td><td>${escHtml(ACTIVE_YEAR)}</td></tr>
-      <tr><td class="k">Parent/Guardian</td><td>${escHtml(st.parent||"—")}</td></tr>
-    </table>
+    <div class="who">
+      <table class="m">
+        <tr><td class="k">Student</td><td><b>${escHtml(st.name)}</b></td></tr>
+        <tr><td class="k">Matricule</td><td>${escHtml(st.id)}</td></tr>
+        <tr><td class="k">Class</td><td>${escHtml(st.form)}</td></tr>
+        <tr><td class="k">Year</td><td>${escHtml(ACTIVE_YEAR)}</td></tr>
+        <tr><td class="k">Parent</td><td>${escHtml(st.parent||"—")}</td></tr>
+      </table>
+      ${st.photo_url ? `<img class="ph" src="${st.photo_url}" alt="">` : `<div class="ph0">Photo</div>`}
+    </div>
     ${it.received ? `<div class="rcv">Amount received today<b>${money(it.received)}</b></div>` : ""}
     <table class="amt">
       <tr><td>Total school fees</td><td class="r">${money(TOTAL_FEE)}</td></tr>
