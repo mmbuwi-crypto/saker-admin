@@ -6038,8 +6038,12 @@ function FeesPage({ ctx }) {
   return <FeesPageInner ctx={ctx}/>;
 }
 function FeesPageInner({ ctx }) {
-  const { students, feesMap, saveFee, auth, isOnline, setOfflineQueue } = ctx;
+  const { students, feesMap, saveFee, auth, isOnline, setOfflineQueue, settings } = ctx;
   const [filter,    setFilter]    = useState({ form:"", search:"", status:"" });
+  const [rcForm,    setRcForm]    = useState("");      // class for the receipt batch ("" = all classes)
+  const [rcCopies,  setRcCopies]  = useState(1);       // 1 copy, or 2 (parent + school)
+  const [rcOnlyPaid,setRcOnlyPaid]= useState(true);    // skip students who have paid nothing
+  const [rcBusy,    setRcBusy]    = useState("");      // "" or "done/total" while a PDF is being made
   const [threshold, setThreshold] = useState(50);
   const [modal,     setModal]     = useState(null);
   const [amount,    setAmount]    = useState("");
@@ -6096,6 +6100,25 @@ function FeesPageInner({ ctx }) {
   }
 
   const allActive       = students.filter(s=>s.active);
+
+  // ── Fee receipts (4 per A4) ──
+  const rcList = allActive
+    .filter(s => (!rcForm || s.form===rcForm) && (!rcOnlyPaid || (feesMap[s.id]?.paid||0)>0))
+    .sort((a,b)=>FORMS.indexOf(a.form)-FORMS.indexOf(b.form) || a.name.localeCompare(b.name));
+  const rcItems = rcList.map(s => ({ student:s, paid:feesMap[s.id]?.paid||0 }));
+  function runReceiptPrint(items) {
+    if (!items.length) { alert("No students to print receipts for."); return; }
+    domPrint("sbc-receipts", feeReceiptPrintDoc(feeReceiptExpand(items, rcCopies), auth.user.name, feePlan(settings)), "A4 portrait", "0");
+  }
+  async function runReceiptPdf(items, fileName) {
+    if (!items.length) { alert("No students to make receipts for."); return; }
+    setRcBusy("0/"+Math.ceil(feeReceiptExpand(items, rcCopies).length/4));
+    try {
+      const docs = feeReceiptDocs(feeReceiptExpand(items, rcCopies), auth.user.name, feePlan(settings));
+      downloadBlob(await htmlDocsToPdfBlob(docs, (d,t)=>setRcBusy(d+"/"+t), 1.5, 0.85), fileName);
+    } catch(e) { alert("Could not create the PDF: "+e.message); }
+    setRcBusy("");
+  }
   const totalExpected   = allActive.length * TOTAL_FEE;
   const totalCollected  = allActive.reduce((a,s)=>a+(feesMap[s.id]?.paid||0),0);
 
@@ -6275,6 +6298,28 @@ function FeesPageInner({ ctx }) {
         {showStmt && <FeeStatementsModal ctx={ctx} onClose={()=>setShowStmt(false)}/>}
       </div>
 
+      {/* Fee receipts — 4 per A4 page */}
+      <div style={{background:C.white,borderRadius:10,padding:12,marginBottom:11,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+        <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:8}}>🧾 Fee Receipts — 4 per A4 page</div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}}>
+          <select style={{...inp,flex:1,minWidth:130}} value={rcForm} onChange={e=>setRcForm(e.target.value)}>
+            <option value="">All classes</option>{FORMS.map(f=><option key={f}>{f}</option>)}
+          </select>
+          <select style={{...inp,flex:1,minWidth:150}} value={rcCopies} onChange={e=>setRcCopies(Number(e.target.value))}>
+            <option value={1}>1 copy per student</option><option value={2}>2 copies (parent + school)</option>
+          </select>
+        </div>
+        <label style={{display:"flex",gap:6,alignItems:"center",fontSize:12,color:C.gray,marginBottom:8}}>
+          <input type="checkbox" checked={rcOnlyPaid} onChange={e=>setRcOnlyPaid(e.target.checked)}/> Only students who have paid something
+        </label>
+        <div style={{fontSize:12,color:C.navy,marginBottom:8}}>{rcList.length} student(s) → {Math.ceil(rcList.length*rcCopies/4)} A4 page(s)</div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <Btn onClick={()=>runReceiptPrint(rcItems)} disabled={!!rcBusy}>🖨 Print</Btn>
+          <Btn onClick={()=>runReceiptPdf(rcItems, `Fee-Receipts-${(rcForm||"All-classes").replace(/\s+/g,"")}.pdf`)} outline disabled={!!rcBusy}>{rcBusy?`Making PDF… ${rcBusy}`:"📄 Download PDF"}</Btn>
+        </div>
+        <div style={{fontSize:10.5,color:C.gray,marginTop:8}}>Each student's card below also has its own Receipt and PDF buttons (same copies setting).</div>
+      </div>
+
       {/* Filters */}
       <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
         <input style={{...inp,flex:1,minWidth:120}} placeholder="Search…" value={filter.search} onChange={e=>setFilter(f=>({...f,search:e.target.value}))}/>
@@ -6302,6 +6347,8 @@ function FeesPageInner({ ctx }) {
             </div>
             <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginTop:7}}>
               <SmBtn onClick={()=>{setModal(s);setAmount("");}} color={C.navy}>Record Payment</SmBtn>
+              <SmBtn onClick={()=>runReceiptPrint([{student:s,paid}])} color={C.green}>🧾 Receipt</SmBtn>
+              <SmBtn onClick={()=>runReceiptPdf([{student:s,paid}], `Fee-Receipt-${(s.name||s.id).replace(/\s+/g,"-")}.pdf`)} color={C.navyMid}>📄 PDF</SmBtn>
               {bal>0 && (() => {
                 const num = waNumber(s.phone);
                 if (!num) return <span style={{fontSize:11,color:C.gray}}>No parent phone</span>;
@@ -6341,15 +6388,19 @@ function FeesPageInner({ ctx }) {
               const pay=Math.min(Number(amount)||0,TOTAL_FEE-(feesMap[modal.id]?.paid||0));
               if(pay<=0) return;
               setSaving(true);
+              let receiptFor = null;
               try {
                 if (!isOnline) {
                   addToOfflineQueue({ type:"payment", data:{ studentId:modal.id, amount:pay } });
                   setOfflineQueue(loadOfflineQueue());
                   alert(`Payment of ${pay.toLocaleString()} FCFA saved on this device. It will upload automatically once you're back online.`);
                 } else {
-                  await saveFee(modal.id,(feesMap[modal.id]?.paid||0)+pay);
+                  const before = feesMap[modal.id]?.paid||0;
+                  await saveFee(modal.id, before+pay);
+                  receiptFor = { student:modal, paid:before+pay, received:pay };
                 }
                 setModal(null);
+                if (receiptFor && window.confirm(`Payment of ${pay.toLocaleString()} FCFA recorded. Print a receipt now?`)) runReceiptPrint([receiptFor]);
               }
               catch(e){ alert("Error: "+e.message); }
               setSaving(false);
@@ -6407,6 +6458,87 @@ function feeStatementDocs(list, feesMap, plan, paysByStudent) {
     .sum{margin-top:3mm;font-size:10pt} .pl{margin-top:2mm;font-size:8pt;color:#555}
   </style></head><body>${g.map(one).join("")}</body></html>`);
 }
+
+// ─── Fee receipts: 4 per A4 page (2 × 2), for one student or a whole class ───────────
+// item = { student, paid, received?, copy? }   received = amount taken in this payment (optional)
+function feeReceiptCss() {
+  return `@page{size:A4 portrait;margin:0}
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .pg{width:210mm;height:297mm;display:grid;grid-template-columns:105mm 105mm;grid-template-rows:148.5mm 148.5mm;page-break-after:always;break-after:page;overflow:hidden}
+  .pg:last-child{page-break-after:auto;break-after:auto}
+  .rc{padding:7mm 8mm;overflow:hidden;font-size:9pt;line-height:1.35}
+  .rc:nth-child(odd){border-right:0.3mm dashed #999}
+  .rc:nth-child(-n+2){border-bottom:0.3mm dashed #999}
+  .hd{display:flex;gap:3mm;align-items:center;border-bottom:0.5mm solid #C9962A;padding-bottom:2mm}
+  .sc{font-weight:700;font-size:9.5pt;color:#0D2340;line-height:1.2} .sub{font-size:7.5pt;color:#555}
+  .ttl{text-align:center;margin:3mm 0 1.5mm;font-weight:800;font-size:12pt;letter-spacing:0.5pt;color:#0D2340}
+  .cp{text-align:center;font-size:7.5pt;font-weight:700;color:#555;margin-bottom:1.5mm}
+  .no{display:flex;justify-content:space-between;font-size:8pt;color:#333;margin-bottom:2mm}
+  table{width:100%;border-collapse:collapse}
+  .m td{padding:0.9mm 0;font-size:9pt;vertical-align:top} .m td.k{width:30mm;color:#555}
+  .rcv{margin:2.5mm 0 1.5mm;border:0.4mm solid #15803D;background:#F0FDF4;border-radius:1.5mm;padding:2mm 3mm;text-align:center;font-size:8.5pt}
+  .rcv b{display:block;font-size:14pt;color:#15803D}
+  .amt{margin-top:2mm} .amt td{border:0.3mm solid #999;padding:1.5mm 2.5mm;font-size:9.5pt} .amt td.r{text-align:right;font-weight:700}
+  .st{text-align:center;font-weight:800;font-size:10pt;margin-top:2.5mm;letter-spacing:0.5pt}
+  .nx{text-align:center;font-size:8pt;color:#444;margin-top:1mm}
+  .sig{display:flex;justify-content:space-between;gap:6mm;margin-top:4mm;font-size:8pt;color:#333}
+  .sig div{flex:1;border-top:0.3mm solid #777;padding-top:1mm;text-align:center}
+  .ft{margin-top:2mm;text-align:center;font-size:7pt;color:#777}`;
+}
+function feeReceiptCell(it, cashier, plan) {
+  const money = n => Number(n).toLocaleString("en-GB") + " FCFA";
+  const st = it.student, paid = Number(it.paid)||0, bal = Math.max(0, TOTAL_FEE - paid);
+  const date = fmtDate(localToday());
+  const recNo = "FR-" + localToday().replace(/-/g,"") + "-" + st.id;
+  const status = paid>=TOTAL_FEE ? "FULLY PAID" : paid>0 ? "PART PAID" : "NOT PAID";
+  const col = paid>=TOTAL_FEE ? "#15803D" : paid>0 ? "#C9962A" : "#B91C1C";
+  const fs = feeStatus(plan, paid);
+  const nextLine = bal>0
+    ? (fs.overdue>0 ? `<div class="nx" style="color:#B91C1C;font-weight:700">Overdue now: ${money(fs.overdue)}</div>` : "")
+      + (fs.nextDue ? `<div class="nx">Next instalment due: <b>${fmtDate(fs.nextDue)}</b></div>` : "")
+    : "";
+  return `<div class="rc">
+    <div class="hd"><img src="${SCHOOL_LOGO}" alt="" style="width:13mm;height:13mm;object-fit:contain"><div><div class="sc">Saker Baptist Comprehensive College Bawe</div><div class="sub">Ngeptang · Noni · NW Region</div></div></div>
+    <div class="ttl">FEE RECEIPT</div>
+    ${it.copy ? `<div class="cp">${escHtml(it.copy)}</div>` : ""}
+    <div class="no"><span>Receipt No: <b>${escHtml(recNo)}</b></span><span>Date: <b>${date}</b></span></div>
+    <table class="m">
+      <tr><td class="k">Student</td><td><b>${escHtml(st.name)}</b></td></tr>
+      <tr><td class="k">Matricule</td><td>${escHtml(st.id)}</td></tr>
+      <tr><td class="k">Class</td><td>${escHtml(st.form)}</td></tr>
+      <tr><td class="k">Academic year</td><td>${escHtml(ACTIVE_YEAR)}</td></tr>
+      <tr><td class="k">Parent/Guardian</td><td>${escHtml(st.parent||"—")}</td></tr>
+    </table>
+    ${it.received ? `<div class="rcv">Amount received today<b>${money(it.received)}</b></div>` : ""}
+    <table class="amt">
+      <tr><td>Total school fees</td><td class="r">${money(TOTAL_FEE)}</td></tr>
+      <tr><td>Total paid to date</td><td class="r" style="color:#15803D">${money(paid)}</td></tr>
+      <tr><td>Balance</td><td class="r" style="color:${bal>0?"#B91C1C":"#15803D"}">${money(bal)}</td></tr>
+    </table>
+    <div class="st" style="color:${col}">${status}</div>
+    ${nextLine}
+    <div class="sig"><div>Cashier: ${escHtml(cashier||"")}</div><div>Parent / Guardian</div></div>
+    <div class="ft">Keep this receipt as proof of payment.</div>
+  </div>`;
+}
+// 1 copy each, or 2 (parent + school) side by side
+function feeReceiptExpand(items, copies) {
+  if (Number(copies)!==2) return items;
+  const out = [];
+  items.forEach(it => { out.push({ ...it, copy:"PARENT COPY" }); out.push({ ...it, copy:"SCHOOL COPY" }); });
+  return out;
+}
+function feeReceiptPagesHtml(items, cashier, plan) {
+  const pages = [];
+  for (let i=0; i<items.length; i+=4) pages.push(items.slice(i,i+4));
+  return pages.map(g => `<div class="pg">${g.map(it => feeReceiptCell(it, cashier, plan)).join("")}</div>`);
+}
+const feeReceiptWrap = body => `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Fee receipts</title><style>${feeReceiptCss()}</style></head><body>${body}</body></html>`;
+// one finished page per document → for the PDF maker
+const feeReceiptDocs = (items, cashier, plan) => feeReceiptPagesHtml(items, cashier, plan).map(pg => feeReceiptWrap(pg));
+// everything in one document → for printing
+const feeReceiptPrintDoc = (items, cashier, plan) => feeReceiptWrap(feeReceiptPagesHtml(items, cashier, plan).join(""));
 
 function FeeStatementsModal({ ctx, onClose }) {
   const { students, feesMap, settings, saveSetting } = ctx;
