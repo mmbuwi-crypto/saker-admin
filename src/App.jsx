@@ -6521,7 +6521,7 @@ function feeReceiptCell(it, cashier, plan) {
         <tr><td class="k">Matricule</td><td>${escHtml(st.id)}</td></tr>
         <tr><td class="k">Class</td><td>${escHtml(st.form)}</td></tr>
         <tr><td class="k">Year</td><td>${escHtml(ACTIVE_YEAR)}</td></tr>
-        <tr><td class="k">Parent</td><td>${escHtml(st.parent||"—")}</td></tr>
+        <tr><td class="k">Parent name</td><td>${escHtml(st.parent||"—")}</td></tr>
       </table>
       ${st.photo_url ? `<img class="ph" src="${st.photo_url}" alt="">` : `<div class="ph0">Photo</div>`}
     </div>
@@ -6533,7 +6533,7 @@ function feeReceiptCell(it, cashier, plan) {
     </table>
     <div class="st" style="color:${col}">${status}</div>
     ${nextLine}
-    <div class="sig"><div>Cashier<br><b>${escHtml(cashier||"")}</b></div><div>Parent / Guardian</div></div>
+    <div class="sig"><div>Cashier<br><b>${escHtml(cashier||"")}</b></div><div>Parent / Guardian<br><b>${escHtml(st.parent||"")}</b></div></div>
     <div class="ft">Keep this receipt as proof of payment.</div>
   </div>`;
 }
