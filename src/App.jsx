@@ -91,6 +91,7 @@ const ACAD_YEARS  = ["2026/2027","2027/2028","2028/2029"];
 // The year the school is working in. Set from app_settings.current_year after load; changed by the New Academic Year tool.
 let ACTIVE_YEAR = ACAD_YEARS[0];
 const TOTAL_FEE   = 35000;
+const FEE_CASHIER = "Rev. Kimbung Christopher Mbuwi"; // name printed as cashier on fee receipts
 const REG_NORMAL  = 500;
 const REG_LATE    = 1000;
 let   LATE_CUTOFF = "2026-09-30"; // overridden by app_settings.late_cutoff (set by the New Academic Year tool)
@@ -6113,13 +6114,13 @@ function FeesPageInner({ ctx }) {
   const rcItems = rcList.map(s => ({ student:s, paid:feesMap[s.id]?.paid||0 }));
   function runReceiptPrint(items) {
     if (!items.length) { alert("No students to print receipts for."); return; }
-    domPrint("sbc-receipts", feeReceiptPrintDoc(feeReceiptExpand(items, rcCopies), auth.user.name, feePlan(settings)), "A4 portrait", "0");
+    domPrint("sbc-receipts", feeReceiptPrintDoc(feeReceiptExpand(items, rcCopies), FEE_CASHIER, feePlan(settings)), "A4 portrait", "0");
   }
   async function runReceiptPdf(items, fileName) {
     if (!items.length) { alert("No students to make receipts for."); return; }
     setRcBusy("0/"+Math.ceil(feeReceiptExpand(items, rcCopies).length/4));
     try {
-      const docs = feeReceiptDocs(feeReceiptExpand(items, rcCopies), auth.user.name, feePlan(settings));
+      const docs = feeReceiptDocs(feeReceiptExpand(items, rcCopies), FEE_CASHIER, feePlan(settings));
       downloadBlob(await htmlDocsToPdfBlob(docs, (d,t)=>setRcBusy(d+"/"+t), 1.5, 0.85), fileName);
     } catch(e) { alert("Could not create the PDF: "+e.message); }
     setRcBusy("");
@@ -6532,7 +6533,7 @@ function feeReceiptCell(it, cashier, plan) {
     </table>
     <div class="st" style="color:${col}">${status}</div>
     ${nextLine}
-    <div class="sig"><div>Cashier: ${escHtml(cashier||"")}</div><div>Parent / Guardian</div></div>
+    <div class="sig"><div>Cashier<br><b>${escHtml(cashier||"")}</b></div><div>Parent / Guardian</div></div>
     <div class="ft">Keep this receipt as proof of payment.</div>
   </div>`;
 }
