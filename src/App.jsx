@@ -62,6 +62,17 @@ const f5Students   = settings => parseJSON(settings?.f5_students, {});
 const f5SubjectsOf = (settings, st) => { const all = SUBJECTS_BY_FORM["Form 5"]; const c = f5Students(settings)[st.id]; return c?.subjects?.length ? all.filter(x => c.subjects.includes(x)) : all; };
 const f5Writes     = (settings, st, sub) => !isF5(st.form) || f5SubjectsOf(settings, st).includes(sub);
 const f5CandNo     = (settings, st) => f5Students(settings)[st.id]?.candNo || "";
+// Parents choose their child's subjects in the Parent Portal until a closing date set by the admin.
+// Settings: f5_subject_deadline (YYYY-MM-DD), f5_subject_closed ("true" = closed by admin),
+//           f5_parent_submitted → {studentId: date the parent saved}.  The database enforces the same rule.
+const f5SubjectWindow = settings => {
+  const dl = String(settings?.f5_subject_deadline||"").trim();
+  if (/^(true|1|yes)$/i.test(String(settings?.f5_subject_closed||"").trim())) return { open:false, reason:"closed_by_admin", deadline:dl };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dl)) return { open:false, reason:"not_opened", deadline:"" };
+  if (localToday() > dl) return { open:false, reason:"deadline_passed", deadline:dl };
+  return { open:true, reason:"", deadline:dl };
+};
+const f5ParentSubmitted = settings => parseJSON(settings?.f5_parent_submitted, {});
 // Form 5 mocks are written in papers. Each paper is stored as its own marks row ("Pre Mock P1" …);
 // the combined score out of 20 is stored in the normal "Pre Mock" row so ranking, locks and progress keep working.
 //   Every subject:    P1 MCQ /50 = 40%,  P2 Structural /100 = 60%
@@ -1463,6 +1474,80 @@ function ParentPortal({ onBack }) {
   );
 }
 
+// ─── Parent Portal → Form 5 subject selection (open until the admin's closing date) ───
+function ParentF5Subjects({ matricule, pin }) {
+  const all = SUBJECTS_BY_FORM["Form 5"];
+  const [st, setSt]     = useState(null);   // status from the database
+  const [err, setErr]   = useState("");
+  const [pick, setPick] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const box = { background:C.white, borderRadius:10, padding:12, marginBottom:11, boxShadow:"0 1px 3px rgba(0,0,0,0.06)" };
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data, error } = await supabase.rpc("portal_f5_subjects_status", { p_matricule: matricule, p_pin: pin });
+        if (error) throw error;
+        if (!data?.ok) throw new Error("not available");
+        setSt(data);
+        setPick(Array.isArray(data.subjects) ? all.filter(x => data.subjects.includes(x)) : []);
+      } catch(e) { setErr("Subject selection is not available right now. Please contact the school office."); }
+    })();
+  }, []);
+  async function save() {
+    if (!pick.length) { alert("Tick at least one subject."); return; }
+    if (!window.confirm(`Save these ${pick.length} subject(s)? You can change them until ${fmtDate(st.deadline)}.`)) return;
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.rpc("portal_f5_submit_subjects", { p_matricule: matricule, p_pin: pin, p_subjects: pick });
+      if (error) throw error;
+      if (!data?.ok) {
+        if (["deadline_passed","closed_by_admin","not_opened"].includes(data?.error)) { setSt(x => ({ ...x, open:false, reason:data.error })); alert("Sorry, subject selection has just closed."); }
+        else alert("Could not save. Please try again.");
+      } else { setSt(x => ({ ...x, submitted:true, subjects:data.subjects })); setSaved(true); }
+    } catch(e) { alert("Could not save: " + e.message); }
+    setBusy(false);
+  }
+  if (err) return <div style={box}><div style={{fontSize:13,color:C.red}}>{err}</div></div>;
+  if (!st) return <div style={box}><div style={{fontSize:13,color:C.gray}}>Loading…</div></div>;
+  if (!st.applicable) return <div style={box}><div style={{fontSize:13,color:C.gray}}>Subject selection is for Form 5 students only.</div></div>;
+
+  const chosen = all.filter(x => (st.subjects||[]).includes(x));
+  if (!st.open) {
+    const why = st.reason==="not_opened" ? "The school has not opened subject selection yet."
+      : st.reason==="closed_by_admin" ? "Subject selection has been closed by the school."
+      : `Subject selection closed on ${fmtDate(st.deadline)}.`;
+    return (
+      <div style={box}>
+        <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:6}}>📚 Form 5 subjects</div>
+        <div style={{background:"#FEF2F2",border:"1px solid #FCA5A5",borderRadius:8,padding:"8px 12px",color:C.red,fontSize:12,marginBottom:10}}>🔒 {why} Subjects can no longer be filled or changed here.</div>
+        {st.submitted && chosen.length>0
+          ? <><div style={{fontSize:12,color:C.gray,marginBottom:4}}>Subjects submitted ({chosen.length}):</div>{chosen.map(x => <div key={x} style={{fontSize:13,color:C.navy,padding:"2px 0"}}>✓ {x}</div>)}</>
+          : st.reason!=="not_opened" && <div style={{fontSize:12,color:C.gray}}>No subjects were submitted from the portal. Please contact the school office.</div>}
+      </div>
+    );
+  }
+  return (
+    <div style={box}>
+      <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:4}}>📚 Choose the subjects your child will write</div>
+      <div style={{background:"#FFFBEB",border:"1px solid #FCD34D",borderRadius:8,padding:"8px 12px",fontSize:12,color:"#92400E",marginBottom:10}}>
+        Open until <strong>{fmtDate(st.deadline)}</strong>. You can change your choice until then; after that it is locked for everyone.
+      </div>
+      {st.submitted && <div style={{fontSize:12,color:C.green,marginBottom:8}}>✓ Your choice is saved{saved ? "" : ` (${chosen.length} subjects)`}. You may still change it before the closing date.</div>}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+        <span style={{fontSize:12,color:C.gray}}>{pick.length} selected</span>
+        <button onClick={()=>setPick([])} style={{background:"none",border:"none",color:C.gray,fontSize:12,cursor:"pointer"}}>Clear</button>
+      </div>
+      {all.map(sub => (
+        <label key={sub} style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:C.navy,padding:"6px 2px",borderBottom:`1px solid ${C.grayBg}`}}>
+          <input type="checkbox" checked={pick.includes(sub)} onChange={e=>setPick(b=>e.target.checked?[...b,sub]:b.filter(x=>x!==sub))}/>{sub}
+        </label>
+      ))}
+      <div style={{marginTop:12}}><Btn onClick={save} disabled={busy}>{busy?"Saving…":"Save subjects"}</Btn></div>
+    </div>
+  );
+}
+
 function ParentPortalResults({ data, matricule, pin, onBack, onExit }) {
   const { student, marks, attendance, fee, recent_submissions } = data;
   const [tab, setTab] = useState("marks");
@@ -1540,10 +1625,12 @@ function ParentPortalResults({ data, matricule, pin, onBack, onExit }) {
 
       <div style={{padding:"14px 12px",maxWidth:600,margin:"0 auto"}}>
         <div style={{display:"flex",background:C.white,borderRadius:10,padding:3,marginBottom:13,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
-          {[["marks","📝 Marks"],["attendance","🗓️ Attendance"],["fees","💰 Fees"]].map(([k,l]) => (
+          {[["marks","📝 Marks"],["attendance","🗓️ Attendance"],["fees","💰 Fees"], ...(f5Student ? [["subjects","📚 Subjects"]] : [])].map(([k,l]) => (
             <button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"9px 4px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:tab===k?C.navy:"transparent",color:tab===k?C.white:C.gray}}>{l}</button>
           ))}
         </div>
+
+        {tab==="subjects" && f5Student && <ParentF5Subjects matricule={matricule} pin={pin}/>}
 
         {tab==="marks" && marksNow.length>0 && (
           <div style={{background:C.white,borderRadius:10,padding:12,marginBottom:11,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
@@ -3456,6 +3543,8 @@ function F5SetupPanel({ ctx }) {
   const [busy, setBusy] = useState("");
   const [open, setOpen] = useState("");
   const [draft, setDraft] = useState({ subjects:[], candNo:"" });
+  const [dlDate, setDlDate] = useState(String(settings?.f5_subject_deadline||""));
+  const [showMissing, setShowMissing] = useState(false);
   const [bulkSubs, setBulkSubs] = useState([]);
   const [bulkSel,  setBulkSel]  = useState([]);
   const [bulkMode, setBulkMode] = useState("replace"); // replace | add | remove
@@ -3468,6 +3557,29 @@ function F5SetupPanel({ ctx }) {
   const pool = students.filter(x => x.active && x.form==="Form 5" && x.reg_status==="registered").sort((a,b)=>a.name.localeCompare(b.name));
   const cfg = f5Students(settings);
 
+  const win = f5SubjectWindow(settings);
+  const submittedMap = f5ParentSubmitted(settings);
+  const submittedCount = pool.filter(x => submittedMap[x.id]).length;
+  const notSubmitted = pool.filter(x => !submittedMap[x.id]);
+  const closedByAdmin = win.reason==="closed_by_admin";
+  async function saveDeadline() {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dlDate)) { alert("Pick a closing date first."); return; }
+    setBusy("dl");
+    try {
+      await saveSetting("f5_subject_deadline", dlDate);
+      if (closedByAdmin) await saveSetting("f5_subject_closed", "false"); // a new date reopens it
+      alert("Closing date saved. Parents of Form 5 students can choose subjects in the Parent Portal until " + fmtDate(dlDate) + ".");
+    } catch(e) { alert("Error: "+e.message); }
+    setBusy("");
+  }
+  async function toggleClosed() {
+    const closing = !closedByAdmin;
+    if (!window.confirm(closing ? "Close subject selection now? No parent will be able to fill or change subjects." : "Reopen subject selection? Parents can fill again until the closing date.")) return;
+    setBusy("dl");
+    try { await saveSetting("f5_subject_closed", closing ? "true" : "false"); }
+    catch(e) { alert("Error: "+e.message); }
+    setBusy("");
+  }
   async function saveScale() {
     const n = Object.fromEntries(Object.entries(sc).map(([k,v]) => [k, Number(v)]));
     const order = ["A","B","C","D","E"];
@@ -3550,6 +3662,24 @@ function F5SetupPanel({ ctx }) {
           ))}
         </div>
         <div style={{marginTop:9}}><Btn onClick={saveScale} disabled={busy==="scale"}>{busy==="scale"?"Saving…":"Save grade scale"}</Btn></div>
+      </div>
+
+      <div style={card}>
+        <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:4}}>Parents choose subjects (Parent Portal)</div>
+        <div style={{fontSize:11,color:C.gray,marginBottom:8}}>Set a closing date. Until then, parents of Form 5 students pick their child's subjects in the Parent Portal. Once it closes, nobody can fill or change them there. You can still edit any student below.</div>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          <input type="date" style={{...inp,maxWidth:170}} value={dlDate} onChange={e=>setDlDate(e.target.value)}/>
+          <Btn onClick={saveDeadline} disabled={busy==="dl"}>{busy==="dl"?"Saving…":"Save closing date"}</Btn>
+        </div>
+        <div style={{marginTop:9,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          <Pill color={win.open?C.green:C.red}>{win.open ? `Open until ${fmtDate(win.deadline)}` : win.reason==="closed_by_admin" ? "Closed by admin" : win.reason==="deadline_passed" ? `Closed (${fmtDate(win.deadline)})` : "Not opened — set a date"}</Pill>
+          {(win.open || closedByAdmin) && <SmBtn onClick={toggleClosed} color={closedByAdmin?C.green:C.red}>{closedByAdmin?"Reopen":"Close now"}</SmBtn>}
+        </div>
+        <div style={{fontSize:12,color:C.navy,marginTop:9}}>{submittedCount} of {pool.length} parents have submitted
+          {notSubmitted.length>0 && <> · <span onClick={()=>setShowMissing(v=>!v)} style={{color:C.navyMid,textDecoration:"underline",cursor:"pointer"}}>{showMissing?"hide":"show"} {notSubmitted.length} not yet</span></>}
+        </div>
+        {showMissing && <div style={{maxHeight:160,overflowY:"auto",border:`1px solid ${C.grayLight}`,borderRadius:8,padding:6,marginTop:6,fontSize:12,color:C.navy}}>{notSubmitted.map(x=><div key={x.id} style={{padding:"2px 0"}}>{x.name}</div>)}</div>}
+        <div style={{fontSize:10.5,color:C.gray,marginTop:8}}>Needs migration_f5_subjects.sql to have been run once in Supabase. Students who never submit keep the default list until you set it.</div>
       </div>
 
       <div style={card}>
