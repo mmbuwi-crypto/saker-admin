@@ -528,6 +528,7 @@ const navItems = [
   { key:"fees",         label:"School Fees",  icon:"💰", roles:["admin"] },
   { key:"notices",      label:"Notices",      icon:"📢", roles:["admin","teacher"] },
   { key:"calendar",     label:"Calendar",     icon:"📅", roles:["admin","teacher"] },
+  { key:"gcepapers",    label:"GCE Papers",   icon:"📚", roles:["admin","teacher"] },
   { key:"profile",      label:"My Profile",   icon:"👤", roles:["admin","teacher"] },
 ];
 
@@ -1381,6 +1382,7 @@ export default function App() {
           {page==="fees"         && ctx.auth.canFees && <FeesPage        ctx={ctx}/>}
           {page==="notices"      && <NoticesPage      ctx={ctx}/>}
           {page==="calendar"     && <CalendarPage     ctx={ctx}/>}
+          {page==="gcepapers"    && <GcePapersPage    ctx={ctx}/>}
           {page==="profile"      && <ProfilePage      ctx={ctx}/>}
         </>}
       </div>
@@ -1801,12 +1803,13 @@ function ParentPortalResults({ data, matricule, pin, onBack, onExit }) {
 
       <div style={{padding:"14px 12px",maxWidth:600,margin:"0 auto"}}>
         <div style={{display:"flex",background:C.white,borderRadius:10,padding:3,marginBottom:13,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
-          {[["marks","📝 Marks"],["attendance","🗓️ Attendance"],["fees","💰 Fees"], ...(f5Student ? [["subjects","📚 Subjects"]] : [])].map(([k,l]) => (
+          {[["marks","📝 Marks"],["attendance","🗓️ Attendance"],["fees","💰 Fees"], ["papers","📚 Papers"], ...(f5Student ? [["subjects","📚 Subjects"]] : [])].map(([k,l]) => (
             <button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"9px 4px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:tab===k?C.navy:"transparent",color:tab===k?C.white:C.gray}}>{l}</button>
           ))}
         </div>
 
         {tab==="subjects" && f5Student && <ParentF5Subjects matricule={matricule} pin={pin}/>}
+        {tab==="papers" && <ParentGcePapers matricule={matricule} pin={pin}/>}
 
         {tab==="marks" && marksNow.length>0 && (
           <div style={{background:C.white,borderRadius:10,padding:12,marginBottom:11,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
@@ -7255,6 +7258,159 @@ function CalendarPage({ ctx }) {
           </div>
         </Modal>
       )}
+    </div>
+  );
+}
+
+// ─── GCE past questions: staff upload them, students download them from the Parent Portal ───
+// Files live in the public Storage bucket "gce-questions" under unguessable folder names. The LIST of papers is only
+// given out by the database after the student's Matricule + PIN check (see gce_papers.sql), so you need the login to find them.
+const GCE_BUCKET = "gce-questions";
+const GCE_MAX_MB = 20;
+const GCE_LEVELS = ["O-Level","A-Level","Other"];
+const GCE_YEARS  = Array.from({ length:12 }, (_, i) => String(2026 - i));
+const gceUrl  = path => `${SUPABASE_URL}/storage/v1/object/public/${GCE_BUCKET}/${String(path).split("/").map(encodeURIComponent).join("/")}`;
+const fmtSize = b => b>=1048576 ? (b/1048576).toFixed(1)+" MB" : Math.max(1, Math.round((b||0)/1024))+" KB";
+
+function GcePapersPage({ ctx }) {
+  const { auth, isOnline } = ctx;
+  const isAdmin = auth.role==="admin";
+  const blank = { title:"", subject:"", level:"O-Level", exam_year:GCE_YEARS[0], paper:"", forms:[] };
+  const [papers, setPapers]   = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr]         = useState("");
+  const [f, setF]             = useState(blank);
+  const [file, setFile]       = useState(null);
+  const [fileKey, setFileKey] = useState(0);
+  const [busy, setBusy]       = useState(false);
+
+  async function load() {
+    setLoading(true);
+    const { data, error } = await supabase.from("gce_papers").select("*").order("created_at", { ascending:false });
+    if (error) setErr(/relation|does not exist/i.test(error.message) ? "The GCE papers table is not set up yet. Run gce_papers.sql in the Supabase SQL editor." : error.message);
+    else { setErr(""); setPapers(data||[]); }
+    setLoading(false);
+  }
+  useEffect(() => { load(); }, []);
+
+  async function upload() {
+    if (!f.title.trim() || !f.subject) { alert("Enter a title and choose a subject."); return; }
+    if (!file) { alert("Choose a file to upload."); return; }
+    if (file.size > GCE_MAX_MB*1048576) { alert(`That file is ${fmtSize(file.size)}. The limit is ${GCE_MAX_MB} MB.`); return; }
+    setBusy(true);
+    let path = null;
+    try {
+      const safe = file.name.replace(/[^A-Za-z0-9._-]+/g, "_");
+      const uid  = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now()+"-"+Math.random().toString(36).slice(2);
+      path = `${uid}/${safe}`;
+      const { error:ue } = await supabase.storage.from(GCE_BUCKET).upload(path, file, { contentType:file.type||"application/octet-stream", upsert:false });
+      if (ue) throw ue;
+      const { error:ie } = await supabase.from("gce_papers").insert({
+        title:f.title.trim(), subject:f.subject, level:f.level, exam_year:f.exam_year, paper:f.paper.trim()||null, forms:f.forms,
+        file_path:path, file_name:file.name, file_size:file.size, uploaded_by:auth.user.id, uploaded_by_name:auth.user.name,
+      });
+      if (ie) { await supabase.storage.from(GCE_BUCKET).remove([path]); throw ie; }
+      setF(blank); setFile(null); setFileKey(k=>k+1);
+      await load();
+    } catch(e) { alert("Upload failed: " + (e.message||e)); }
+    setBusy(false);
+  }
+
+  async function remove(p) {
+    if (!window.confirm(`Delete "${p.title}"? Students will no longer be able to download it.`)) return;
+    try {
+      const { data, error } = await supabase.from("gce_papers").delete().eq("id", p.id).select();
+      if (error) throw error;
+      if (!data?.length) throw new Error("You can only delete papers you uploaded yourself.");
+      await supabase.storage.from(GCE_BUCKET).remove([p.file_path]);
+      await load();
+    } catch(e) { alert("Could not delete: " + (e.message||e)); }
+  }
+
+  const box = { background:C.white, borderRadius:10, padding:12, marginBottom:11, boxShadow:"0 1px 3px rgba(0,0,0,0.06)" };
+  return (
+    <div>
+      <div style={box}>
+        <div style={{fontWeight:800,color:C.navy,fontSize:14,marginBottom:8}}>📚 Upload a GCE paper</div>
+        {!isOnline && <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:8,padding:"8px 12px",color:"#92400e",fontSize:12,marginBottom:10}}>📡 No internet. Uploading needs a connection.</div>}
+        <Fr label="Title"><input style={inp} placeholder="e.g. Computer Science Paper 1 (June 2024)" value={f.title} onChange={e=>setF(x=>({...x,title:e.target.value}))}/></Fr>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
+          <Fr label="Subject"><select style={inp} value={f.subject} onChange={e=>setF(x=>({...x,subject:e.target.value}))}><option value="">— choose —</option>{ALL_SUBJECTS.map(x=><option key={x}>{x}</option>)}</select></Fr>
+          <Fr label="Level"><select style={inp} value={f.level} onChange={e=>setF(x=>({...x,level:e.target.value}))}>{GCE_LEVELS.map(x=><option key={x}>{x}</option>)}</select></Fr>
+          <Fr label="Exam year"><select style={inp} value={f.exam_year} onChange={e=>setF(x=>({...x,exam_year:e.target.value}))}>{GCE_YEARS.map(x=><option key={x}>{x}</option>)}</select></Fr>
+          <Fr label="Paper (optional)"><input style={inp} placeholder="e.g. Paper 2" value={f.paper} onChange={e=>setF(x=>({...x,paper:e.target.value}))}/></Fr>
+        </div>
+        <div style={{marginBottom:8}}>
+          <label style={lbl}>Who can download it (leave blank for all forms)</label>
+          <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:5}}>
+            {FORMS.map(fm => { const on = f.forms.includes(fm); return (
+              <button key={fm} type="button" onClick={()=>setF(x=>({...x,forms:on?x.forms.filter(y=>y!==fm):[...x.forms,fm]}))} style={{padding:"4px 8px",borderRadius:12,border:`1px solid ${on?C.gold:C.grayLight}`,background:on?C.gold:C.white,color:on?C.white:C.gray,fontSize:11,cursor:"pointer"}}>{fm}</button>
+            ); })}
+          </div>
+        </div>
+        <Fr label={`File (PDF, Word or photo, up to ${GCE_MAX_MB} MB)`}>
+          <input key={fileKey} type="file" accept=".pdf,.doc,.docx,image/*" onChange={e=>setFile(e.target.files?.[0]||null)} style={{...inp,padding:7}}/>
+        </Fr>
+        {file && <div style={{fontSize:11,color:C.gray,marginBottom:8}}>{file.name} · {fmtSize(file.size)}</div>}
+        <Btn onClick={upload} disabled={busy||!isOnline}>{busy?"Uploading…":"Upload paper"}</Btn>
+      </div>
+
+      {err && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"8px 12px",color:C.red,fontSize:12,marginBottom:11}}>{err}</div>}
+      <div style={box}>
+        <div style={{fontWeight:800,color:C.navy,fontSize:14,marginBottom:8}}>Uploaded papers ({papers.length})</div>
+        {loading ? <div style={{fontSize:12,color:C.gray}}>Loading…</div>
+          : papers.length===0 ? <div style={{fontSize:12,color:C.gray}}>No papers uploaded yet.</div>
+          : papers.map(p => (
+            <div key={p.id} style={{padding:"9px 0",borderTop:`1px solid ${C.grayBg}`}}>
+              <div style={{fontWeight:700,fontSize:13,color:C.navy}}>{p.title}</div>
+              <div style={{fontSize:11,color:C.gray,margin:"2px 0 6px"}}>{p.subject} · {p.level} · {p.exam_year}{p.paper?` · ${p.paper}`:""} · {p.forms?.length?p.forms.join(", "):"All forms"} · {fmtSize(p.file_size)}{p.uploaded_by_name?` · by ${p.uploaded_by_name}`:""}</div>
+              <div style={{display:"flex",gap:7}}>
+                <a href={gceUrl(p.file_path)} target="_blank" rel="noopener noreferrer" style={{padding:"5px 11px",background:C.navy,color:C.white,borderRadius:6,fontSize:11,fontWeight:700,textDecoration:"none"}}>Open</a>
+                {(isAdmin || p.uploaded_by===auth.user.id) && <SmBtn onClick={()=>remove(p)} color={C.red}>Delete</SmBtn>}
+              </div>
+            </div>
+          ))}
+      </div>
+    </div>
+  );
+}
+
+// Parent Portal tab: the student's papers, found with their Matricule + PIN
+function ParentGcePapers({ matricule, pin }) {
+  const [papers, setPapers] = useState(null);
+  const [err, setErr]       = useState("");
+  const [subj, setSubj]     = useState("");
+  const box = { background:C.white, borderRadius:10, padding:12, marginBottom:11, boxShadow:"0 1px 3px rgba(0,0,0,0.06)" };
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data, error } = await supabase.rpc("portal_gce_papers", { p_matricule:matricule, p_pin:pin });
+        if (error) throw error;
+        if (!data?.ok) throw new Error("not available");
+        setPapers(data.papers||[]);
+      } catch { setErr("GCE papers are not available right now. Please try again later or contact the school office."); }
+    })();
+  }, []);
+  if (err) return <div style={box}><div style={{fontSize:13,color:C.red}}>{err}</div></div>;
+  if (!papers) return <div style={box}><div style={{fontSize:13,color:C.gray}}>Loading…</div></div>;
+  const subjects = [...new Set(papers.map(p => p.subject))].sort();
+  const shown = papers.filter(p => !subj || p.subject===subj);
+  return (
+    <div style={box}>
+      <div style={{fontWeight:800,color:C.navy,fontSize:13,marginBottom:8}}>📚 GCE past questions</div>
+      {papers.length===0 ? <div style={{fontSize:12,color:C.gray}}>No papers have been uploaded for your class yet.</div> : <>
+        <select style={{...inp,marginBottom:8}} value={subj} onChange={e=>setSubj(e.target.value)}>
+          <option value="">All subjects ({papers.length})</option>
+          {subjects.map(x => <option key={x} value={x}>{x}</option>)}
+        </select>
+        {shown.map(p => (
+          <div key={p.id} style={{padding:"9px 0",borderTop:`1px solid ${C.grayBg}`}}>
+            <div style={{fontWeight:700,fontSize:13,color:C.navy}}>{p.title}</div>
+            <div style={{fontSize:11,color:C.gray,margin:"2px 0 6px"}}>{p.subject} · {p.level} · {p.exam_year}{p.paper?` · ${p.paper}`:""} · {fmtSize(p.file_size)}</div>
+            <a href={gceUrl(p.file_path)} target="_blank" rel="noopener noreferrer" download={p.file_name||true} style={{display:"inline-block",padding:"6px 14px",background:C.navy,color:C.white,borderRadius:6,fontSize:12,fontWeight:700,textDecoration:"none"}}>⬇ Download</a>
+          </div>
+        ))}
+      </>}
     </div>
   );
 }
