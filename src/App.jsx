@@ -621,6 +621,7 @@ export default function App() {
   CURRENT_UID = session?.user?.id || null;
   const offlineWantRef = useRef(null);    // {email, password} to remember for offline sign-in once the profile shows a teacher
   const upgradingRef = useRef(false);
+  const loadedOnce = useRef(false);
 
   // ── Auth ───────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -709,10 +710,12 @@ export default function App() {
   }, [userRole, userProfile, page]);
 
   // ── Load all data ──────────────────────────────────────────────────────────
+  // Depends on WHO is signed in, not on the session object: Supabase hands out a new object every time the app comes
+  // back to the foreground (e.g. after picking a file), and reloading everything then wiped whatever the person was typing.
   useEffect(() => {
-    if (!session) return;
+    if (!session) { loadedOnce.current = false; return; }
     loadAll();
-  }, [session]);
+  }, [session?.user?.id, session?.offline]);
 
   function applySnapshot(snap) {
     // Open with the last data seen online. Marks entered now go into the offline queue.
@@ -732,7 +735,7 @@ export default function App() {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!loadedOnce.current) setLoading(true);   // full-screen spinner only the first time; later refreshes happen quietly
     try {
       const [
         { data: st, error: stErr }, { data: tc }, { data: mk },
@@ -784,6 +787,7 @@ export default function App() {
       setMarkDeadlines(dl || []);
       setMarkUnlocks(ul || []);
       setDbError(null);
+      loadedOnce.current = true;
       writeSnapshot(sessionRef.current?.user?.id, { students:(st||[]).map(({ photo_url, ...r }) => r), teachers:tc||[], marks:mk||[], fees:fe||[], settings:settingsObj, deadlines:dl||[], unlocks:ul||[] });
     } catch(e) {
       const snap = await readSnapshot(sessionRef.current?.user?.id);
@@ -813,7 +817,7 @@ export default function App() {
       .on("postgres_changes", { event:"*", schema:"public", table:"teachers" }, () => loadAll())
       .subscribe();
     return () => supabase.removeChannel(sub);
-  }, [session]);
+  }, [session?.user?.id, session?.offline]);
 
   // ── Auth actions ───────────────────────────────────────────────────────────
   const isNetErr = m => /fetch|network|load failed|timeout/i.test(m||"");
