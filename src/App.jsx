@@ -232,7 +232,7 @@ function saveOfflineQueue(queue) {
 
 function addToOfflineQueue(item) {
   const queue = loadOfflineQueue();
-  queue.push({ ...item, queuedAt: new Date().toISOString(), id: generateTempId("Form 0").replace("TEMP-0","QITEM") });
+  queue.push({ ...item, uid: CURRENT_UID, queuedAt: new Date().toISOString(), id: generateTempId("Form 0").replace("TEMP-0","QITEM") });
   saveOfflineQueue(queue);
   return queue;
 }
@@ -243,17 +243,106 @@ async function pushMarkRows(rows, oldScores, who) {
   const { error } = await supabase.from("marks").upsert(rows, { onConflict:"student_id,subject,seq,acad_year" });
   if (error) throw error;
 }
+// A dead connection can leave a request hanging for minutes. After 12 s treat it as offline and queue the marks
+// (safe: the upload is an upsert, so a late duplicate just writes the same values again).
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("network timeout: failed to fetch")), ms))]);
 async function writeMarkRows(rows, online, who, oldScores) {
   if (!rows.length) return { queued:false };
   const queue = () => { addToOfflineQueue({ type:"marks", data:{ rows, who, oldScores } }); return { queued:true }; };
   if (!online) return queue();
-  try { await pushMarkRows(rows, oldScores, who); return { queued:false }; }
+  try { await withTimeout(pushMarkRows(rows, oldScores, who), 12000); return { queued:false }; }
   catch(e) { if (/fetch|network|failed to send|load failed/i.test(e?.message||"")) return queue(); throw e; }
 }
 // Last data loaded online, kept on the phone so the app can open and take marks without internet (photos left out to save space)
-const SNAP_KEY = "sbcc_snapshot_v1";
-function writeSnapshot(o) { try { localStorage.setItem(SNAP_KEY, JSON.stringify(o)); } catch(e) { console.warn("Snapshot not saved:", e); } }
-function readSnapshot()   { try { const r = localStorage.getItem(SNAP_KEY); return r ? JSON.parse(r) : null; } catch { return null; } }
+// Kept in IndexedDB, not localStorage: a whole school's marks is far bigger than localStorage's ~5 MB limit,
+// which made the save fail silently and offline sign-in then said "not set up". One copy per signed-in user,
+// so two teachers sharing a phone never see each other's class lists.
+const SNAP_KEY = "sbcc_snapshot_v1";   // old localStorage copy, still read as a fallback
+const SNAP_DB = "sbcc_offline_db", SNAP_STORE = "snapshots";
+function idbOpen() {
+  return new Promise((res, rej) => {
+    if (!window.indexedDB) return rej(new Error("IndexedDB not available"));
+    const r = indexedDB.open(SNAP_DB, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore(SNAP_STORE);
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+async function idbGet(key) {
+  const db = await idbOpen();
+  return new Promise((res, rej) => { const q = db.transaction(SNAP_STORE).objectStore(SNAP_STORE).get(key); q.onsuccess = () => res(q.result ?? null); q.onerror = () => rej(q.error); });
+}
+async function idbSet(key, val) {
+  const db = await idbOpen();
+  return new Promise((res, rej) => { const tx = db.transaction(SNAP_STORE, "readwrite"); tx.objectStore(SNAP_STORE).put(val, key); tx.oncomplete = () => res(true); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error); });
+}
+async function writeSnapshot(uid, o) {
+  if (!uid) return false;
+  try { await idbSet("snap_"+uid, { ...o, savedAt:Date.now() }); return true; }
+  catch(e) { console.warn("Snapshot not saved:", e); return false; }
+}
+async function readSnapshot(uid) {
+  try {
+    const v = uid ? await idbGet("snap_"+uid) : null;
+    if (v) return v;
+    const r = localStorage.getItem(SNAP_KEY); return r ? JSON.parse(r) : null; // older phones: copy saved before this update
+  } catch { return null; }
+}
+
+// ── Offline sign-in for teachers ─────────────────────────────────────────────
+// After a teacher signs in ONLINE on this phone (with "Allow offline sign-in" ticked), a salted PBKDF2 check of the
+// password is kept on the phone, never the password itself. With no internet the teacher signs in against that check,
+// opens the saved class lists and enters marks. Marks go to the offline queue and upload once a real sign-in happens.
+// Teachers only. Valid 30 days after the last online sign-in. 5 wrong tries lock it for 10 minutes.
+const OFFLINE_LOGIN_KEY = "sbcc_offline_login_v1";
+const OFFLINE_LOGIN_DAYS = 30;
+const OFFLINE_LOGIN_DEFAULT_ON = true;   // the "Allow offline sign-in" box starts ticked (set false to start unticked)
+let OFFLINE_PW_MEM = null;               // password of the current offline session, kept in memory only, so the app can sign in for real when the internet returns
+let CURRENT_UID = null;                  // who is signed in now (stamped on queued items)
+const offlineErr = msg => { const e = new Error(msg); e.friendly = true; return e; };
+const hexOf = u8 => Array.from(u8).map(b => b.toString(16).padStart(2,"0")).join("");
+const emailKey = e => String(e||"").trim().toLowerCase();
+async function pbkdf2Hex(password, saltHex, iter) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
+  const salt = Uint8Array.from(saltHex.match(/../g).map(h => parseInt(h,16)));
+  return hexOf(new Uint8Array(await crypto.subtle.deriveBits({ name:"PBKDF2", hash:"SHA-256", salt, iterations:iter }, key, 256)));
+}
+function readOfflineLogins() { try { return JSON.parse(localStorage.getItem(OFFLINE_LOGIN_KEY)||"{}") || {}; } catch { return {}; } }
+function writeOfflineLogins(o) { try { localStorage.setItem(OFFLINE_LOGIN_KEY, JSON.stringify(o)); } catch(e) { console.warn("Offline sign-in not saved:", e); } }
+function removeOfflineLogin(email) { const all = readOfflineLogins(); delete all[emailKey(email)]; writeOfflineLogins(all); }
+async function saveOfflineLogin(email, password, user) {
+  if (!(window.crypto && window.crypto.subtle)) return;
+  const salt = hexOf(crypto.getRandomValues(new Uint8Array(16))), iter = 150000;
+  const hash = await pbkdf2Hex(password, salt, iter);
+  const all = readOfflineLogins();
+  all[emailKey(email)] = { id:user.id, email:emailKey(email), salt, iter, hash, savedAt:Date.now(), fails:0, lockUntil:0 };
+  writeOfflineLogins(all);
+}
+async function checkOfflineLogin(email, password) {
+  if (!(window.crypto && window.crypto.subtle)) throw offlineErr("Offline sign-in is not available in this browser. Connect to the internet to sign in.");
+  const all = readOfflineLogins(), rec = all[emailKey(email)];
+  let cachedRole = null;
+  if (rec) { try { cachedRole = JSON.parse(localStorage.getItem("sbcc_profile_"+rec.id)||"null")?.role; } catch {} }
+  if (!rec || cachedRole!=="teacher" || !(await readSnapshot(rec.id))) throw offlineErr("Offline sign-in is not set up for this account on this phone. Connect to the internet and sign in once, with Allow offline sign-in ticked.");
+  if (Date.now()-rec.savedAt > OFFLINE_LOGIN_DAYS*86400000) throw offlineErr(`Offline sign-in has expired (${OFFLINE_LOGIN_DAYS} days). Connect to the internet and sign in again.`);
+  if (rec.lockUntil > Date.now()) throw offlineErr(`Too many wrong tries. Try again in ${Math.ceil((rec.lockUntil-Date.now())/60000)} minute(s).`);
+  const hash = await pbkdf2Hex(password, rec.salt, rec.iter);
+  let diff = hash.length ^ rec.hash.length;
+  for (let i=0; i<hash.length; i++) diff |= hash.charCodeAt(i) ^ (rec.hash.charCodeAt(i)||0);
+  if (diff!==0) {
+    rec.fails = (rec.fails||0)+1;
+    if (rec.fails>=5) { rec.fails = 0; rec.lockUntil = Date.now()+10*60000; }
+    writeOfflineLogins(all);
+    throw new Error("Invalid login credentials");
+  }
+  rec.fails = 0; rec.lockUntil = 0; writeOfflineLogins(all);
+  return rec;
+}
+// Marks typed on this phone but not uploaded yet: shown on screen straight away
+function overlayQueuedMarks(map) {
+  loadOfflineQueue().filter(q => q.type==="marks").forEach(q => (q.data?.rows||[]).forEach(r => { map[markKey(r)] = { ...(map[markKey(r)]||{}), ...r }; }));
+  return map;
+}
 
 function removeFromOfflineQueue(queueItemId) {
   const queue = loadOfflineQueue().filter(q => q.id !== queueItemId);
@@ -265,16 +354,19 @@ function removeFromOfflineQueue(queueItemId) {
 // report "online" while connected to a WiFi network with no actual working
 // internet). This does a tiny, cheap, no-cache fetch to confirm a real
 // response comes back, with a short timeout so it never hangs the UI.
-async function checkRealConnectivity() {
+// mode "no-cors": we only care that the server answered, not what it said, so a missing CORS header can never
+// make a working connection look offline.
+async function checkRealConnectivity(ms = 4000) {
   if (!navigator.onLine) return false;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ms);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 4000);
-    await fetch(`${SUPABASE_URL}/auth/v1/health`, { method:"GET", signal: controller.signal, cache:"no-store" });
-    clearTimeout(timeout);
+    await fetch(`${SUPABASE_URL}/auth/v1/health`, { method:"GET", mode:"no-cors", signal: controller.signal, cache:"no-store" });
     return true;
   } catch {
     return false;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -523,6 +615,11 @@ export default function App() {
   const [syncing,      setSyncing]      = useState(false);
   const [syncResult,   setSyncResult]   = useState(null); // {success, failed} shown briefly after a sync run
   const [showQueueDetails, setShowQueueDetails] = useState(false);
+  const sessionRef = useRef(undefined);   // always the latest session (event handlers read it)
+  sessionRef.current = session;
+  CURRENT_UID = session?.user?.id || null;
+  const offlineWantRef = useRef(null);    // {email, password} to remember for offline sign-in once the profile shows a teacher
+  const upgradingRef = useRef(false);
 
   // ── Auth ───────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -554,6 +651,12 @@ export default function App() {
 
     (async () => {
       try {
+        if (session.offline) {
+          // Signed in without internet: use the profile saved on this phone (teachers only)
+          let c = null; try { c = JSON.parse(localStorage.getItem("sbcc_profile_"+session.user.id)||"null"); } catch {}
+          if (c && c.role==="teacher") { if (!cancelled) { setUserProfile(c); setUserRole("teacher"); } return; }
+          throw new Error("Offline sign-in needs a teacher profile saved on this phone. Connect to the internet and sign in once.");
+        }
         const { data, error } = await supabase
           .from("profiles")
           .select("*")
@@ -566,6 +669,14 @@ export default function App() {
           throw new Error("This account has an unsupported or missing profile role. Access has been blocked.");
         }
         try { localStorage.setItem("sbcc_profile_"+session.user.id, JSON.stringify(data)); } catch {}
+        {
+          const want = offlineWantRef.current;
+          if (want && emailKey(want.email)===emailKey(session.user.email)) {
+            offlineWantRef.current = null;
+            if (data.role==="teacher") saveOfflineLogin(want.email, want.password, session.user).catch(() => {});
+            else removeOfflineLogin(want.email);
+          }
+        }
         if (!cancelled) {
           setUserProfile(data);
           setUserRole(data.role);
@@ -602,7 +713,24 @@ export default function App() {
     loadAll();
   }, [session]);
 
+  function applySnapshot(snap) {
+    // Open with the last data seen online. Marks entered now go into the offline queue.
+    if (ACAD_YEARS.includes(snap.settings?.current_year)) ACTIVE_YEAR = snap.settings.current_year;
+    setStudents(snap.students||[]); setTeachers(snap.teachers||[]);
+    const mm = {}; (snap.marks||[]).forEach(m => { mm[`${m.student_id}-${m.subject}-${m.seq}-${m.acad_year}`] = m; });
+    setMarksMap(overlayQueuedMarks(mm));
+    const fm = {}; (snap.fees||[]).forEach(f => { fm[f.student_id] = { paid:f.paid||0, total:f.total||TOTAL_FEE }; }); setFeesMap(fm);
+    setSettings(snap.settings||{}); setMarkDeadlines(snap.deadlines||[]); setMarkUnlocks(snap.unlocks||[]);
+    setIsOnline(false); setDbError(null);
+  }
   async function loadAll() {
+    if (sessionRef.current?.offline) {
+      // Offline sign-in: no network calls, just the data saved on this phone
+      const snap = await readSnapshot(sessionRef.current?.user?.id);
+      if (snap) applySnapshot(snap); else setDbError("No class lists are saved on this phone yet. Connect to the internet and sign in once.");
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const [
@@ -626,7 +754,7 @@ export default function App() {
       // Build marks map: "studentId-subject-seq-year" → record
       const mm = {};
       (mk||[]).forEach(m => { mm[`${m.student_id}-${m.subject}-${m.seq}-${m.acad_year}`] = m; });
-      setMarksMap(mm);
+      setMarksMap(overlayQueuedMarks(mm)); // marks still waiting to upload stay visible
       // Build fees map: studentId → {paid, total}
       const fm = {};
       (fe||[]).forEach(f => { fm[f.student_id] = { paid: f.paid||0, total: f.total||TOTAL_FEE }; });
@@ -655,16 +783,11 @@ export default function App() {
       setMarkDeadlines(dl || []);
       setMarkUnlocks(ul || []);
       setDbError(null);
-      writeSnapshot({ students:(st||[]).map(({ photo_url, ...r }) => r), teachers:tc||[], marks:mk||[], fees:fe||[], settings:settingsObj, deadlines:dl||[], unlocks:ul||[] });
+      writeSnapshot(sessionRef.current?.user?.id, { students:(st||[]).map(({ photo_url, ...r }) => r), teachers:tc||[], marks:mk||[], fees:fe||[], settings:settingsObj, deadlines:dl||[], unlocks:ul||[] });
     } catch(e) {
-      const snap = readSnapshot();
+      const snap = await readSnapshot(sessionRef.current?.user?.id);
       if (snap && /fetch|network|load failed/i.test(e?.message||"")) {
-        // No connection: open with the last data seen online. Marks entered now go into the offline queue.
-        setStudents(snap.students||[]); setTeachers(snap.teachers||[]);
-        const mm = {}; (snap.marks||[]).forEach(m => { mm[`${m.student_id}-${m.subject}-${m.seq}-${m.acad_year}`] = m; }); setMarksMap(mm);
-        const fm = {}; (snap.fees||[]).forEach(f => { fm[f.student_id] = { paid:f.paid||0, total:f.total||TOTAL_FEE }; }); setFeesMap(fm);
-        setSettings(snap.settings||{}); setMarkDeadlines(snap.deadlines||[]); setMarkUnlocks(snap.unlocks||[]);
-        setIsOnline(false); setDbError(null);
+        applySnapshot(snap);
       } else setDbError(e.message);
     }
     setLoading(false);
@@ -678,7 +801,7 @@ export default function App() {
 
   // ── Real-time subscriptions ─────────────────────────────────────────────────
   useEffect(() => {
-    if (!session) return;
+    if (!session || session.offline) return;
     const sub = supabase.channel("db-changes")
       .on("postgres_changes", { event:"*", schema:"public", table:"students" }, () => loadAll())
       .on("postgres_changes", { event:"*", schema:"public", table:"marks"    }, () => loadAll())
@@ -692,14 +815,57 @@ export default function App() {
   }, [session]);
 
   // ── Auth actions ───────────────────────────────────────────────────────────
-  async function doLogin(email, password) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
+  const isNetErr = m => /fetch|network|load failed|timeout/i.test(m||"");
+  async function doLogin(email, password, remember = true) {
+    // WiFi/data with no real internet makes a normal sign-in hang, so check first (long timeout for slow networks).
+    // With no offline sign-in saved for this email there is nothing to fall back on, so always try online then.
+    const reachable = navigator.onLine && await checkRealConnectivity(8000);
+    if (navigator.onLine && (reachable || !readOfflineLogins()[emailKey(email)])) {
+      try {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (!error) { offlineWantRef.current = remember ? { email, password } : null; if (!remember) removeOfflineLogin(email); return; }
+        if (!isNetErr(error.message)) throw error; // wrong password etc.
+      } catch(e) {
+        if (!isNetErr(e?.message)) throw e;
+      }
+    }
+    // No internet: sign in against the check saved on this phone (teachers only)
+    const rec = await checkOfflineLogin(email, password);
+    OFFLINE_PW_MEM = password;
+    setSession({ user:{ id:rec.id, email:rec.email }, offline:true });
   }
   async function doLogout() {
-    await supabase.auth.signOut();
+    OFFLINE_PW_MEM = null;
+    try { await supabase.auth.signOut(); } catch {}
+    setSession(null); // also ends an offline sign-in, and covers a sign-out attempted with no internet
     setMenuOpen(false); setPage("dashboard");
   }
+  // When the internet returns during an offline sign-in, sign in for real so queued marks can upload
+  async function upgradeOfflineSession() {
+    const s = sessionRef.current;
+    if (!s?.offline || upgradingRef.current || !OFFLINE_PW_MEM) return;
+    upgradingRef.current = true;
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email:s.user.email, password:OFFLINE_PW_MEM });
+      if (!error) offlineWantRef.current = { email:s.user.email, password:OFFLINE_PW_MEM }; // renews the 30 days
+      else if (/invalid login/i.test(error.message||"")) {
+        removeOfflineLogin(s.user.email); OFFLINE_PW_MEM = null; setSession(null);
+        alert("Your password has changed, so please sign in again. Marks you entered offline are kept and will upload after you sign in.");
+      }
+      // a network error just means we stay offline and try again shortly
+    } catch {}
+    upgradingRef.current = false;
+  }
+  useEffect(() => {
+    if (!session?.offline) return;
+    const t = setInterval(async () => { if (await checkRealConnectivity()) upgradeOfflineSession(); }, 15000);
+    return () => clearInterval(t);
+  }, [session?.offline]);
+  // After a real sign-in, upload anything this person queued on this phone
+  useEffect(() => {
+    if (!session?.user?.id || session.offline) return;
+    if (loadOfflineQueue().length) syncOfflineQueue();
+  }, [session?.user?.id, session?.offline]);
   async function doRequestPasswordReset(email) {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: window.location.origin, // Supabase appends its own recovery tokens to this URL
@@ -858,7 +1024,9 @@ export default function App() {
   // in that form) and swaps it in everywhere — including on any queued fee
   // payment for that same offline-registered student, matched by temp ID.
   async function syncOfflineQueue() {
-    const queue = loadOfflineQueue();
+    const cur = sessionRef.current;
+    if (!cur || cur.offline) return; // uploading needs a real signed-in session
+    const queue = loadOfflineQueue().filter(it => !it.uid || it.uid===cur.user.id);
     if (!queue.length || syncing) return;
 
     // navigator.onLine can be wrong — it only reflects whether the device has
@@ -933,7 +1101,7 @@ export default function App() {
 
   // Watch for connectivity changes and auto-sync when we come back online
   useEffect(() => {
-    function handleOnline() { setIsOnline(true); loadAll(); syncOfflineQueue(); }
+    function handleOnline() { setIsOnline(true); if (sessionRef.current?.offline) { upgradeOfflineSession(); return; } loadAll(); syncOfflineQueue(); }
     function handleOffline() { setIsOnline(false); }
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
@@ -1083,7 +1251,7 @@ export default function App() {
   const allowedNavItems = navItems.filter(n => n.roles.includes(userRole) && (n.key!=="fees" || canFees));
 
   const ctx = {
-    auth: { user: currentUser, role: userRole, canFees },
+    auth: { user: currentUser, role: userRole, canFees, offline: !!session?.offline },
     students, teachers, marksMap, feesMap, notices, attendanceMap, calendarEvents,
     saveStudent, deleteStudent, saveTeacher, saveMark,
     remarksMap, saveRemarks,
@@ -1093,6 +1261,7 @@ export default function App() {
     councilMeetings, councilDecisions, councilReady,
     saveCouncilMeeting, deleteCouncilMeeting, updateDecisionStatus,
     offlineQueue, isOnline, syncOfflineQueue, setOfflineQueue,
+    applyQueuedMarks: () => setMarksMap(prev => overlayQueuedMarks({ ...prev })),
   };
 
   return (
@@ -1222,6 +1391,7 @@ export default function App() {
 // ─── Login Screen ──────────────────────────────────────────────────────────────
 function LoginScreen({ onLogin, onRequestReset, onOpenPortal }) {
   const [mode,  setMode]  = useState("login"); // "login" | "forgot"
+  const [remember, setRemember] = useState(OFFLINE_LOGIN_DEFAULT_ON);
   const [email, setEmail] = useState("");
   const [pass,  setPass]  = useState("");
   const [err,   setErr]   = useState("");
@@ -1246,9 +1416,10 @@ function LoginScreen({ onLogin, onRequestReset, onOpenPortal }) {
     if (!email.trim() || !pass) { setErr("Enter your email and password."); return; }
     setErr(""); setBusy(true);
     try {
-      await onLogin(email.trim(), pass);
+      await onLogin(email.trim(), pass, remember);
       setAttempts(0);
     } catch(e) {
+      if (e.friendly) { setErr(e.message); setBusy(false); return; }
       const next = attempts+1;
       setAttempts(next);
       if (next>=5) {
@@ -1316,6 +1487,11 @@ function LoginScreen({ onLogin, onRequestReset, onOpenPortal }) {
           <Fr label="Password">
             <input style={inp} type="password" autoComplete="current-password" placeholder="••••••••" value={pass} onChange={e=>setPass(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handle()} disabled={isLocked}/>
           </Fr>
+          {!navigator.onLine && <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:8,padding:"8px 12px",color:"#92400e",fontSize:12,marginBottom:12}}>📡 No internet. Teachers can sign in with the email and password they used on this phone before.</div>}
+          <label style={{display:"flex",gap:8,alignItems:"flex-start",fontSize:11.5,color:C.gray,marginBottom:12,cursor:"pointer"}}>
+            <input type="checkbox" checked={remember} onChange={e=>setRemember(e.target.checked)} style={{marginTop:2}}/>
+            <span>Allow offline sign-in on this phone (teachers). Do not tick on a shared phone.</span>
+          </label>
           {err && <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"8px 12px",color:C.red,fontSize:12,marginBottom:12}}>{err}</div>}
           {isLocked
             ? <div style={{width:"100%",padding:"10px",background:C.grayBg,color:C.gray,borderRadius:8,fontWeight:700,fontSize:13,textAlign:"center"}}>🔒 Locked — try again in {secondsLeft}s</div>
@@ -3434,7 +3610,7 @@ function MarksPage({ ctx }) {
         mk(s.id, seqV, Number(v));
       }
       const res = await writeMarkRows(rows, ctx.isOnline, auth.user.name, {});
-      if (res.queued) { ctx.setOfflineQueue(loadOfflineQueue()); alert("No internet. The marks are saved on this phone and will upload by themselves when you are back online."); }
+      if (res.queued) { ctx.setOfflineQueue(loadOfflineQueue()); ctx.applyQueuedMarks(); alert("No internet. The marks are saved on this phone and will upload by themselves when you are back online."); }
       else await ctx.loadAll(); // refresh all data
       setSaved(true);
     } catch(e) { alert("Save error: "+e.message); }
@@ -7095,6 +7271,10 @@ function ProfilePage({ ctx }) {
   const [pwErr, setPwErr] = useState("");
   const [pwOk,  setPwOk]  = useState("");
   const [pwBusy,setPwBusy]= useState(false);
+  const [offTick,setOffTick]= useState(0);
+  const [snapAt,setSnapAt]= useState(null);
+  useEffect(() => { readSnapshot(u.id).then(x => setSnapAt(x?.savedAt||null)); }, [offTick]);
+  const offRec = auth.role==="teacher" ? readOfflineLogins()[emailKey(u.email)] : null;
 
   async function changePassword() {
     setPwErr(""); setPwOk("");
@@ -7137,6 +7317,21 @@ function ProfilePage({ ctx }) {
           </div>
         ))}
       </div>
+
+      {auth.role==="teacher" && (
+        <div data-tick={offTick} style={{background:C.white,borderRadius:13,padding:18,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",marginBottom:12}}>
+          <div style={{fontWeight:800,fontSize:14,color:C.navy,marginBottom:6}}>Offline sign-in on this phone</div>
+          {offRec ? (
+            <>
+              <div style={{fontSize:12,color:C.green,marginBottom:8}}>On. Valid until {fmtDate(new Date(offRec.savedAt+OFFLINE_LOGIN_DAYS*86400000).toISOString().slice(0,10))}. It renews each time you sign in with internet.</div>
+              <div style={{fontSize:12,color:snapAt?C.green:C.red,marginBottom:8}}>{snapAt ? `Class lists saved on this phone: ${new Date(snapAt).toLocaleString()}.` : "Class lists are NOT saved on this phone yet. Stay signed in with internet for a minute so they download."}</div>
+              <SmBtn onClick={()=>{ if (window.confirm("Remove offline sign-in from this phone?")) { removeOfflineLogin(u.email); setOffTick(n=>n+1); } }} color={C.red}>Remove from this phone</SmBtn>
+            </>
+          ) : (
+            <div style={{fontSize:12,color:C.gray}}>Off. Sign in once with internet and tick Allow offline sign-in on the sign-in screen.</div>
+          )}
+        </div>
+      )}
 
       <div style={{background:C.white,borderRadius:13,padding:22,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:showPwForm?14:0}}>
