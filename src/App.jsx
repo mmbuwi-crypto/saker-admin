@@ -554,6 +554,7 @@ const navItems = [
   { key:"notices",      label:"Notices",      icon:"📢", roles:["admin","teacher"] },
   { key:"calendar",     label:"Calendar",     icon:"📅", roles:["admin","teacher"] },
   { key:"subjectsetup", label:"Subjects",     icon:"🧮", roles:["admin"] },
+  { key:"streamsetup",  label:"Arts / Science", icon:"🧪", roles:["admin"] },
   { key:"gcepapers",    label:"GCE Papers",   icon:"📚", roles:["admin","teacher"] },
   { key:"profile",      label:"My Profile",   icon:"👤", roles:["admin","teacher"] },
 ];
@@ -1417,6 +1418,7 @@ export default function App() {
           {page==="notices"      && <NoticesPage      ctx={ctx}/>}
           {page==="calendar"     && <CalendarPage     ctx={ctx}/>}
           {page==="subjectsetup" && <SubjectsPage     ctx={ctx}/>}
+          {page==="streamsetup"  && <StreamsPage      ctx={ctx}/>}
           {page==="gcepapers"    && <GcePapersPage    ctx={ctx}/>}
           {page==="profile"      && <ProfilePage      ctx={ctx}/>}
         </>}
@@ -2759,8 +2761,11 @@ function StudentsPage({ ctx }) {
   const [form, setForm] = useState(blank);
   const photoInputRef = useRef(null);
 
+  // The class filter also offers "Form 4 Arts" / "Form 4 Science" / "Form 4 (no stream yet)" for forms split into streams
+  const classOptions = FORMS.flatMap(f => SUBJECT_CFG.streamForms.includes(f) ? [f, f+" Arts", f+" Science", f+" (no stream yet)"] : [f]);
+  const matchClass = (st, v) => !v || (v.endsWith(" (no stream yet)") ? st.form===v.replace(" (no stream yet)","") && !STREAMS.includes(st.stream) : FORMS.includes(v) ? st.form===v : classLabel(st)===v);
   const filtered = students.filter(s => s.active
-    && (!filter.form   || s.form===filter.form)
+    && matchClass(s, filter.form)
     && (!filter.search || s.name?.toLowerCase().includes(filter.search.toLowerCase()) || s.id?.includes(filter.search))
   );
 
@@ -2830,8 +2835,8 @@ function StudentsPage({ ctx }) {
     <div>
       <div style={{display:"flex",gap:8,marginBottom:11,flexWrap:"wrap"}}>
         <input style={{...inp,flex:1,minWidth:130}} placeholder="Search name or ID…" value={filter.search} onChange={e=>setFilter(f=>({...f,search:e.target.value}))}/>
-        <select style={{...inp,width:114}} value={filter.form} onChange={e=>setFilter(f=>({...f,form:e.target.value}))}>
-          <option value="">All Forms</option>{FORMS.map(f=><option key={f}>{f}</option>)}
+        <select style={{...inp,width:130}} value={filter.form} onChange={e=>setFilter(f=>({...f,form:e.target.value}))}>
+          <option value="">All Forms</option>{classOptions.map(f=><option key={f}>{f}</option>)}
         </select>
         {auth.role==="admin" && <SmBtn onClick={exportStudents} color={C.green}>📊 Export Excel</SmBtn>}
         {auth.role==="admin" && <SmBtn onClick={()=>setShowPromote(true)} color={C.gold}>🎓 Promote Students</SmBtn>}
@@ -2851,7 +2856,7 @@ function StudentsPage({ ctx }) {
                 <div style={{fontSize:10,fontFamily:"monospace",color:C.gold}}>{s.id}</div>
               </div>
             </div>
-            <Pill color={C.navyMid}>{s.form}</Pill>
+            <Pill color={/ Science$/.test(classLabel(s)) ? C.green : / Arts$/.test(classLabel(s)) ? C.gold : (SUBJECT_CFG.streamForms.includes(s.form) ? C.red : C.navyMid)}>{classLabel(s)}{SUBJECT_CFG.streamForms.includes(s.form) && !STREAMS.includes(s.stream) ? " · no stream" : ""}</Pill>
           </div>
           <div style={{display:"flex",gap:10,flexWrap:"wrap",marginTop:6}}>
             <Info label="Gender" value={s.gender}/>
@@ -5194,7 +5199,7 @@ function reportCardParts(student, env, sel, conduct) {
     const nextBegin = settings?.next_term_begins ? fmtDate(settings.next_term_begins) : "";
     const fill = v => v ? "<b>"+escHtml(v)+"</b>" : "________";
 
-    const SBC_SUBJECTS = SBC_SUBJECTS_LIST;
+    const SBC_SUBJECTS = subjectsOfStudent(student);   // the subjects set for this student's class (Subjects page)
     const isTerm = f5 ? true : sel.mode==="term";
 
     // ── Class ranking (same rules as before) ─────────────────────────────────
@@ -7325,7 +7330,7 @@ function SubjectsPage({ ctx }) {
     const n = newSub.trim().replace(/\s+/g, " ");
     if (!n) return;
     if (cfg.master.some(x => x.toLowerCase()===n.toLowerCase())) { alert(`"${n}" is already in the list.`); return; }
-    setCfg(c => ({ ...c, master:[...c.master, n] }));
+    setCfg(c => ({ ...c, master:[...c.master, n], byClass:Object.fromEntries(Object.entries(c.byClass).map(([k, v]) => [k, [...v, n]])) }));
     setNewSub("");
   }
   function removeSubject(sub) {
@@ -7360,7 +7365,7 @@ function SubjectsPage({ ctx }) {
     <div>
       <div style={box}>
         <div style={{fontWeight:800,color:C.navy,fontSize:14,marginBottom:4}}>🧮 All subjects in the school</div>
-        <div style={{fontSize:11,color:C.gray,marginBottom:8}}>Add a new subject here, then tick it in the classes that take it below.</div>
+        <div style={{fontSize:11,color:C.gray,marginBottom:8}}>A new subject is switched on for every class. Untick it below in the classes that do not take it, then save.</div>
         <div style={{display:"flex",gap:7,marginBottom:9}}>
           <input style={{...inp,flex:1}} placeholder="New subject name" value={newSub} onChange={e=>setNewSub(e.target.value)} onKeyDown={e=>{ if (e.key==="Enter") addSubject(); }}/>
           <Btn onClick={addSubject}>Add</Btn>
@@ -7398,6 +7403,67 @@ function SubjectsPage({ ctx }) {
 
       <div style={{position:"sticky",bottom:8}}>
         <Btn onClick={save} disabled={busy||!dirty}>{busy ? "Saving…" : dirty ? "Save subject changes" : "No changes to save"}</Btn>
+      </div>
+    </div>
+  );
+}
+
+// ─── Arts / Science: put every student of a split form into their stream in one go (admin) ───
+function StreamsPage({ ctx }) {
+  const { students, loadAll } = ctx;
+  const splitForms = SUBJECT_CFG.streamForms;
+  const [form, setForm]   = useState(splitForms[0] || "");
+  const [draft, setDraft] = useState({});   // studentId → "Arts" | "Science" | "" (not saved yet)
+  const [busy, setBusy]   = useState(false);
+  useEffect(() => { if (!splitForms.includes(form)) setForm(splitForms[0] || ""); }, [splitForms.join("|")]);
+  const box = { background:C.white, borderRadius:10, padding:12, marginBottom:11, boxShadow:"0 1px 3px rgba(0,0,0,0.06)" };
+  if (!splitForms.length) return <div style={box}><div style={{fontSize:13,color:C.gray}}>No form is split into Arts and Science yet. Open <b>Subjects</b>, switch it on for a form (for example Form 4), then come back here to put each student in their stream.</div></div>;
+
+  const cur     = st => draft[st.id] ?? (st.stream || "");
+  const pool    = students.filter(x => x.active && x.reg_status==="registered" && x.form===form).sort((a,b) => a.name.localeCompare(b.name));
+  const changed = students.filter(x => x.active && splitForms.includes(x.form) && cur(x) !== (x.stream || ""));
+  const count   = k => pool.filter(x => cur(x)===k).length;
+  const pick    = (st, v) => setDraft(d => ({ ...d, [st.id]: cur(st)===v ? "" : v }));
+
+  async function save() {
+    setBusy(true);
+    try {
+      for (const st of changed) {
+        const { error } = await supabase.from("students").update({ stream: cur(st) || null }).eq("id", st.id);
+        if (error) throw error;
+      }
+      setDraft({});
+      await loadAll();
+      alert(`Saved streams for ${changed.length} student(s).`);
+    } catch(e) { alert("Could not save: " + (/stream/i.test(e.message||"") ? "the stream column is missing. Run subjects_streams.sql in Supabase first." : (e.message||e))); }
+    setBusy(false);
+  }
+
+  const btn = (on, color) => ({ padding:"5px 12px", borderRadius:6, border:`1px solid ${on?color:C.grayLight}`, background:on?color:C.white, color:on?C.white:C.gray, fontSize:11, fontWeight:700, cursor:"pointer" });
+  return (
+    <div>
+      <div style={box}>
+        <div style={{fontWeight:800,color:C.navy,fontSize:14,marginBottom:8}}>🧪 Arts and Science streams</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+          {splitForms.map(f => <button key={f} type="button" onClick={()=>setForm(f)} style={{padding:"5px 12px",borderRadius:12,border:`1px solid ${form===f?C.navy:C.grayLight}`,background:form===f?C.navy:C.white,color:form===f?C.white:C.gray,fontSize:12,cursor:"pointer"}}>{f}</button>)}
+        </div>
+        <div style={{fontSize:12,color:C.gray}}>{form}: <b style={{color:C.gold}}>{count("Arts")} Arts</b> · <b style={{color:C.green}}>{count("Science")} Science</b> · <b style={{color:C.red}}>{pool.length-count("Arts")-count("Science")} not set</b></div>
+      </div>
+      {pool.length===0 && <div style={box}><div style={{fontSize:12,color:C.gray}}>No registered students in {form}.</div></div>}
+      {pool.map(st => (
+        <div key={st.id} style={{...box,display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"9px 12px",marginBottom:6}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontWeight:700,color:C.navy,fontSize:13,overflow:"hidden",textOverflow:"ellipsis"}}>{st.name}</div>
+            <div style={{fontSize:10,fontFamily:"monospace",color:C.gold}}>{st.id}</div>
+          </div>
+          <div style={{display:"flex",gap:5,flexShrink:0}}>
+            <button type="button" onClick={()=>pick(st,"Arts")}    style={btn(cur(st)==="Arts",C.gold)}>Arts</button>
+            <button type="button" onClick={()=>pick(st,"Science")} style={btn(cur(st)==="Science",C.green)}>Science</button>
+          </div>
+        </div>
+      ))}
+      <div style={{position:"sticky",bottom:8}}>
+        <Btn onClick={save} disabled={busy||!changed.length}>{busy ? "Saving…" : changed.length ? `Save ${changed.length} change${changed.length!==1?"s":""}` : "No changes to save"}</Btn>
       </div>
     </div>
   );
