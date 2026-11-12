@@ -28,6 +28,31 @@ const SUBJECTS_BY_FORM = {
   "Form 1":[...ALL_SUBJECTS], "Form 2":[...ALL_SUBJECTS], "Form 3":[...ALL_SUBJECTS],
   "Form 4":[...ALL_SUBJECTS], "Form 5":[...ALL_SUBJECTS],
 };
+// ── Subject set-up (admin → Subjects page) ─────────────────────────────────────────────────────────────────────────
+// The admin can add/remove subjects, choose the subjects each class takes, and split a form into Arts and Science.
+// It is saved as one setting ("subject_config"); applySubjectConfig() refreshes the lists above in place whenever data loads,
+// so every page and the report card use the same lists. With nothing saved, everything behaves as before.
+const DEFAULT_SUBJECTS = [...ALL_SUBJECTS];
+const STREAMS = ["Arts","Science"];
+const SUBJECT_CFG = { streamForms:[], byClass:{} };
+const classKey   = (form, stream) => (SUBJECT_CFG.streamForms.includes(form) && STREAMS.includes(stream)) ? `${form} ${stream}` : form;
+const classLabel = st => classKey(st.form, st.stream);             // "Form 4 Science", or just "Form 1"
+const subjectsOfStudent = st => SUBJECT_CFG.byClass[classKey(st.form, st.stream)] || SUBJECTS_BY_FORM[st.form] || [];
+function applySubjectConfig(raw) {
+  const cfg    = parseJSON(raw, null);
+  const master = Array.isArray(cfg?.master) && cfg.master.length ? cfg.master.filter(x => typeof x==="string" && x.trim()) : DEFAULT_SUBJECTS;
+  const sf     = Array.isArray(cfg?.streamForms) ? cfg.streamForms.filter(f => FORMS.includes(f)) : [];
+  ALL_SUBJECTS.length = 0; ALL_SUBJECTS.push(...master);
+  const by = {};
+  FORMS.forEach(f => {
+    (sf.includes(f) ? [f+" Arts", f+" Science"] : [f]).forEach(k => {
+      const l = cfg?.byClass?.[k];
+      by[k] = Array.isArray(l) ? master.filter(x => l.includes(x)) : [...master];
+    });
+    SUBJECTS_BY_FORM[f] = sf.includes(f) ? master.filter(x => by[f+" Arts"].includes(x) || by[f+" Science"].includes(x)) : by[f];
+  });
+  SUBJECT_CFG.streamForms = sf; SUBJECT_CFG.byClass = by;
+}
 const SEQ_LABELS  = ["SEQ 1","SEQ 2","SEQ 3","SEQ 4","SEQ 5","SEQ 6"];
 const TERM_SEQS   = {"First Term":["SEQ 1","SEQ 2"],"Second Term":["SEQ 3","SEQ 4"],"Third Term":["SEQ 5","SEQ 6"]};
 const TERMS       = ["First Term","Second Term","Third Term"];
@@ -59,8 +84,8 @@ function f5Grade(settings, score) {
 }
 const f5Students   = settings => parseJSON(settings?.f5_students, {});
 // A Form 5 student with no list saved yet is treated as writing every Form 5 subject
-const f5SubjectsOf = (settings, st) => { const all = SUBJECTS_BY_FORM["Form 5"]; const c = f5Students(settings)[st.id]; return c?.subjects?.length ? all.filter(x => c.subjects.includes(x)) : all; };
-const f5Writes     = (settings, st, sub) => !isF5(st.form) || f5SubjectsOf(settings, st).includes(sub);
+const f5SubjectsOf = (settings, st) => { const all = subjectsOfStudent(st); const c = f5Students(settings)[st.id]; return c?.subjects?.length ? all.filter(x => c.subjects.includes(x)) : all; };
+const f5Writes     = (settings, st, sub) => isF5(st.form) ? f5SubjectsOf(settings, st).includes(sub) : subjectsOfStudent(st).includes(sub); // only students who take the subject (Arts/Science)
 const f5CandNo     = (settings, st) => f5Students(settings)[st.id]?.candNo || "";
 // Parents choose their child's subjects in the Parent Portal until a closing date set by the admin.
 // Settings: f5_subject_deadline (YYYY-MM-DD), f5_subject_closed ("true" = closed by admin),
@@ -528,6 +553,7 @@ const navItems = [
   { key:"fees",         label:"School Fees",  icon:"💰", roles:["admin"] },
   { key:"notices",      label:"Notices",      icon:"📢", roles:["admin","teacher"] },
   { key:"calendar",     label:"Calendar",     icon:"📅", roles:["admin","teacher"] },
+  { key:"subjectsetup", label:"Subjects",     icon:"🧮", roles:["admin"] },
   { key:"gcepapers",    label:"GCE Papers",   icon:"📚", roles:["admin","teacher"] },
   { key:"profile",      label:"My Profile",   icon:"👤", roles:["admin","teacher"] },
 ];
@@ -720,6 +746,7 @@ export default function App() {
   function applySnapshot(snap) {
     // Open with the last data seen online. Marks entered now go into the offline queue.
     if (ACAD_YEARS.includes(snap.settings?.current_year)) ACTIVE_YEAR = snap.settings.current_year;
+    applySubjectConfig(snap.settings?.subject_config);
     setStudents(snap.students||[]); setTeachers(snap.teachers||[]);
     const mm = {}; (snap.marks||[]).forEach(m => { mm[`${m.student_id}-${m.subject}-${m.seq}-${m.acad_year}`] = m; });
     setMarksMap(overlayQueuedMarks(mm));
@@ -783,6 +810,7 @@ export default function App() {
       const settingsObj = Object.fromEntries((ss||[]).map(r => [r.key, r.value]));
       if (ACAD_YEARS.includes(settingsObj.current_year)) ACTIVE_YEAR = settingsObj.current_year;
       if (/^\d{4}-\d{2}-\d{2}$/.test(settingsObj.late_cutoff||"")) LATE_CUTOFF = settingsObj.late_cutoff;
+      applySubjectConfig(settingsObj.subject_config);
       setSettings(settingsObj);
       setMarkDeadlines(dl || []);
       setMarkUnlocks(ul || []);
@@ -940,6 +968,7 @@ export default function App() {
       reg_paid_by: s.reg_paid_by||null, reg_cashier: s.reg_cashier||null,
       is_late_reg: s.is_late_reg||false, graduated: s.graduated||false,
       parent_pin: parentPin,
+      ...(s.stream !== undefined ? { stream: s.stream || null } : {}),
     };
     const { error } = await supabase.from("students").upsert(row, { onConflict:"id" });
     if (error) {
@@ -1068,6 +1097,7 @@ export default function App() {
             reg_paid_by: item.data.reg_paid_by, reg_cashier: item.data.reg_cashier,
             is_late_reg: item.data.is_late_reg||false, graduated:false,
             parent_pin: item.data.parent_pin,
+            ...(item.data.stream !== undefined ? { stream: item.data.stream || null } : {}),
           };
           const { error } = await supabase.from("students").upsert(row, { onConflict:"id" });
           if (error) throw error;
@@ -1386,6 +1416,7 @@ export default function App() {
           {page==="fees"         && ctx.auth.canFees && <FeesPage        ctx={ctx}/>}
           {page==="notices"      && <NoticesPage      ctx={ctx}/>}
           {page==="calendar"     && <CalendarPage     ctx={ctx}/>}
+          {page==="subjectsetup" && <SubjectsPage     ctx={ctx}/>}
           {page==="gcepapers"    && <GcePapersPage    ctx={ctx}/>}
           {page==="profile"      && <ProfilePage      ctx={ctx}/>}
         </>}
@@ -2249,6 +2280,7 @@ function RegistrationPage({ ctx }) {
         reg_paid_by:form.paidBy||form.parent,
         reg_cashier:auth.user.name,
         is_late_reg:form.isLate,
+        stream: SUBJECT_CFG.streamForms.includes(form.form) ? (form.stream||null) : undefined,
         parent_pin: pin,
       };
 
@@ -2379,6 +2411,7 @@ function RegistrationPage({ ctx }) {
                 <Fr label="Full Name *"><input style={inp} value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}/></Fr>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
                   <Fr label="Form"><select style={inp} value={form.form} onChange={e=>setForm(f=>({...f,form:e.target.value}))}>{FORMS.map(f=><option key={f}>{f}</option>)}</select></Fr>
+                  {SUBJECT_CFG.streamForms.includes(form.form) && <Fr label="Stream"><select style={inp} value={form.stream||""} onChange={e=>setForm(f=>({...f,stream:e.target.value}))}><option value="">— choose —</option>{STREAMS.map(x=><option key={x}>{x}</option>)}</select></Fr>}
                   <Fr label="Gender"><select style={inp} value={form.gender} onChange={e=>setForm(f=>({...f,gender:e.target.value}))}><option>Female</option><option>Male</option></select></Fr>
                 </div>
               </div>
@@ -2902,6 +2935,7 @@ function StudentsPage({ ctx }) {
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
                 <div style={{gridColumn:"1/-1"}}><label style={lbl}>Full Name</label><input style={inp} value={form.name||""} onChange={e=>setForm(f=>({...f,name:e.target.value}))}/></div>
                 <div><label style={lbl}>Form</label><select style={inp} value={form.form} onChange={e=>setForm(f=>({...f,form:e.target.value}))}>{FORMS.map(f=><option key={f}>{f}</option>)}</select></div>
+                {SUBJECT_CFG.streamForms.includes(form.form) && <div><label style={lbl}>Stream</label><select style={inp} value={form.stream||""} onChange={e=>setForm(f=>({...f,stream:e.target.value}))}><option value="">— choose —</option>{STREAMS.map(x=><option key={x}>{x}</option>)}</select></div>}
                 <div><label style={lbl}>Gender</label><select style={inp} value={form.gender} onChange={e=>setForm(f=>({...f,gender:e.target.value}))}><option>Female</option><option>Male</option></select></div>
                 <div><label style={lbl}>DOB</label><input style={inp} type="date" value={form.dob||""} onChange={e=>setForm(f=>({...f,dob:e.target.value}))}/></div>
                 <div><label style={lbl}>Phone</label><input style={inp} value={form.phone||""} onChange={e=>setForm(f=>({...f,phone:e.target.value}))}/></div>
@@ -5109,7 +5143,7 @@ function computeReport(student, env, sel) {
   const f5       = isF5(student.form);
   const assess   = sel.f5Assess || F5_ASSESSMENTS[0];
   // Form 5: only the subjects this student writes; everyone else: the whole form's list
-  const subjects = f5 ? f5SubjectsOf(settings, student) : (SUBJECTS_BY_FORM[student.form] || []);
+  const subjects = f5 ? f5SubjectsOf(settings, student) : subjectsOfStudent(student);
   const termSeqs = f5 ? [assess] : TERM_SEQS[sel.term];
   const isTerm   = sel.mode==="term";
   const getScore = (sub,seq) => marksMap[`${student.id}-${sub}-${seq}-${sel.year}`]?.score ?? null;
@@ -5164,7 +5198,7 @@ function reportCardParts(student, env, sel, conduct) {
     const isTerm = f5 ? true : sel.mode==="term";
 
     // ── Class ranking (same rules as before) ─────────────────────────────────
-    const peers = students.filter(s=>s.active&&s.form===student.form&&s.reg_status==="registered");
+    const peers = students.filter(s=>s.active&&s.form===student.form&&classLabel(s)===classLabel(student)&&s.reg_status==="registered");
     const peerAvgs = peers.map(ps=>{
       let tw=0,tc=0;
       SBC_SUBJECTS.forEach(sub=>{
@@ -5329,7 +5363,7 @@ function reportCardParts(student, env, sel, conduct) {
   </div>
 
   <table class="info"><tr>
-    <td colspan="2" style="background:#EEF4FB"><b>${termLabel}</b> &nbsp;|&nbsp; Class: <b>${escHtml(student.form)}</b> &nbsp;|&nbsp; No. on Roll: <b>${peers.length}</b> &nbsp;|&nbsp; Academic Year: <b>${escHtml(sel.year)}</b>${f5 ? ` &nbsp;|&nbsp; Subjects written: <b>${modeRows.length}</b>` : ""}</td>
+    <td colspan="2" style="background:#EEF4FB"><b>${termLabel}</b> &nbsp;|&nbsp; Class: <b>${escHtml(classLabel(student))}</b> &nbsp;|&nbsp; No. on Roll: <b>${peers.length}</b> &nbsp;|&nbsp; Academic Year: <b>${escHtml(sel.year)}</b>${f5 ? ` &nbsp;|&nbsp; Subjects written: <b>${modeRows.length}</b>` : ""}</td>
     <td rowspan="5" style="width:27mm;text-align:center;vertical-align:middle;padding:1mm">${photoHtml}</td>
   </tr><tr>
     <td style="width:62%;height:7.5mm">Name / Nom: <b style="font-size:12.5pt;letter-spacing:.2px">${escHtml(student.name)}</b></td>
@@ -5461,7 +5495,7 @@ function ReportsPageInner({ ctx }) {
   const [savingNT, setSavingNT] = useState(false);
 
   const student  = students.find(s=>s.id===sel.studentId);
-  const subjects = student ? (SUBJECTS_BY_FORM[student.form]||[]) : [];
+  const subjects = student ? subjectsOfStudent(student) : [];
   const termSeqs = TERM_SEQS[sel.term];
 
   // Auto-compute real attendance totals for this student from the Attendance page's data
@@ -5631,7 +5665,7 @@ function ReportsPageInner({ ctx }) {
               <div style={{flex:1}}>
                 <div style={{fontWeight:800,color:C.navy,fontSize:14}}>{student.name}</div>
                 <div style={{fontSize:11,color:C.gold,fontFamily:"monospace"}}>{student.id}</div>
-                <div style={{fontSize:11,color:C.gray}}>{student.form} · {student.gender}</div>
+                <div style={{fontSize:11,color:C.gray}}>{classLabel(student)} · {student.gender}</div>
               </div>
             </div>
             {showC && (
@@ -5702,7 +5736,7 @@ const isOverdue = d => d.deadline && d.status!=="completed" && d.deadline < toda
 
 // One student's result for one term: weighted average + per-subject averages
 function studentTermResult(student, marksMap, year, term) {
-  const subs = SUBJECTS_BY_FORM[student.form] || []; // (Form 5 rankings here still use the mocks only)
+  const subs = subjectsOfStudent(student); // (Form 5 rankings here still use the mocks only)
   const seqs = isF5(student.form) ? F5_MOCKS : (TERM_SEQS[term] || []);
   const rows = [];
   let tw = 0, tc = 0;
@@ -7262,6 +7296,109 @@ function CalendarPage({ ctx }) {
           </div>
         </Modal>
       )}
+    </div>
+  );
+}
+
+// ─── Subjects: add/remove subjects, choose them per class, split a form into Arts and Science (admin) ───
+function SubjectsPage({ ctx }) {
+  const { settings, saveSetting } = ctx;
+  const saved = parseJSON(settings?.subject_config, null);
+  const startCfg = () => ({
+    master: [...ALL_SUBJECTS],
+    streamForms: [...SUBJECT_CFG.streamForms],
+    byClass: Object.fromEntries(Object.entries(SUBJECT_CFG.byClass).map(([k, v]) => [k, [...v]])),
+  });
+  const [cfg, setCfg]       = useState(startCfg);
+  const [newSub, setNewSub] = useState("");
+  const [busy, setBusy]     = useState(false);
+  const listFor = k => cfg.byClass[k] ?? cfg.master;
+  const classKeys = FORMS.flatMap(f => cfg.streamForms.includes(f) ? [f+" Arts", f+" Science"] : [f]);
+  const normalised = () => ({
+    master: cfg.master,
+    streamForms: cfg.streamForms,
+    byClass: Object.fromEntries(classKeys.map(k => [k, cfg.master.filter(x => listFor(k).includes(x))])),
+  });
+  const dirty = JSON.stringify(normalised()) !== JSON.stringify(saved ? { master:saved.master, streamForms:saved.streamForms||[], byClass:saved.byClass||{} } : { master:DEFAULT_SUBJECTS, streamForms:[], byClass:Object.fromEntries(FORMS.map(f => [f, DEFAULT_SUBJECTS])) });
+
+  function addSubject() {
+    const n = newSub.trim().replace(/\s+/g, " ");
+    if (!n) return;
+    if (cfg.master.some(x => x.toLowerCase()===n.toLowerCase())) { alert(`"${n}" is already in the list.`); return; }
+    setCfg(c => ({ ...c, master:[...c.master, n] }));
+    setNewSub("");
+  }
+  function removeSubject(sub) {
+    if (!window.confirm(`Remove "${sub}"?\n\nIt disappears from every class and from report cards. Marks already entered are kept and come back if you add the same subject again.`)) return;
+    setCfg(c => ({ ...c, master:c.master.filter(x => x!==sub), byClass:Object.fromEntries(Object.entries(c.byClass).map(([k, v]) => [k, v.filter(x => x!==sub)])) }));
+  }
+  function toggleStream(f) {
+    setCfg(c => {
+      const on = c.streamForms.includes(f);
+      const base = c.byClass[f] ?? c.master;
+      const byClass = { ...c.byClass };
+      if (!on) { byClass[f+" Arts"] = byClass[f+" Arts"] ?? [...base]; byClass[f+" Science"] = byClass[f+" Science"] ?? [...base]; }
+      return { ...c, byClass, streamForms: on ? c.streamForms.filter(x => x!==f) : [...c.streamForms, f] };
+    });
+  }
+  function toggleSubject(k, sub) {
+    setCfg(c => { const cur = c.byClass[k] ?? c.master; return { ...c, byClass:{ ...c.byClass, [k]: cur.includes(sub) ? cur.filter(x => x!==sub) : [...cur, sub] } }; });
+  }
+  const setAll = (k, all) => setCfg(c => ({ ...c, byClass:{ ...c.byClass, [k]: all ? [...c.master] : [] } }));
+
+  async function save() {
+    if (!cfg.master.length) { alert("Keep at least one subject."); return; }
+    setBusy(true);
+    try { await saveSetting("subject_config", JSON.stringify(normalised())); alert("Saved. New lists are used on the marks pages and report cards now."); }
+    catch(e) { alert("Could not save: " + (e.message||e)); }
+    setBusy(false);
+  }
+
+  const box = { background:C.white, borderRadius:10, padding:12, marginBottom:11, boxShadow:"0 1px 3px rgba(0,0,0,0.06)" };
+  const chip = on => ({ padding:"4px 9px", borderRadius:12, border:`1px solid ${on?C.navy:C.grayLight}`, background:on?C.navy:C.white, color:on?C.white:C.gray, fontSize:11, cursor:"pointer" });
+  return (
+    <div>
+      <div style={box}>
+        <div style={{fontWeight:800,color:C.navy,fontSize:14,marginBottom:4}}>🧮 All subjects in the school</div>
+        <div style={{fontSize:11,color:C.gray,marginBottom:8}}>Add a new subject here, then tick it in the classes that take it below.</div>
+        <div style={{display:"flex",gap:7,marginBottom:9}}>
+          <input style={{...inp,flex:1}} placeholder="New subject name" value={newSub} onChange={e=>setNewSub(e.target.value)} onKeyDown={e=>{ if (e.key==="Enter") addSubject(); }}/>
+          <Btn onClick={addSubject}>Add</Btn>
+        </div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+          {cfg.master.map(x => <span key={x} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 6px 4px 9px",borderRadius:12,background:C.grayBg,fontSize:11,color:C.navy}}>{x}<button type="button" onClick={()=>removeSubject(x)} style={{border:"none",background:"transparent",color:C.red,fontWeight:800,cursor:"pointer",padding:"0 3px"}}>✕</button></span>)}
+        </div>
+      </div>
+
+      <div style={box}>
+        <div style={{fontWeight:800,color:C.navy,fontSize:14,marginBottom:4}}>Arts and Science classes</div>
+        <div style={{fontSize:11,color:C.gray,marginBottom:8}}>Switch on for each form that splits into Arts and Science. Then choose each student's stream on their record.</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+          {FORMS.map(f => <button key={f} type="button" onClick={()=>toggleStream(f)} style={chip(cfg.streamForms.includes(f))}>{f}{cfg.streamForms.includes(f)?" ✓ Arts / Science":""}</button>)}
+        </div>
+      </div>
+
+      {classKeys.map(k => {
+        const list = listFor(k);
+        return (
+          <div key={k} style={box}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:7}}>
+              <div style={{fontWeight:800,color:C.navy,fontSize:13}}>{k} <span style={{fontWeight:600,color:C.gray,fontSize:11}}>· {cfg.master.filter(x=>list.includes(x)).length} subjects</span></div>
+              <div style={{display:"flex",gap:6}}>
+                <button type="button" onClick={()=>setAll(k,true)}  style={{...chip(false),padding:"3px 8px"}}>All</button>
+                <button type="button" onClick={()=>setAll(k,false)} style={{...chip(false),padding:"3px 8px"}}>None</button>
+              </div>
+            </div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+              {cfg.master.map(x => <button key={x} type="button" onClick={()=>toggleSubject(k,x)} style={chip(list.includes(x))}>{x}</button>)}
+            </div>
+          </div>
+        );
+      })}
+
+      <div style={{position:"sticky",bottom:8}}>
+        <Btn onClick={save} disabled={busy||!dirty}>{busy ? "Saving…" : dirty ? "Save subject changes" : "No changes to save"}</Btn>
+      </div>
     </div>
   );
 }
